@@ -11,9 +11,10 @@ import (
 	"github.com/tidwall/redcon"
 )
 
-type RespFunc func(conn redcon.Conn)
+type RespFunc func(txn *Txn)
 
 type Txn struct {
+	redcon.Conn
 	client      *Client
 	txn         kv.Transaction
 	Multi       bool

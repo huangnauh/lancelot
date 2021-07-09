@@ -14,15 +14,8 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/store"
 )
 
-type Conn struct {
-	Authenticated bool
-	Multi         bool
-	Commands      []*redcon.Command
-	Conn          redcon.Conn
-}
-
-type TxnHandle func(conn redcon.Conn, txn *store.Txn, args [][]byte) store.RespFunc
-type ConnHandle func(conn redcon.Conn, cmd redcon.Command)
+type TxnHandle func(txn *store.Txn, args [][]byte) store.RespFunc
+type ConnHandle func(txn redcon.Conn, cmd redcon.Command)
 type Server struct {
 	sync.RWMutex
 	cfg          *config.Config
@@ -61,6 +54,7 @@ const (
 	SET_COMMAND      = "set"
 	GET_COMMAND      = "get"
 	DEL_COMMAND      = "del"
+	TTL_COMMAND      = "ttl"
 )
 
 func NewServer(cfg *config.Config) *Server {
@@ -71,15 +65,16 @@ func NewServer(cfg *config.Config) *Server {
 		connHandlers: make(map[string]ConnHandle),
 	}
 
-	s.ConnHandle("detach", s.detach)
-	s.ConnHandle("quit", s.quit)
-	s.ConnHandle(SHUTDONW_COMMAND, s.shutdown)
+	// s.ConnHandle("detach", s.detach)
+	// s.ConnHandle("quit", s.quit)
+	// s.ConnHandle(SHUTDONW_COMMAND, s.shutdown)
 	s.ConnHandle(WATCH_COMMAND, s.watch)
 	s.ConnHandle(EXEC_COMMAND, s.exec)
 	s.ConnHandle(MULTI_COMMAND, s.multi)
 
 	s.TxnHandle(GET_COMMAND, Get)
 	s.TxnHandle(SET_COMMAND, Set)
+	s.TxnHandle(TTL_COMMAND, TTL)
 
 	s.red = redcon.NewServer("", s.ServeRESP, s.Accept, s.Close)
 	return s
