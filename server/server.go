@@ -10,8 +10,17 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/tidwall/redcon"
 
+	"gitlab.s.upyun.com/platform/lancelot/command"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/store"
+)
+
+const (
+	PING_COMMAND     = "ping"
+	SHUTDONW_COMMAND = "shutdown"
+	WATCH_COMMAND    = "watch"
+	EXEC_COMMAND     = "exec"
+	MULTI_COMMAND    = "multi"
 )
 
 type TxnHandle func(txn *store.Txn, args [][]byte) store.RespFunc
@@ -45,26 +54,6 @@ func (s *Server) ServeRESP(conn redcon.Conn, cmd redcon.Command) {
 	}
 }
 
-const (
-	PING_COMMAND     = "ping"
-	SHUTDONW_COMMAND = "shutdown"
-	WATCH_COMMAND    = "watch"
-	EXEC_COMMAND     = "exec"
-	MULTI_COMMAND    = "multi"
-	HSET_COMMAND     = "hset"
-	HGET_COMMAND     = "hget"
-	SET_COMMAND      = "set"
-	GET_COMMAND      = "get"
-	DEL_COMMAND      = "del"
-	TTL_COMMAND      = "ttl"
-	OBJECT_COMMAND   = "object"
-	HELP_COMMAND     = "help"
-	ENCODING_COMMAND = "encoding"
-	FREQ_COMMAND     = "freq"
-	IDLETIME_COMMAND = "idletime"
-	REFCOUNT_COMMAND = "refcount"
-)
-
 func NewServer(cfg *config.Config) *Server {
 	s := &Server{
 		cfg:          cfg,
@@ -80,11 +69,11 @@ func NewServer(cfg *config.Config) *Server {
 	s.ConnHandle(EXEC_COMMAND, s.exec)
 	s.ConnHandle(MULTI_COMMAND, s.multi)
 
-	s.TxnHandle(GET_COMMAND, GetHandle)
-	s.TxnHandle(SET_COMMAND, SetHandle)
-	s.TxnHandle(TTL_COMMAND, TTLHandle)
-	s.TxnHandle(HSET_COMMAND, HSetHandle)
-	s.TxnHandle(HGET_COMMAND, HGetHandle)
+	s.TxnHandle(command.GET_COMMAND, command.GetHandle)
+	s.TxnHandle(command.SET_COMMAND, command.SetHandle)
+	s.TxnHandle(command.TTL_COMMAND, command.TTLHandle)
+	s.TxnHandle(command.HSET_COMMAND, command.HSetHandle)
+	s.TxnHandle(command.HGET_COMMAND, command.HGetHandle)
 
 	s.red = redcon.NewServer("", s.ServeRESP, s.Accept, s.Close)
 	return s

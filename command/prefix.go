@@ -1,6 +1,10 @@
-package server
+package command
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+
+	"gitlab.s.upyun.com/platform/lancelot/xerror"
+)
 
 func GetKeyBytes(otype ObjectType, key []byte) []byte {
 	k := make([]byte, len(key)+1)
@@ -17,7 +21,7 @@ func EncodeTTLValue(timestamp uint64) []byte {
 
 func DecodeTTLValue(b []byte) (uint64, error) {
 	if len(b) < 8 {
-		return 0, ErrValueTooShort
+		return 0, xerror.ErrValueTooShort
 	}
 	return binary.BigEndian.Uint64(b), nil
 }

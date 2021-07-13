@@ -1,4 +1,4 @@
-package server
+package command
 
 import (
 	"encoding/binary"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"gitlab.s.upyun.com/platform/lancelot/store"
+	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
 
 type ObjectEncoding byte
@@ -119,7 +120,7 @@ func ObjectEncode(o *Object) []byte {
 
 func ObjectDecode(b []byte, o *Object) error {
 	if len(b) < 1+8+8 {
-		return ErrValueTooShort
+		return xerror.ErrValueTooShort
 	}
 	o.Type = ObjectType(b[0])
 	o.TTL = int64(binary.BigEndian.Uint64(b[1:9]))

@@ -1,4 +1,4 @@
-package server
+package command
 
 import (
 	"strconv"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"gitlab.s.upyun.com/platform/lancelot/store"
+	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
 
 type CheckType int
@@ -55,7 +56,7 @@ func getTxnKey(txn *store.Txn, key []byte, keyType ObjectType) ([]byte, int64, e
 	}
 
 	if object.Type != KeyType {
-		return nil, object.TTL, wrongTypeError
+		return nil, object.TTL, xerror.WrongTypeError
 	}
 
 	if object.TTL > 0 && time.Unix(object.TTL/1000, object.TTL%1000).Before(time.Now()) {
@@ -85,7 +86,6 @@ func GetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 // (string) SET key value [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp|KEEPTTL] [NX|XX] [GET]
 func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 	if len(args) < 2 {
-		txn.Err = wrongNumberOfArgs
 		return txn.LazyWriteWrongArgs(SET_COMMAND)
 	}
 
@@ -102,31 +102,31 @@ func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		switch str {
 		case EX:
 			if (unitDuration != 0 && unitDuration != time.Second) || keepTTL {
-				return txn.LazyWriteError(errSyntax)
+				return txn.LazyWriteError(xerror.ErrSyntax)
 			}
 			intFlag = true
 			unitDuration = time.Second
 		case PX:
 			if (unitDuration != 0 && unitDuration != time.Millisecond) || keepTTL {
-				return txn.LazyWriteError(errSyntax)
+				return txn.LazyWriteError(xerror.ErrSyntax)
 			}
 			intFlag = true
 			unitDuration = time.Millisecond
 		case EXAT:
 			if (unitInt64 != 0 && unitInt64 != 1000) || keepTTL {
-				return txn.LazyWriteError(errSyntax)
+				return txn.LazyWriteError(xerror.ErrSyntax)
 			}
 			intFlag = true
 			unitInt64 = 1000
 		case PXAT:
 			if (unitInt64 != 0 && unitInt64 != 1) || keepTTL {
-				return txn.LazyWriteError(errSyntax)
+				return txn.LazyWriteError(xerror.ErrSyntax)
 			}
 			intFlag = true
 			unitInt64 = 1
 		case KEEPTTL:
 			if unitDuration > 0 || unitInt64 > 0 {
-				return txn.LazyWriteError(errSyntax)
+				return txn.LazyWriteError(xerror.ErrSyntax)
 			}
 			keepTTL = true
 		case NX:
@@ -136,7 +136,7 @@ func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		case GET:
 			getArg = true
 		default:
-			return txn.LazyWriteError(errSyntax)
+			return txn.LazyWriteError(xerror.ErrSyntax)
 		}
 
 		if intFlag {
@@ -145,11 +145,11 @@ func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 			}
 			intArg, err := strconv.ParseInt(string(args[i+1]), 10, 64)
 			if err != nil {
-				return txn.LazyWriteError(errNotInteger)
+				return txn.LazyWriteError(xerror.ErrNotInteger)
 			}
 
 			if intArg <= 0 {
-				return txn.LazyWriteError(errInvalidExpire)
+				return txn.LazyWriteError(xerror.ErrInvalidExpire)
 			}
 
 			if unitDuration > 0 {

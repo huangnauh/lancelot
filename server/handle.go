@@ -2,12 +2,13 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/tidwall/redcon"
+	"gitlab.s.upyun.com/platform/lancelot/command"
 	"gitlab.s.upyun.com/platform/lancelot/store"
+	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
 
 func (s *Server) detach(conn store.Txn, cmd redcon.Command) {
@@ -16,17 +17,17 @@ func (s *Server) detach(conn store.Txn, cmd redcon.Command) {
 	go func(c redcon.DetachedConn) {
 		defer c.Close()
 
-		c.WriteString(OK)
+		c.WriteString(command.OK)
 		c.Flush()
 	}(detachedConn)
 }
 
 func (s *Server) ping(conn store.Txn, cmd redcon.Command) {
-	conn.WriteString(PONG)
+	conn.WriteString(command.PONG)
 }
 
 func (s *Server) quit(conn store.Txn, cmd redcon.Command) {
-	conn.WriteString(OK)
+	conn.WriteString(command.OK)
 	conn.Close()
 }
 
@@ -79,8 +80,8 @@ func (s *Server) Handler(conn redcon.Conn, cmd redcon.Command, txnHandle TxnHand
 
 	if txn.Exec {
 		if !txn.HasTransaction() {
-			txn.Err = invalidTxn
-			writerConnError(conn, invalidTxn)
+			txn.Err = xerror.InvalidTxn
+			writerConnError(conn, xerror.InvalidTxn)
 			return
 		}
 		resp := txnHandle(txn, args)
@@ -89,7 +90,7 @@ func (s *Server) Handler(conn redcon.Conn, cmd redcon.Command, txnHandle TxnHand
 		}
 	} else {
 		txn.PendingReq = append(txn.PendingReq, cmd)
-		conn.WriteString(Queued)
+		conn.WriteString(command.Queued)
 	}
 }
 
@@ -97,7 +98,7 @@ func (s *Server) exec(conn redcon.Conn, cmd redcon.Command) {
 	logrus.Debugf("exec: %v", cmd)
 	args := cmd.Args[1:]
 	if len(args) != 0 {
-		writerConnWrongArgs(conn, string(cmd.Args[0]))
+		conn.WriteError(xerror.WrongArgsString(string(cmd.Args[0])))
 		return
 	}
 
@@ -105,7 +106,7 @@ func (s *Server) exec(conn redcon.Conn, cmd redcon.Command) {
 	defer conn.SetTransaction(nil)
 
 	if !txn.Multi || !alreadyExist {
-		conn.WriteError(errEXECErr)
+		conn.WriteError(xerror.ErrEXECErr)
 		return
 	}
 
@@ -161,12 +162,12 @@ func (s *Server) multi(conn redcon.Conn, cmd redcon.Command) {
 	logrus.Debugf("multi: %v", cmd)
 	args := cmd.Args[1:]
 	if len(args) != 0 {
-		writerConnWrongArgs(conn, string(cmd.Args[0]))
+		conn.WriteError(xerror.WrongArgsString(string(cmd.Args[0])))
 		return
 	}
 	txn, alreadyExist := s.getTransaction(conn)
 	if txn.Multi {
-		conn.WriteError(errMultiNested)
+		conn.WriteError(xerror.ErrMultiNested)
 		return
 	}
 	txn.PendingReq = make([]redcon.Command, 0)
@@ -174,20 +175,20 @@ func (s *Server) multi(conn redcon.Conn, cmd redcon.Command) {
 	if !alreadyExist {
 		conn.SetTransaction(txn)
 	}
-	conn.WriteString(OK)
+	conn.WriteString(command.OK)
 }
 
 func (s *Server) watch(conn redcon.Conn, cmd redcon.Command) {
 	logrus.Debugf("watch: %v", cmd)
 	args := cmd.Args[1:]
 	if len(args) == 0 {
-		writerConnWrongArgs(conn, string(cmd.Args[0]))
+		conn.WriteError(xerror.WrongArgsString(string(cmd.Args[0])))
 		return
 	}
 
 	txn, alreadyExist := s.getTransaction(conn)
 	if txn.Multi {
-		conn.WriteError(errWatchInsideMulti)
+		conn.WriteError(xerror.ErrWatchInsideMulti)
 		return
 	}
 
@@ -212,13 +213,9 @@ func (s *Server) watch(conn redcon.Conn, cmd redcon.Command) {
 	if !alreadyExist {
 		conn.SetTransaction(txn)
 	}
-	conn.WriteString(OK)
+	conn.WriteString(command.OK)
 }
 
 func writerConnError(conn redcon.Conn, err error) {
 	conn.WriteError("Err " + err.Error())
-}
-
-func writerConnWrongArgs(conn redcon.Conn, command string) {
-	conn.WriteError(fmt.Sprintf("ERR wrong number of arguments for '%s' command", command))
 }

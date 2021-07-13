@@ -1,8 +1,9 @@
-package server
+package command
 
 import (
 	"github.com/google/uuid"
 	"gitlab.s.upyun.com/platform/lancelot/store"
+	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
 
 //(hash) HGET key field
@@ -18,7 +19,7 @@ func HGetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 	} else if err != nil {
 		return txn.LazyWriteError(err)
 	} else if object.Type != HashType {
-		return txn.LazyWriteError(wrongTypeError)
+		return txn.LazyWriteError(xerror.WrongTypeError)
 	}
 	hkey := object.GetHashBytes(field)
 	value, err := txn.Get(hkey)
@@ -59,7 +60,7 @@ func HSetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 	} else if err != nil {
 		return txn.LazyWriteError(err)
 	} else if object.Type != HashType {
-		return txn.LazyWriteError(wrongTypeError)
+		return txn.LazyWriteError(xerror.WrongTypeError)
 	}
 
 	hkey := object.GetHashBytes(field)

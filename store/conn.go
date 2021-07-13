@@ -1,12 +1,7 @@
 package store
 
 import (
-	"errors"
-	"fmt"
-)
-
-var (
-	WrongNumberOfArgs = errors.New("wrong number of arguments")
+	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
 
 func (txn *Txn) LazyWriteError(err error) RespFunc {
@@ -15,21 +10,20 @@ func (txn *Txn) LazyWriteError(err error) RespFunc {
 }
 
 func (txn *Txn) WriteWrongArgs(command string) {
-	txn.WriteError(fmt.Sprintf("ERR wrong number of arguments for '%s' command", command))
+	txn.WriteError(xerror.WrongArgsString(command))
 }
 
 func (txn *Txn) WriteWrongSubArgs(command, help string) {
-	txn.WriteError(fmt.Sprintf("ERR Unknown subcommand or wrong number of arguments for '%s'. Try %s.",
-		command, help))
+	txn.WriteError(xerror.WrongSubArgsString(command, help))
 }
 
 func (txn *Txn) LazyWriteWrongArgs(command string) RespFunc {
-	txn.Err = WrongNumberOfArgs
+	txn.Err = xerror.WrongNumberOfArgs
 	return func(txn *Txn) { txn.WriteWrongArgs(command) }
 }
 
 func (txn *Txn) LazyWriteWrongSubArgs(command, help string) RespFunc {
-	txn.Err = WrongNumberOfArgs
+	txn.Err = xerror.WrongNumberOfArgs
 	return func(txn *Txn) { txn.WriteWrongSubArgs(command, help) }
 }
 
