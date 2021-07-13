@@ -9,9 +9,11 @@ var (
 	errDISCARDErr       = "ERROR DISCARD without MULTI"
 	errMultiErr         = "ERROR without MULTI"
 	errTransactionErr   = "ERROR Transaction discarded because of previous errors."
-	errNotInteger       = errors.New("ERROR value is not an integer or out of range")
-	errInvalidExpire    = errors.New("ERROR invalid expire time in set")
-	errSyntax           = errors.New("ERROR syntax error")
+
+	errNotInteger    = errors.New("ERROR value is not an integer or out of range")
+	errInvalidExpire = errors.New("ERROR invalid expire time in set")
+	errSyntax        = errors.New("ERROR syntax error")
+	wrongTypeError   = errors.New("ERROR WRONGTYPE Operation against a key holding the wrong kind of value")
 
 	missingTxn        = errors.New("missing transcation")
 	invalidTxn        = errors.New("invalid transcation")

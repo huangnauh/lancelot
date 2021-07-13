@@ -72,9 +72,9 @@ func NewServer(cfg *config.Config) *Server {
 	s.ConnHandle(EXEC_COMMAND, s.exec)
 	s.ConnHandle(MULTI_COMMAND, s.multi)
 
-	s.TxnHandle(GET_COMMAND, Get)
-	s.TxnHandle(SET_COMMAND, Set)
-	s.TxnHandle(TTL_COMMAND, TTL)
+	s.TxnHandle(GET_COMMAND, GetHandle)
+	s.TxnHandle(SET_COMMAND, SetHandle)
+	s.TxnHandle(TTL_COMMAND, TTLHandle)
 
 	s.red = redcon.NewServer("", s.ServeRESP, s.Accept, s.Close)
 	return s

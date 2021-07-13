@@ -7,11 +7,11 @@ import (
 )
 
 // (generic) TTL key
-func TTL(txn *store.Txn, args [][]byte) store.RespFunc {
+func TTLHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 	if len(args) != 1 {
 		return txn.LazyWriteWrongArgs(TTL_COMMAND)
 	}
-	key := GetKeyBytes(StringPrefix, args[0])
+	key := GetKeyBytes(KeyType, args[0])
 	_, expire, err := getTxnKey(txn, key)
 	if err == store.KeyNotFound {
 		return txn.LazyWriteInt(-2)

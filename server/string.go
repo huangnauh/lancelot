@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 )
 
@@ -39,19 +40,29 @@ func getTxnKey(txn *store.Txn, key []byte) ([]byte, int64, error) {
 	if err != nil {
 		return value, 0, err
 	}
-	v, expire, err := GetStringValue(value)
-	if err != nil || (expire > 0 && time.Unix(expire/1000, expire%1000).Before(time.Now())) {
-		return nil, expire, store.KeyNotFound
+	object := &Object{}
+	err = ObjectDecode(value, object)
+	if err != nil {
+		return nil, object.TTL, store.KeyNotFound
 	}
-	return v, expire, nil
+
+	if object.Type != KeyType {
+		return nil, object.TTL, wrongTypeError
+	}
+
+	if object.TTL > 0 && time.Unix(object.TTL/1000, object.TTL%1000).Before(time.Now()) {
+		return nil, 0, store.KeyNotFound
+	}
+
+	return object.Value, object.TTL, nil
 }
 
 // (string) GET key
-func Get(txn *store.Txn, args [][]byte) store.RespFunc {
+func GetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 	if len(args) != 1 {
 		return txn.LazyWriteWrongArgs(GET_COMMAND)
 	}
-	key := GetKeyBytes(StringPrefix, args[0])
+	key := GetKeyBytes(KeyType, args[0])
 	v, _, err := getTxnKey(txn, key)
 	if err == store.KeyNotFound {
 		return txn.LazyWriteNull()
@@ -64,16 +75,17 @@ func Get(txn *store.Txn, args [][]byte) store.RespFunc {
 
 // https://redis.io/commands/set
 // (string) SET key value [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp|KEEPTTL] [NX|XX] [GET]
-func Set(txn *store.Txn, args [][]byte) store.RespFunc {
+func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 	if len(args) < 2 {
 		txn.Err = wrongNumberOfArgs
 		return txn.LazyWriteWrongArgs(SET_COMMAND)
 	}
 
+	startTs := txn.StartTS()
+	now := oracle.GetTimeFromTS(startTs)
 	var expire int64
 	var keepTTL, getArg bool
 	var check CheckType
-	now := time.Now()
 	for i := 2; i < len(args); i++ {
 		str := strings.ToLower(string(args[i]))
 		intFlag := false
@@ -145,22 +157,25 @@ func Set(txn *store.Txn, args [][]byte) store.RespFunc {
 	var oldExpire int64
 	var getOld bool
 	var getErr error
-	key := GetKeyBytes(StringPrefix, args[0])
+	key := GetKeyBytes(KeyType, args[0])
 
 	if expire > 0 {
-		ttlKey := GetTTLBytes(expire, StringPrefix, key)
+		ttlKey := GetTTLBytes(expire, KeyType, key)
 		err := txn.Put(ttlKey, []byte{1})
 		if err != nil {
 			return txn.LazyWriteError(err)
 		}
-	} else if !keepTTL {
+	} else {
 		getOld = true
 		oldValue, oldExpire, getErr = getTxnKey(txn, key)
 		if getErr != nil && getErr != store.KeyNotFound {
 			return txn.LazyWriteError(getErr)
 		}
-		if oldExpire > 0 {
-			ttlKey := GetTTLBytes(oldExpire, StringPrefix, key)
+
+		if keepTTL {
+			expire = oldExpire
+		} else if oldExpire > 0 {
+			ttlKey := GetTTLBytes(oldExpire, KeyType, key)
 			err := txn.Del(ttlKey)
 			if err != nil {
 				return txn.LazyWriteError(err)
@@ -170,7 +185,7 @@ func Set(txn *store.Txn, args [][]byte) store.RespFunc {
 
 	if check > 0 || getArg {
 		if !getOld {
-			oldValue, oldExpire, getErr = getTxnKey(txn, key)
+			oldValue, _, getErr = getTxnKey(txn, key)
 		}
 		if getErr == store.KeyNotFound {
 			if CheckExist == check {
@@ -186,7 +201,13 @@ func Set(txn *store.Txn, args [][]byte) store.RespFunc {
 	}
 
 	value := args[1]
-	err := txn.Put(key, SetStringValue(expire, value))
+	object := &Object{
+		Type:      KeyType,
+		TTL:       expire,
+		Timestamp: startTs,
+		Value:     value,
+	}
+	err := txn.Put(key, ObjectEncode(object))
 	if err != nil {
 		txn.Err = err
 		return txn.LazyWriteError(err)

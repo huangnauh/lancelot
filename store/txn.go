@@ -48,6 +48,10 @@ func (t *Txn) Begin() error {
 	return nil
 }
 
+func (t *Txn) StartTS() uint64 {
+	return t.txn.StartTS()
+}
+
 func (t *Txn) Commit() error {
 	logrus.Debugf("%p commit", t)
 	ctx, cancel := context.WithTimeout(context.Background(), t.client.Conf.WriteTimeout)
