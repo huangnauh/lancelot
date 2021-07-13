@@ -35,15 +35,23 @@ const (
 	CheckNotExist CheckType = 2
 )
 
-func getTxnKey(txn *store.Txn, key []byte) ([]byte, int64, error) {
+func getTxnObject(txn *store.Txn, key []byte) (*Object, error) {
 	value, err := txn.Get(key)
 	if err != nil {
-		return value, 0, err
+		return nil, err
 	}
 	object := &Object{}
 	err = ObjectDecode(value, object)
 	if err != nil {
-		return nil, object.TTL, store.KeyNotFound
+		return nil, store.KeyNotFound
+	}
+	return object, nil
+}
+
+func getTxnKey(txn *store.Txn, key []byte, keyType ObjectType) ([]byte, int64, error) {
+	object, err := getTxnObject(txn, key)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	if object.Type != KeyType {
@@ -63,13 +71,13 @@ func GetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		return txn.LazyWriteWrongArgs(GET_COMMAND)
 	}
 	key := GetKeyBytes(KeyType, args[0])
-	v, _, err := getTxnKey(txn, key)
+	v, _, err := getTxnKey(txn, key, KeyType)
 	if err == store.KeyNotFound {
 		return txn.LazyWriteNull()
 	} else if err != nil {
 		return txn.LazyWriteError(err)
 	} else {
-		return txn.LazyWriteString(string(v))
+		return txn.LazyWriteBulk(v)
 	}
 }
 
@@ -153,11 +161,11 @@ func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		}
 	}
 
-	var oldValue []byte
-	var oldExpire int64
-	var getOld bool
-	var getErr error
 	key := GetKeyBytes(KeyType, args[0])
+	oldValue, oldExpire, getErr := getTxnKey(txn, key, KeyType)
+	if getErr != nil && getErr != store.KeyNotFound {
+		return txn.LazyWriteError(getErr)
+	}
 
 	if expire > 0 {
 		ttlKey := GetTTLBytes(expire, KeyType, key)
@@ -165,34 +173,21 @@ func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		if err != nil {
 			return txn.LazyWriteError(err)
 		}
-	} else {
-		getOld = true
-		oldValue, oldExpire, getErr = getTxnKey(txn, key)
-		if getErr != nil && getErr != store.KeyNotFound {
-			return txn.LazyWriteError(getErr)
-		}
-
-		if keepTTL {
-			expire = oldExpire
-		} else if oldExpire > 0 {
-			ttlKey := GetTTLBytes(oldExpire, KeyType, key)
-			err := txn.Del(ttlKey)
-			if err != nil {
-				return txn.LazyWriteError(err)
-			}
+	} else if keepTTL {
+		expire = oldExpire
+	} else if oldExpire > 0 {
+		ttlKey := GetTTLBytes(oldExpire, KeyType, key)
+		err := txn.Del(ttlKey)
+		if err != nil {
+			return txn.LazyWriteError(err)
 		}
 	}
 
 	if check > 0 || getArg {
-		if !getOld {
-			oldValue, _, getErr = getTxnKey(txn, key)
-		}
 		if getErr == store.KeyNotFound {
 			if CheckExist == check {
 				return txn.LazyWriteNull()
 			}
-		} else if getErr != nil {
-			return txn.LazyWriteError(getErr)
 		} else {
 			if CheckNotExist == check {
 				return txn.LazyWriteNull()
@@ -209,9 +204,8 @@ func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 	}
 	err := txn.Put(key, ObjectEncode(object))
 	if err != nil {
-		txn.Err = err
 		return txn.LazyWriteError(err)
-	} else if getOld {
+	} else if getArg {
 		if oldValue != nil {
 			return txn.LazyWriteString(string(oldValue))
 		} else {

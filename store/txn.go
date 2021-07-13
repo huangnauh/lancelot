@@ -107,6 +107,7 @@ func (t *Txn) Put(key, val []byte) error {
 }
 
 func (t *Txn) Del(key []byte) error {
+	logrus.Debugf("%p del %s", t, key)
 	err := t.txn.Delete(key)
 	if err != nil {
 		logrus.Errorf("del %s failed %s", key, err)

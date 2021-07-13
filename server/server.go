@@ -51,10 +51,18 @@ const (
 	WATCH_COMMAND    = "watch"
 	EXEC_COMMAND     = "exec"
 	MULTI_COMMAND    = "multi"
+	HSET_COMMAND     = "hset"
+	HGET_COMMAND     = "hget"
 	SET_COMMAND      = "set"
 	GET_COMMAND      = "get"
 	DEL_COMMAND      = "del"
 	TTL_COMMAND      = "ttl"
+	OBJECT_COMMAND   = "object"
+	HELP_COMMAND     = "help"
+	ENCODING_COMMAND = "encoding"
+	FREQ_COMMAND     = "freq"
+	IDLETIME_COMMAND = "idletime"
+	REFCOUNT_COMMAND = "refcount"
 )
 
 func NewServer(cfg *config.Config) *Server {
@@ -75,6 +83,8 @@ func NewServer(cfg *config.Config) *Server {
 	s.TxnHandle(GET_COMMAND, GetHandle)
 	s.TxnHandle(SET_COMMAND, SetHandle)
 	s.TxnHandle(TTL_COMMAND, TTLHandle)
+	s.TxnHandle(HSET_COMMAND, HSetHandle)
+	s.TxnHandle(HGET_COMMAND, HGetHandle)
 
 	s.red = redcon.NewServer("", s.ServeRESP, s.Accept, s.Close)
 	return s

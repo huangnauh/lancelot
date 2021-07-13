@@ -12,7 +12,7 @@ func TTLHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		return txn.LazyWriteWrongArgs(TTL_COMMAND)
 	}
 	key := GetKeyBytes(KeyType, args[0])
-	_, expire, err := getTxnKey(txn, key)
+	_, expire, err := getTxnKey(txn, key, KeyType)
 	if err == store.KeyNotFound {
 		return txn.LazyWriteInt(-2)
 	} else if err != nil {
