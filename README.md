@@ -20,3 +20,4 @@
 - [x] (transactions) EXEC
 - [x] (generic) OBJECT subcommand [arguments [arguments ...]]
 - [x] (generic) TTL key
+- [x] (generic) DEL key [key ...]
