@@ -36,49 +36,49 @@ const (
 	CheckNotExist CheckType = 2
 )
 
-func getTxnObject(txn *store.Txn, key []byte) (*Object, error) {
+func getTxnObject(txn *store.Txn, objectType ObjectType, origin []byte) (*Object, error) {
+	key := GetKeyBytes(KeyType, origin)
 	value, err := txn.Get(key)
 	if err != nil {
 		return nil, err
 	}
-	object := &Object{}
+	object := &Object{Key: origin, Type: objectType}
 	err = ObjectDecode(value, object)
 	if err != nil {
+		return nil, store.KeyNotFound
+	}
+
+	if object.TTL > 0 && time.Unix(object.TTL/1e3, (object.TTL%1e3)*1e6).Before(time.Now()) {
 		return nil, store.KeyNotFound
 	}
 	return object, nil
 }
 
-func getTxnKey(txn *store.Txn, key []byte, keyType ObjectType) ([]byte, int64, error) {
-	object, err := getTxnObject(txn, key)
+func getTxnKey(txn *store.Txn, objectType ObjectType, origin []byte) (*Object, error) {
+	object, err := getTxnObject(txn, objectType, origin)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
-	if object.Type != KeyType {
-		return nil, object.TTL, xerror.WrongTypeError
+	if object.Type != objectType {
+		return nil, xerror.WrongTypeError
 	}
-
-	if object.TTL > 0 && time.Unix(object.TTL/1000, object.TTL%1000).Before(time.Now()) {
-		return nil, 0, store.KeyNotFound
-	}
-
-	return object.Value, object.TTL, nil
+	return object, nil
 }
 
+// https://redis.io/commands/get
 // (string) GET key
 func GetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 	if len(args) != 1 {
 		return txn.LazyWriteWrongArgs(GET_COMMAND)
 	}
-	key := GetKeyBytes(KeyType, args[0])
-	v, _, err := getTxnKey(txn, key, KeyType)
+	object, err := getTxnKey(txn, KeyType, args[0])
 	if err == store.KeyNotFound {
 		return txn.LazyWriteNull()
 	} else if err != nil {
 		return txn.LazyWriteError(err)
 	} else {
-		return txn.LazyWriteBulk(v)
+		return txn.LazyWriteBulk(object.Value)
 	}
 }
 
@@ -161,53 +161,59 @@ func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		}
 	}
 
-	key := GetKeyBytes(KeyType, args[0])
-	oldValue, oldExpire, getErr := getTxnKey(txn, key, KeyType)
-	if getErr != nil && getErr != store.KeyNotFound {
-		return txn.LazyWriteError(getErr)
+	oldObject, err := getTxnKey(txn, KeyType, args[0])
+	if err == store.KeyNotFound {
+		if CheckExist == check {
+			return txn.LazyWriteNull()
+		}
+	} else if err != nil && err != store.KeyNotFound {
+		return txn.LazyWriteError(err)
+	} else {
+		if CheckNotExist == check {
+			return txn.LazyWriteNull()
+		}
 	}
 
-	if expire > 0 {
-		ttlKey := GetTTLBytes(expire, KeyType, key)
+	var oldExpire int64
+	if oldObject != nil && oldObject.TTL > 0 {
+		oldExpire = oldObject.TTL
+	}
+
+	if keepTTL && oldExpire > 0 {
+		expire = oldExpire
+	}
+
+	object := &Object{
+		Key:       args[0],
+		Type:      KeyType,
+		TTL:       expire,
+		Timestamp: startTs,
+		Value:     args[1],
+	}
+
+	if expire > 0 && expire != oldExpire {
+		ttlKey := object.GetTTLKeyBytes()
 		err := txn.Put(ttlKey, []byte{1})
 		if err != nil {
 			return txn.LazyWriteError(err)
 		}
-	} else if keepTTL {
-		expire = oldExpire
-	} else if oldExpire > 0 {
-		ttlKey := GetTTLBytes(oldExpire, KeyType, key)
+	}
+
+	if oldExpire > 0 && expire != oldExpire {
+		ttlKey := oldObject.GetTTLKeyBytes()
 		err := txn.Del(ttlKey)
 		if err != nil {
 			return txn.LazyWriteError(err)
 		}
 	}
 
-	if check > 0 || getArg {
-		if getErr == store.KeyNotFound {
-			if CheckExist == check {
-				return txn.LazyWriteNull()
-			}
-		} else {
-			if CheckNotExist == check {
-				return txn.LazyWriteNull()
-			}
-		}
-	}
-
-	value := args[1]
-	object := &Object{
-		Type:      KeyType,
-		TTL:       expire,
-		Timestamp: startTs,
-		Value:     value,
-	}
-	err := txn.Put(key, ObjectEncode(object))
+	key := GetKeyBytes(KeyType, object.Key)
+	err = txn.Put(key, ObjectEncode(object))
 	if err != nil {
 		return txn.LazyWriteError(err)
 	} else if getArg {
-		if oldValue != nil {
-			return txn.LazyWriteString(string(oldValue))
+		if oldObject != nil && oldObject.Value != nil {
+			return txn.LazyWriteString(string(oldObject.Value))
 		} else {
 			return txn.LazyWriteNull()
 		}

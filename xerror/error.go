@@ -23,6 +23,7 @@ var (
 	WrongNumberOfArgs = errors.New("wrong number of arguments")
 
 	ErrValueTooShort = errors.New("ERR value is too short")
+	ErrNotTTL        = errors.New("ERR value is not ttl")
 )
 
 func WrongArgsString(command string) string {

@@ -21,15 +21,18 @@ type Store struct {
 	BatchDeleteTimeout time.Duration `yaml:"batch-delete-timeout"`
 	TsoSlowThreshold   time.Duration `yaml:"tso-slow-threshold"`
 	DisableLockBackOff bool          `yaml:"disable-lock-back-off"`
+	BatchLimit         int           `yaml:"batch-limit"`
 }
 
 type Config struct {
-	LogLevel  string `yaml:"log-level"`
-	PIDFile   string `yaml:"pid-file"`
-	Host      string `yaml:"host"`
-	RedisPort int    `yaml:"redis-port"`
-	HttpPort  int    `yaml:"http-port"`
-	Store     Store  `yaml:"store"`
+	LogLevel       string        `yaml:"log-level"`
+	PIDFile        string        `yaml:"pid-file"`
+	Host           string        `yaml:"host"`
+	RedisPort      int           `yaml:"redis-port"`
+	HttpPort       int           `yaml:"http-port"`
+	Store          Store         `yaml:"store"`
+	GcTickInterval time.Duration `yaml:"gc-tick-interval"`
+	GcWorkers      int           `yaml:"gc-workers"`
 }
 
 var cfg = &Config{
@@ -48,7 +51,10 @@ var cfg = &Config{
 		BatchPutTimeout:    time.Minute,
 		BatchDeleteTimeout: time.Minute,
 		TsoSlowThreshold:   100 * time.Millisecond,
+		BatchLimit:         200,
 	},
+	GcTickInterval: time.Minute,
+	GcWorkers:      2,
 }
 
 func LoadYAMLConfig(filename string) error {

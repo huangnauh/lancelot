@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"time"
 
@@ -52,6 +53,12 @@ func (t *Txn) StartTS() uint64 {
 	return t.txn.StartTS()
 }
 
+func (t *Txn) Rollback() {
+	logrus.Debugf("%p rollback", t)
+	_ = t.txn.Rollback()
+	t.txn = nil
+}
+
 func (t *Txn) Commit() error {
 	logrus.Debugf("%p commit", t)
 	ctx, cancel := context.WithTimeout(context.Background(), t.client.Conf.WriteTimeout)
@@ -59,6 +66,7 @@ func (t *Txn) Commit() error {
 	err := t.txn.Commit(ctx)
 	if err != nil {
 		logrus.Errorf("commit failed, err: %s", err)
+		t.Rollback()
 		return err
 	}
 	return nil
@@ -122,4 +130,47 @@ func (t *Txn) LockKeys(keys [][]byte) error {
 		kvKeys[i] = kv.Key(keys[i])
 	}
 	return t.txn.LockKeys(context.Background(), new(kv.LockCtx), kvKeys...)
+}
+
+type Iterator struct {
+	start []byte
+	end   []byte
+	kv.Iterator
+	txn *Txn
+}
+
+func (t *Txn) Iter(start, end []byte, reversed bool) (*Iterator, error) {
+	var it kv.Iterator
+	var err error
+	if !reversed {
+		it, err = t.txn.Iter(start, end)
+	} else {
+		it, err = t.txn.IterReverse(end)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &Iterator{start, end, it, t}, nil
+}
+
+func (t *Iterator) DeleteUntil(limit int) (key []byte, count int, err error) {
+	for t.Valid() {
+		key = t.Key()
+		if bytes.Compare(key, t.start) < 0 || bytes.Compare(key, t.end) >= 0 {
+			return
+		}
+		err = t.txn.Del(key)
+		if err != nil {
+			return
+		}
+		count++
+		if limit > 0 && count >= limit {
+			return
+		}
+		err = t.Next()
+		if err != nil {
+			return
+		}
+	}
+	return
 }

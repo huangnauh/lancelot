@@ -66,6 +66,7 @@ func (s *Server) Handler(conn redcon.Conn, cmd redcon.Command, txnHandle TxnHand
 		}
 		resp := txnHandle(txn, args)
 		if txn.Err != nil {
+			txn.Rollback()
 			resp(txn)
 			return
 		}
@@ -124,6 +125,7 @@ func (s *Server) exec(conn redcon.Conn, cmd redcon.Command) {
 	for _, cmd := range txn.PendingReq {
 		s.ServeRESP(conn, cmd)
 		if txn.Err != nil {
+			txn.Rollback()
 			writerConnError(conn, txn.Err)
 			return
 		}
@@ -206,6 +208,7 @@ func (s *Server) watch(conn redcon.Conn, cmd redcon.Command) {
 	}
 	err := txn.LockKeys(keys)
 	if err != nil {
+		txn.Rollback()
 		writerConnError(conn, err)
 		return
 	}

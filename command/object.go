@@ -85,18 +85,47 @@ var (
 )
 
 type Object struct {
+	Key       []byte
 	Type      ObjectType
 	TTL       int64
 	Timestamp uint64
 	Value     []byte
 }
 
-func (o *Object) GetHashBytes(field []byte) []byte {
+func (o *Object) IsSimple() bool {
+	return o.Type == KeyType
+}
+
+func (o *Object) GetKeyBytes(field []byte) []byte {
 	k := make([]byte, 1+len(o.Value)+len(field))
-	k[0] = byte(HashType)
+	k[0] = byte(o.Type)
 	// binary.BigEndian.PutUint64(k[1:], uint64(o.Timestamp))
 	copy(k[1:], o.Value)
 	copy(k[1+len(o.Value):], field)
+	return k
+}
+
+func (o *Object) GetTTLKeyBytes() []byte {
+	if o.IsSimple() {
+		k := make([]byte, 1+8+1+len(o.Key))
+		k[0] = byte(TTLType)
+		binary.BigEndian.PutUint64(k[1:], uint64(o.TTL))
+		k[9] = byte(o.Type)
+		copy(k[10:], o.Key)
+		return k
+	}
+	k := make([]byte, 1+8+1+len(o.Value))
+	k[0] = byte(TTLType)
+	binary.BigEndian.PutUint64(k[1:], uint64(o.TTL))
+	k[9] = byte(o.Type)
+	copy(k[10:], o.Value)
+	return k
+}
+
+func (o *Object) GetKeyBytesPrefix() []byte {
+	k := make([]byte, 1+len(o.Value))
+	k[0] = byte(o.Type)
+	copy(k[1:], o.Value)
 	return k
 }
 
@@ -145,15 +174,13 @@ func ObjectHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 
 	switch subcommand {
 	case ENCODING_COMMAND:
-		key := GetKeyBytes(KeyType, args[0])
-		object, err := getTxnObject(txn, key)
+		object, err := getTxnObject(txn, KeyType, args[0])
 		if err != nil {
 			return txn.LazyWriteNull()
 		}
 		return txn.LazyWriteString(object.ObjectEncoding().String())
 	case IDLETIME_COMMAND:
-		key := GetKeyBytes(KeyType, args[0])
-		object, err := getTxnObject(txn, key)
+		object, err := getTxnObject(txn, KeyType, args[0])
 		if err != nil {
 			return txn.LazyWriteNull()
 		}

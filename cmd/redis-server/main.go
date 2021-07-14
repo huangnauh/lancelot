@@ -36,6 +36,11 @@ func main() {
 		level = logrus.ErrorLevel
 	}
 	logrus.SetLevel(level)
+	logrus.SetFormatter(&logrus.TextFormatter{
+		TimestampFormat: "2006-01-02 15:04:05",
+		FullTimestamp:   true,
+	})
+	logrus.Infof("config: %#v", cfg)
 
 	upg, err := tableflip.New(tableflip.Options{
 		UpgradeTimeout: time.Minute,
@@ -83,6 +88,10 @@ func main() {
 
 	go func() {
 		serv.RedisServe(redln)
+	}()
+
+	go func() {
+		serv.StartGC()
 	}()
 
 	if err := upg.Ready(); err != nil {

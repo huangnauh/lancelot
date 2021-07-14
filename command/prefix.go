@@ -26,11 +26,30 @@ func DecodeTTLValue(b []byte) (uint64, error) {
 	return binary.BigEndian.Uint64(b), nil
 }
 
-func GetTTLBytes(expire int64, otype ObjectType, key []byte) []byte {
-	k := make([]byte, 1+8+1+len(key))
+func GetObjectFromTTL(ttl []byte) (*Object, error) {
+	if len(ttl) <= 9 {
+		return nil, xerror.ErrValueTooShort
+	}
+	if ttl[0] != byte(TTLType) {
+		return nil, xerror.ErrNotTTL
+	}
+
+	o := &Object{
+		TTL:  int64(binary.BigEndian.Uint64(ttl[1:9])),
+		Type: ObjectType(ttl[9]),
+	}
+
+	if o.Type == KeyType {
+		o.Key = ttl[10:]
+	} else {
+		o.Value = ttl[10:]
+	}
+	return o, nil
+}
+
+func GetTTLPrefix(expire int64) []byte {
+	k := make([]byte, 1+8)
 	k[0] = byte(TTLType)
 	binary.BigEndian.PutUint64(k[1:], uint64(expire))
-	k[9] = byte(otype)
-	copy(k[10:], key)
 	return k
 }

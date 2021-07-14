@@ -11,9 +11,8 @@ func HGetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 	if len(args) != 2 {
 		return txn.LazyWriteWrongArgs(HGET_COMMAND)
 	}
-	key := GetKeyBytes(KeyType, args[0])
 	field := args[1]
-	object, err := getTxnObject(txn, key)
+	object, err := getTxnObject(txn, KeyType, args[0])
 	if err == store.KeyNotFound {
 		return txn.LazyWriteNull()
 	} else if err != nil {
@@ -21,7 +20,7 @@ func HGetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 	} else if object.Type != HashType {
 		return txn.LazyWriteError(xerror.WrongTypeError)
 	}
-	hkey := object.GetHashBytes(field)
+	hkey := object.GetKeyBytes(field)
 	value, err := txn.Get(hkey)
 	if err == store.KeyNotFound {
 		return txn.LazyWriteNull()
@@ -37,22 +36,23 @@ func HSetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		return txn.LazyWriteWrongArgs(HSET_COMMAND)
 	}
 	startTs := txn.StartTS()
-	key := GetKeyBytes(KeyType, args[0])
 	field := args[1]
 	value := args[2]
 	ret := 0
-	object, err := getTxnObject(txn, key)
+	object, err := getTxnObject(txn, KeyType, args[0])
 	if err == store.KeyNotFound {
 		id, err := uuid.NewUUID()
 		if err != nil {
 			return txn.LazyWriteError(err)
 		}
 		object = &Object{
+			Key:       args[0],
 			Type:      HashType,
 			Timestamp: startTs,
 			Value:     id[:],
 		}
 		ret = 1
+		key := GetKeyBytes(KeyType, object.Key)
 		err = txn.Put(key, ObjectEncode(object))
 		if err != nil {
 			return txn.LazyWriteError(err)
@@ -63,7 +63,7 @@ func HSetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		return txn.LazyWriteError(xerror.WrongTypeError)
 	}
 
-	hkey := object.GetHashBytes(field)
+	hkey := object.GetKeyBytes(field)
 	_, err = txn.Get(hkey)
 	if err == store.KeyNotFound {
 		ret = 1

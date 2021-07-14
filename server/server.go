@@ -33,6 +33,10 @@ type Server struct {
 	txnHandlers  map[string]TxnHandle
 	connHandlers map[string]ConnHandle
 	client       *store.Client
+	closed       chan bool
+	gcWait       *sync.WaitGroup
+	gcWorkers    int32
+	gcClosed     chan bool
 }
 
 func (s *Server) ConnHandle(command string, handler ConnHandle) {
@@ -60,6 +64,9 @@ func NewServer(cfg *config.Config) *Server {
 		http:         &http.Server{},
 		txnHandlers:  make(map[string]TxnHandle),
 		connHandlers: make(map[string]ConnHandle),
+		closed:       make(chan bool),
+		gcClosed:     make(chan bool),
+		gcWait:       &sync.WaitGroup{},
 	}
 
 	// s.ConnHandle("detach", s.detach)
@@ -100,8 +107,13 @@ func (s *Server) RedisServe(ln net.Listener) {
 }
 
 func (s *Server) Shutdown(ctx context.Context) {
+	close(s.closed)
 	_ = s.red.Close(ctx)
 	_ = s.http.Shutdown(ctx)
+	select {
+	case <-s.gcClosed:
+	case <-ctx.Done():
+	}
 }
 
 // func (s *Server) Handle(conn redcon.Conn, cmd redcon.Command) {
