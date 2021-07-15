@@ -68,25 +68,25 @@ func getTxnKey(txn *store.Txn, objectType ObjectType, origin []byte) (*Object, e
 
 // https://redis.io/commands/get
 // (string) GET key
-func GetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
+func (c *Command) GetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
-		return txn.LazyWriteWrongArgs(GET_COMMAND)
+		return txn.SetWrongArgs(GET_COMMAND)
 	}
 	object, err := getTxnKey(txn, KeyType, args[0])
 	if err == store.KeyNotFound {
-		return txn.LazyWriteNull()
+		return nil
 	} else if err != nil {
-		return txn.LazyWriteError(err)
+		return txn.SetError(err)
 	} else {
-		return txn.LazyWriteBulk(object.Value)
+		return object.Value
 	}
 }
 
 // https://redis.io/commands/set
 // (string) SET key value [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp|KEEPTTL] [NX|XX] [GET]
-func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
+func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
-		return txn.LazyWriteWrongArgs(SET_COMMAND)
+		return txn.SetWrongArgs(SET_COMMAND)
 	}
 
 	startTs := txn.StartTS()
@@ -102,31 +102,31 @@ func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		switch str {
 		case EX:
 			if (unitDuration != 0 && unitDuration != time.Second) || keepTTL {
-				return txn.LazyWriteError(xerror.ErrSyntax)
+				return txn.SetError(xerror.ErrSyntax)
 			}
 			intFlag = true
 			unitDuration = time.Second
 		case PX:
 			if (unitDuration != 0 && unitDuration != time.Millisecond) || keepTTL {
-				return txn.LazyWriteError(xerror.ErrSyntax)
+				return txn.SetError(xerror.ErrSyntax)
 			}
 			intFlag = true
 			unitDuration = time.Millisecond
 		case EXAT:
 			if (unitInt64 != 0 && unitInt64 != 1000) || keepTTL {
-				return txn.LazyWriteError(xerror.ErrSyntax)
+				return txn.SetError(xerror.ErrSyntax)
 			}
 			intFlag = true
 			unitInt64 = 1000
 		case PXAT:
 			if (unitInt64 != 0 && unitInt64 != 1) || keepTTL {
-				return txn.LazyWriteError(xerror.ErrSyntax)
+				return txn.SetError(xerror.ErrSyntax)
 			}
 			intFlag = true
 			unitInt64 = 1
 		case KEEPTTL:
 			if unitDuration > 0 || unitInt64 > 0 {
-				return txn.LazyWriteError(xerror.ErrSyntax)
+				return txn.SetError(xerror.ErrSyntax)
 			}
 			keepTTL = true
 		case NX:
@@ -136,20 +136,20 @@ func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		case GET:
 			getArg = true
 		default:
-			return txn.LazyWriteError(xerror.ErrSyntax)
+			return txn.SetError(xerror.ErrSyntax)
 		}
 
 		if intFlag {
 			if i+1 == len(args) {
-				return txn.LazyWriteWrongArgs(SET_COMMAND)
+				return txn.SetWrongArgs(SET_COMMAND)
 			}
 			intArg, err := strconv.ParseInt(string(args[i+1]), 10, 64)
 			if err != nil {
-				return txn.LazyWriteError(xerror.ErrNotInteger)
+				return txn.SetError(xerror.ErrNotInteger)
 			}
 
 			if intArg <= 0 {
-				return txn.LazyWriteError(xerror.ErrInvalidExpire)
+				return txn.SetError(xerror.ErrInvalidExpire)
 			}
 
 			if unitDuration > 0 {
@@ -164,13 +164,13 @@ func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 	oldObject, err := getTxnKey(txn, KeyType, args[0])
 	if err == store.KeyNotFound {
 		if CheckExist == check {
-			return txn.LazyWriteNull()
+			return nil
 		}
 	} else if err != nil && err != store.KeyNotFound {
-		return txn.LazyWriteError(err)
+		return txn.SetError(err)
 	} else {
 		if CheckNotExist == check {
-			return txn.LazyWriteNull()
+			return nil
 		}
 	}
 
@@ -195,7 +195,7 @@ func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		ttlKey := object.GetTTLKeyBytes()
 		err := txn.Put(ttlKey, []byte{1})
 		if err != nil {
-			return txn.LazyWriteError(err)
+			return txn.SetError(err)
 		}
 	}
 
@@ -203,21 +203,21 @@ func SetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		ttlKey := oldObject.GetTTLKeyBytes()
 		err := txn.Del(ttlKey)
 		if err != nil {
-			return txn.LazyWriteError(err)
+			return txn.SetError(err)
 		}
 	}
 
 	key := GetKeyBytes(KeyType, object.Key)
 	err = txn.Put(key, ObjectEncode(object))
 	if err != nil {
-		return txn.LazyWriteError(err)
+		return txn.SetError(err)
 	} else if getArg {
 		if oldObject != nil && oldObject.Value != nil {
-			return txn.LazyWriteString(string(oldObject.Value))
+			return oldObject.Value
 		} else {
-			return txn.LazyWriteNull()
+			return nil
 		}
 	} else {
-		return txn.LazyWriteString(OK)
+		return OK
 	}
 }

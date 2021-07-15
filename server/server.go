@@ -23,14 +23,13 @@ const (
 	MULTI_COMMAND    = "multi"
 )
 
-type TxnHandle func(txn *store.Txn, args [][]byte) store.RespFunc
 type ConnHandle func(txn redcon.Conn, cmd redcon.Command)
 type Server struct {
 	sync.RWMutex
 	cfg          *config.Config
 	http         *http.Server
 	red          *redcon.Server
-	txnHandlers  map[string]TxnHandle
+	command      *command.Command
 	connHandlers map[string]ConnHandle
 	client       *store.Client
 	closed       chan bool
@@ -43,16 +42,12 @@ func (s *Server) ConnHandle(command string, handler ConnHandle) {
 	s.connHandlers[command] = handler
 }
 
-func (s *Server) TxnHandle(command string, handler TxnHandle) {
-	s.txnHandlers[command] = handler
-}
-
 func (s *Server) ServeRESP(conn redcon.Conn, cmd redcon.Command) {
 	command := strings.ToLower(string(cmd.Args[0]))
 	if handler, ok := s.connHandlers[command]; ok {
 		handler(conn, cmd)
-	} else if handler, ok := s.txnHandlers[command]; ok {
-		s.Handler(conn, cmd, handler)
+	} else if handler, ok := s.command.TxnHandle[command]; ok {
+		s.Handler(conn, cmd, handler.Func)
 	} else {
 		conn.WriteError("ERR unknown command '" + command + "'")
 	}
@@ -62,7 +57,7 @@ func NewServer(cfg *config.Config) *Server {
 	s := &Server{
 		cfg:          cfg,
 		http:         &http.Server{},
-		txnHandlers:  make(map[string]TxnHandle),
+		command:      command.NewCommand(&cfg.Lua),
 		connHandlers: make(map[string]ConnHandle),
 		closed:       make(chan bool),
 		gcClosed:     make(chan bool),
@@ -75,12 +70,6 @@ func NewServer(cfg *config.Config) *Server {
 	s.ConnHandle(WATCH_COMMAND, s.watch)
 	s.ConnHandle(EXEC_COMMAND, s.exec)
 	s.ConnHandle(MULTI_COMMAND, s.multi)
-
-	s.TxnHandle(command.GET_COMMAND, command.GetHandle)
-	s.TxnHandle(command.SET_COMMAND, command.SetHandle)
-	s.TxnHandle(command.TTL_COMMAND, command.TTLHandle)
-	s.TxnHandle(command.HSET_COMMAND, command.HSetHandle)
-	s.TxnHandle(command.HGET_COMMAND, command.HGetHandle)
 
 	s.red = redcon.NewServer("", s.ServeRESP, s.Accept, s.Close)
 	return s
@@ -115,23 +104,6 @@ func (s *Server) Shutdown(ctx context.Context) {
 	case <-ctx.Done():
 	}
 }
-
-// func (s *Server) Handle(conn redcon.Conn, cmd redcon.Command) {
-// 	logrus.Debugf("cmd: %s", cmd)
-// 	switch strings.ToLower(string(cmd.Args[0])) {
-// 	default:
-// 		conn.WriteError("ERR unknown command '" + string(cmd.Args[0]) + "'")
-// 	case "ping":
-// 		conn.WriteString("PONG")
-// 	case "quit":
-// 		conn.WriteString("OK")
-// 		conn.Close()
-// 	case "shutdown":
-// 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-// 		defer cancel()
-// 		s.Shutdown(ctx)
-// 	}
-// }
 
 func (s *Server) Accept(conn redcon.Conn) bool {
 	logrus.Debugf("Accept %s", conn.RemoteAddr())

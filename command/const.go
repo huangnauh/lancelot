@@ -1,20 +1,34 @@
 package command
 
-const (
-	HSET_COMMAND     = "hset"
-	HGET_COMMAND     = "hget"
-	SET_COMMAND      = "set"
-	GET_COMMAND      = "get"
-	DEL_COMMAND      = "del"
-	TTL_COMMAND      = "ttl"
-	OBJECT_COMMAND   = "object"
-	HELP_COMMAND     = "help"
-	ENCODING_COMMAND = "encoding"
-	FREQ_COMMAND     = "freq"
-	IDLETIME_COMMAND = "idletime"
-	REFCOUNT_COMMAND = "refcount"
+import "github.com/tidwall/redcon"
 
-	OK     = "OK"
-	Queued = "QUEUED"
-	PONG   = "PONG"
+const (
+	HSET_COMMAND       = "hset"
+	HGET_COMMAND       = "hget"
+	SET_COMMAND        = "set"
+	GET_COMMAND        = "get"
+	DEL_COMMAND        = "del"
+	TTL_COMMAND        = "ttl"
+	OBJECT_COMMAND     = "object"
+	HELP_COMMAND       = "help"
+	ENCODING_COMMAND   = "encoding"
+	FREQ_COMMAND       = "freq"
+	IDLETIME_COMMAND   = "idletime"
+	REFCOUNT_COMMAND   = "refcount"
+	EVAL_COMMAND       = "eval"
+	EVALSHA_COMMAND    = "evalsha"
+	EVAL_RO_COMMAND    = "eval_ro"
+	EVALSHA_RO_COMMAND = "evalsha_ro"
+
+	OK     = redcon.SimpleString("OK")
+	Queued = redcon.SimpleString("QUEUED")
+	PONG   = redcon.SimpleString("PONG")
 )
+
+func SimpleInt(n int) redcon.SimpleInt {
+	return redcon.SimpleInt(n)
+}
+
+func SimpleString(n string) redcon.SimpleString {
+	return redcon.SimpleString(n)
+}

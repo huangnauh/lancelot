@@ -12,7 +12,7 @@ import (
 	"github.com/tidwall/redcon"
 )
 
-type RespFunc func(txn *Txn)
+// type RespFunc func(txn *Txn)
 
 type Txn struct {
 	redcon.Conn
@@ -22,7 +22,7 @@ type Txn struct {
 	Exec        bool
 	Err         error
 	PendingReq  []redcon.Command
-	PendingResp []RespFunc
+	PendingResp []interface{}
 }
 
 // type Transaction interface {
@@ -55,8 +55,10 @@ func (t *Txn) StartTS() uint64 {
 
 func (t *Txn) Rollback() {
 	logrus.Debugf("%p rollback", t)
-	_ = t.txn.Rollback()
-	t.txn = nil
+	if t.txn != nil {
+		_ = t.txn.Rollback()
+		t.txn = nil
+	}
 }
 
 func (t *Txn) Commit() error {
@@ -69,6 +71,7 @@ func (t *Txn) Commit() error {
 		t.Rollback()
 		return err
 	}
+	t.txn = nil
 	return nil
 }
 

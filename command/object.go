@@ -159,39 +159,39 @@ func ObjectDecode(b []byte, o *Object) error {
 }
 
 // (generic) OBJECT subcommand [arguments [arguments ...]]
-func ObjectHandle(txn *store.Txn, args [][]byte) store.RespFunc {
+func ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) == 0 {
-		return txn.LazyWriteWrongArgs(OBJECT_COMMAND)
+		return txn.SetWrongArgs(OBJECT_COMMAND)
 	}
 	subcommand := strings.ToLower(string(args[0]))
 	if len(args) == 1 && subcommand == HELP_COMMAND {
-		return txn.LazyWriteArrayBulk(objectHelpInfo)
+		return objectHelpInfo
 	}
 
 	if len(args) != 2 {
-		return txn.LazyWriteWrongSubArgs(subcommand, ObjectHelpCommand)
+		return txn.SetWrongSubArgs(subcommand, ObjectHelpCommand)
 	}
 
 	switch subcommand {
 	case ENCODING_COMMAND:
 		object, err := getTxnObject(txn, KeyType, args[0])
 		if err != nil {
-			return txn.LazyWriteNull()
+			return nil
 		}
-		return txn.LazyWriteString(object.ObjectEncoding().String())
+		return SimpleString(object.ObjectEncoding().String())
 	case IDLETIME_COMMAND:
 		object, err := getTxnObject(txn, KeyType, args[0])
 		if err != nil {
-			return txn.LazyWriteNull()
+			return nil
 		}
 		now := oracle.ExtractPhysical(txn.StartTS())
 		timepstamp := oracle.ExtractPhysical(object.Timestamp)
-		return txn.LazyWriteInt(int((now - timepstamp) / 1000))
+		return SimpleInt(int((now - timepstamp) / 1000))
 	case REFCOUNT_COMMAND:
-		return txn.LazyWriteInt(0)
+		return SimpleInt(0)
 	case FREQ_COMMAND:
-		return txn.LazyWriteInt(0)
+		return SimpleInt(0)
 	default:
-		return txn.LazyWriteWrongSubArgs(subcommand, ObjectHelpCommand)
+		return txn.SetWrongSubArgs(subcommand, ObjectHelpCommand)
 	}
 }

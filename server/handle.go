@@ -17,17 +17,17 @@ func (s *Server) detach(conn store.Txn, cmd redcon.Command) {
 	go func(c redcon.DetachedConn) {
 		defer c.Close()
 
-		c.WriteString(command.OK)
+		c.WriteAny(command.OK)
 		c.Flush()
 	}(detachedConn)
 }
 
 func (s *Server) ping(conn store.Txn, cmd redcon.Command) {
-	conn.WriteString(command.PONG)
+	conn.WriteAny(command.PONG)
 }
 
 func (s *Server) quit(conn store.Txn, cmd redcon.Command) {
-	conn.WriteString(command.OK)
+	conn.WriteAny(command.OK)
 	conn.Close()
 }
 
@@ -54,7 +54,7 @@ func (s *Server) checkSingle(conn redcon.Conn) (*store.Txn, bool) {
 	return newTxn, true
 }
 
-func (s *Server) Handler(conn redcon.Conn, cmd redcon.Command, txnHandle TxnHandle) {
+func (s *Server) Handler(conn redcon.Conn, cmd redcon.Command, txnHandle command.TxnHandle) {
 	args := cmd.Args[1:]
 	txn, single := s.checkSingle(conn)
 	logrus.Debugf("handler: %s, single: %t", cmd.Args, single)
@@ -67,7 +67,7 @@ func (s *Server) Handler(conn redcon.Conn, cmd redcon.Command, txnHandle TxnHand
 		resp := txnHandle(txn, args)
 		if txn.Err != nil {
 			txn.Rollback()
-			resp(txn)
+			txn.WriteAny(resp)
 			return
 		}
 		err = txn.Commit()
@@ -75,7 +75,7 @@ func (s *Server) Handler(conn redcon.Conn, cmd redcon.Command, txnHandle TxnHand
 			writerConnError(conn, err)
 			return
 		}
-		resp(txn)
+		txn.WriteAny(resp)
 		return
 	}
 
@@ -91,7 +91,7 @@ func (s *Server) Handler(conn redcon.Conn, cmd redcon.Command, txnHandle TxnHand
 		}
 	} else {
 		txn.PendingReq = append(txn.PendingReq, cmd)
-		conn.WriteString(command.Queued)
+		conn.WriteAny(command.Queued)
 	}
 }
 
@@ -139,10 +139,11 @@ func (s *Server) exec(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	// response
-	conn.WriteArray(len(txn.PendingResp))
-	for i := range txn.PendingResp {
-		txn.PendingResp[i](txn)
-	}
+	txn.WriteAny(txn.PendingResp)
+	// txn.WriteArray(len(txn.PendingResp))
+	// for i := range txn.PendingResp {
+	// 	txn.WriteAny(txn.PendingResp[i])
+	// }
 }
 
 func (s *Server) getTransaction(conn redcon.Conn) (*store.Txn, bool) {
@@ -177,7 +178,7 @@ func (s *Server) multi(conn redcon.Conn, cmd redcon.Command) {
 	if !alreadyExist {
 		conn.SetTransaction(txn)
 	}
-	conn.WriteString(command.OK)
+	conn.WriteAny(command.OK)
 }
 
 func (s *Server) watch(conn redcon.Conn, cmd redcon.Command) {
@@ -216,7 +217,7 @@ func (s *Server) watch(conn redcon.Conn, cmd redcon.Command) {
 	if !alreadyExist {
 		conn.SetTransaction(txn)
 	}
-	conn.WriteString(command.OK)
+	conn.WriteAny(command.OK)
 }
 
 func writerConnError(conn redcon.Conn, err error) {

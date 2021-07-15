@@ -7,33 +7,33 @@ import (
 )
 
 //(hash) HGET key field
-func HGetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
+func (c *Command) HGetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 {
-		return txn.LazyWriteWrongArgs(HGET_COMMAND)
+		return txn.SetWrongArgs(HGET_COMMAND)
 	}
 	field := args[1]
 	object, err := getTxnObject(txn, KeyType, args[0])
 	if err == store.KeyNotFound {
-		return txn.LazyWriteNull()
+		return nil
 	} else if err != nil {
-		return txn.LazyWriteError(err)
+		return txn.SetError(err)
 	} else if object.Type != HashType {
-		return txn.LazyWriteError(xerror.WrongTypeError)
+		return txn.SetError(xerror.WrongTypeError)
 	}
 	hkey := object.GetKeyBytes(field)
 	value, err := txn.Get(hkey)
 	if err == store.KeyNotFound {
-		return txn.LazyWriteNull()
+		return nil
 	} else if err != nil {
-		return txn.LazyWriteError(err)
+		return txn.SetError(err)
 	}
-	return txn.LazyWriteBulk(value)
+	return value
 }
 
 //(hash) HSET key field value
-func HSetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
+func (c *Command) HSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 3 {
-		return txn.LazyWriteWrongArgs(HSET_COMMAND)
+		return txn.SetWrongArgs(HSET_COMMAND)
 	}
 	startTs := txn.StartTS()
 	field := args[1]
@@ -43,7 +43,7 @@ func HSetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 	if err == store.KeyNotFound {
 		id, err := uuid.NewUUID()
 		if err != nil {
-			return txn.LazyWriteError(err)
+			return txn.SetError(err)
 		}
 		object = &Object{
 			Key:       args[0],
@@ -55,12 +55,12 @@ func HSetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		key := GetKeyBytes(KeyType, object.Key)
 		err = txn.Put(key, ObjectEncode(object))
 		if err != nil {
-			return txn.LazyWriteError(err)
+			return txn.SetError(err)
 		}
 	} else if err != nil {
-		return txn.LazyWriteError(err)
+		return txn.SetError(err)
 	} else if object.Type != HashType {
-		return txn.LazyWriteError(xerror.WrongTypeError)
+		return txn.SetError(xerror.WrongTypeError)
 	}
 
 	hkey := object.GetKeyBytes(field)
@@ -68,12 +68,12 @@ func HSetHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 	if err == store.KeyNotFound {
 		ret = 1
 	} else if err != nil {
-		return txn.LazyWriteError(err)
+		return txn.SetError(err)
 	}
 
 	err = txn.Put(hkey, value)
 	if err != nil {
-		return txn.LazyWriteError(err)
+		return txn.SetError(err)
 	}
-	return txn.LazyWriteInt(ret)
+	return SimpleInt(ret)
 }

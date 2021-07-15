@@ -24,6 +24,10 @@ type Store struct {
 	BatchLimit         int           `yaml:"batch-limit"`
 }
 
+type Lua struct {
+	InitPoolSize int `yaml:"init-pool-size"`
+	MaxPoolSize  int `yaml:"max-pool-size"`
+}
 type Config struct {
 	LogLevel       string        `yaml:"log-level"`
 	PIDFile        string        `yaml:"pid-file"`
@@ -33,6 +37,7 @@ type Config struct {
 	Store          Store         `yaml:"store"`
 	GcTickInterval time.Duration `yaml:"gc-tick-interval"`
 	GcWorkers      int           `yaml:"gc-workers"`
+	Lua            Lua           `yaml:"lua"`
 }
 
 var cfg = &Config{
@@ -55,6 +60,10 @@ var cfg = &Config{
 	},
 	GcTickInterval: time.Minute,
 	GcWorkers:      2,
+	Lua: Lua{
+		InitPoolSize: 10,
+		MaxPoolSize:  100,
+	},
 }
 
 func LoadYAMLConfig(filename string) error {

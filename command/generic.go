@@ -8,31 +8,31 @@ import (
 )
 
 // (generic) TTL key
-func TTLHandle(txn *store.Txn, args [][]byte) store.RespFunc {
+func (c *Command) TTLHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
-		return txn.LazyWriteWrongArgs(TTL_COMMAND)
+		return txn.SetWrongArgs(TTL_COMMAND)
 	}
 	object, err := getTxnObject(txn, KeyType, args[0])
 	if err == store.KeyNotFound {
-		return txn.LazyWriteInt(-2)
+		return SimpleInt(-2)
 	} else if err != nil {
-		return txn.LazyWriteError(err)
+		return txn.SetError(err)
 	} else if object.TTL > 0 {
 		i := (object.TTL - time.Now().UnixNano()/int64(time.Millisecond)) / 1000
 		if i > 0 {
-			return txn.LazyWriteInt(int(i))
+			return SimpleInt(int(i))
 		} else {
-			return txn.LazyWriteInt(-2)
+			return SimpleInt(-2)
 		}
 	} else {
-		return txn.LazyWriteInt(-1)
+		return SimpleInt(-1)
 	}
 }
 
 // (generic) DEL key [key ...]
-func DELHandle(txn *store.Txn, args [][]byte) store.RespFunc {
+func (c *Command) DELHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) == 0 {
-		return txn.LazyWriteWrongArgs(DEL_COMMAND)
+		return txn.SetWrongArgs(DEL_COMMAND)
 	}
 	startTs := txn.StartTS()
 	now := oracle.ExtractPhysical(startTs)
@@ -43,14 +43,14 @@ func DELHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 		if err == store.KeyNotFound {
 			continue
 		} else if err != nil {
-			return txn.LazyWriteError(err)
+			return txn.SetError(err)
 		}
 		count++
 		if object.TTL > 0 {
 			ttlKey := object.GetTTLKeyBytes()
 			err = txn.Del(ttlKey)
 			if err != nil {
-				return txn.LazyWriteError(err)
+				return txn.SetError(err)
 			}
 		}
 
@@ -59,15 +59,15 @@ func DELHandle(txn *store.Txn, args [][]byte) store.RespFunc {
 			ttlKey := object.GetTTLKeyBytes()
 			err = txn.Put(ttlKey, []byte{1})
 			if err != nil {
-				return txn.LazyWriteError(err)
+				return txn.SetError(err)
 			}
 		}
 
 		key := GetKeyBytes(KeyType, object.Key)
 		err = txn.Del(key)
 		if err != nil {
-			return txn.LazyWriteError(err)
+			return txn.SetError(err)
 		}
 	}
-	return txn.LazyWriteInt(count)
+	return SimpleInt(count)
 }
