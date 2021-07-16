@@ -12,6 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/tidwall/redcon"
 	lua "github.com/yuin/gopher-lua"
+	"gitlab.s.upyun.com/platform/lancelot/lua/cjson"
 	"gitlab.s.upyun.com/platform/lancelot/lua/cmsgpack"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -35,6 +36,8 @@ var (
 		{lua.DebugLibName, lua.OpenDebug},
 		{lua.ChannelLibName, lua.OpenChannel},
 		{lua.CoroutineLibName, lua.OpenCoroutine},
+		{cjson.LibName, cjson.OpenJson},
+		{cmsgpack.LibName, cmsgpack.OpenMsgpack},
 	}
 )
 
@@ -138,11 +141,6 @@ func (l *LStatePool) New() *lua.LState {
 		L.Push(lua.LString(lib.libName))
 		L.Call(1, 0)
 	}
-	// jsonValue := L.Get(cjson.Loader(L))
-	// L.SetGlobal("cjson", jsonValue)
-
-	msgpackValue := L.Get(cmsgpack.Loader(L))
-	L.SetGlobal("cmsgpack", msgpackValue)
 	return L
 }
 

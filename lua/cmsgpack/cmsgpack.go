@@ -8,6 +8,10 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
+const (
+	LibName = "cmsgpack"
+)
+
 var (
 	errNested      = errors.New("cannot encode recursively nested tables to msgpack")
 	errInvalidKeys = errors.New("cannot encode mixed or invalid key types")
@@ -27,6 +31,12 @@ func Loader(L *lua.LState) int {
 	t := L.NewTable()
 	L.SetFuncs(t, api)
 	L.Push(t)
+	return 1
+}
+
+func OpenMsgpack(L *lua.LState) int {
+	mpmod := L.RegisterModule(LibName, api)
+	L.Push(mpmod)
 	return 1
 }
 
