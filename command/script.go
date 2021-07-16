@@ -9,13 +9,33 @@ import (
 	"sync"
 	"time"
 
-	luajson "github.com/layeh/gopher-json"
 	"github.com/sirupsen/logrus"
 	"github.com/tidwall/redcon"
 	lua "github.com/yuin/gopher-lua"
+	"gitlab.s.upyun.com/platform/lancelot/lua/cmsgpack"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
+)
+
+type LuaLib struct {
+	libName string
+	libFunc lua.LGFunction
+}
+
+var (
+	luaLibs = []LuaLib{
+		{lua.LoadLibName, lua.OpenPackage},
+		{lua.BaseLibName, lua.OpenBase},
+		{lua.TabLibName, lua.OpenTable},
+		// {lua.IoLibName, lua.OpenIo},
+		// {lua.OsLibName, lua.OpenOs},
+		{lua.StringLibName, lua.OpenString},
+		{lua.MathLibName, lua.OpenMath},
+		{lua.DebugLibName, lua.OpenDebug},
+		{lua.ChannelLibName, lua.OpenChannel},
+		{lua.CoroutineLibName, lua.OpenCoroutine},
+	}
 )
 
 type LScriptMap struct {
@@ -106,10 +126,23 @@ func luaSetRawGlobals(ls *lua.LState, tbl map[string]lua.LValue) {
 }
 
 func (l *LStatePool) New() *lua.LState {
-	L := lua.NewState()
-	jsonValue := L.Get(luajson.Loader(L))
-	L.SetGlobal("cjson", jsonValue)
-	L.SetGlobal("json", jsonValue)
+	L := lua.NewState(lua.Options{
+		CallStackSize:       lua.CallStackSize,
+		RegistrySize:        lua.RegistrySize,
+		RegistryMaxSize:     lua.RegistrySize * 2,
+		IncludeGoStackTrace: true,
+		SkipOpenLibs:        true,
+	})
+	for _, lib := range luaLibs {
+		L.Push(L.NewFunction(lib.libFunc))
+		L.Push(lua.LString(lib.libName))
+		L.Call(1, 0)
+	}
+	// jsonValue := L.Get(cjson.Loader(L))
+	// L.SetGlobal("cjson", jsonValue)
+
+	msgpackValue := L.Get(cmsgpack.Loader(L))
+	L.SetGlobal("cmsgpack", msgpackValue)
 	return L
 }
 
@@ -154,15 +187,11 @@ func (c *Command) callTxn(txn *store.Txn, ls *lua.LState, raiseErr bool) int {
 
 func (c *Command) luaCall(txn *store.Txn, scriptCmd, cmd string, args [][]byte) (interface{}, error) {
 	cmd = strings.ToLower(cmd)
-	switch cmd {
-	case "auth", "shutdown", "gc",
-		"script load", "script exists", "script flush",
-		"eval", "evalsha", "evalro", "evalrosha", "evalna", "evalnasha":
-		return nil, xerror.UnsupportCmdFromScript
-	}
-
 	txnHandle, ok := c.TxnHandle[cmd]
 	if !ok {
+		return nil, xerror.UnsupportCmdFromScript
+	}
+	if txnHandle.NoSupportScript {
 		return nil, xerror.UnsupportCmdFromScript
 	}
 	readonly := strings.HasSuffix(scriptCmd, "ro")

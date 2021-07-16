@@ -9,14 +9,19 @@ import (
 type TxnHandle func(txn *store.Txn, args [][]byte) interface{}
 
 type TxnHandler struct {
-	Func     TxnHandle
-	ReadOnly bool
+	Func            TxnHandle
+	ReadOnly        bool
+	NoSupportScript bool
 }
 
 type Command struct {
 	luapool   *LStatePool
 	TxnHandle map[string]TxnHandler
 	scriptMap *LScriptMap
+}
+
+func (c *Command) Shutdown() {
+	c.luapool.Shutdown()
 }
 
 func NewCommand(cfg *config.Lua) *Command {
@@ -53,23 +58,27 @@ func NewCommand(cfg *config.Lua) *Command {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
 				return c.evalHandle(txn, args, EVAL_COMMAND)
 			},
+			NoSupportScript: true,
 		},
 		EVALSHA_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
 				return c.evalHandle(txn, args, EVALSHA_COMMAND)
 			},
+			NoSupportScript: true,
 		},
 		EVAL_RO_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
 				return c.evalHandle(txn, args, EVAL_RO_COMMAND)
 			},
-			ReadOnly: true,
+			ReadOnly:        true,
+			NoSupportScript: true,
 		},
 		EVALSHA_RO_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
 				return c.evalHandle(txn, args, EVALSHA_COMMAND)
 			},
-			ReadOnly: true,
+			ReadOnly:        true,
+			NoSupportScript: true,
 		},
 	}
 	return c

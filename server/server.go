@@ -99,6 +99,7 @@ func (s *Server) Shutdown(ctx context.Context) {
 	close(s.closed)
 	_ = s.red.Close(ctx)
 	_ = s.http.Shutdown(ctx)
+	s.command.Shutdown()
 	select {
 	case <-s.gcClosed:
 	case <-ctx.Done():
