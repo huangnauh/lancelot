@@ -24,6 +24,7 @@ var (
 	ErrNoMatchScript       = errors.New("ERROR No matching script. Please use EVAL.")
 	ErrReadOnlyScript      = errors.New("ERROR Write commands are not allowed from read-only scripts.")
 	UnsupportCmdFromScript = errors.New("ERROR Unsupported commands from scripts.")
+	UnsupportFlushOption   = errors.New("ERROR SCRIPT FLUSH only support SYNC|ASYNC option.")
 
 	MissingTxn        = errors.New("missing transcation")
 	InvalidTxn        = errors.New("invalid transcation")

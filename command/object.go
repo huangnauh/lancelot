@@ -6,6 +6,7 @@ import (
 
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"gitlab.s.upyun.com/platform/lancelot/store"
+	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
 
@@ -163,7 +164,7 @@ func ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) == 0 {
 		return txn.SetWrongArgs(OBJECT_COMMAND)
 	}
-	subcommand := strings.ToLower(string(args[0]))
+	subcommand := strings.ToLower(utils.B2S(args[0]))
 	if len(args) == 1 && subcommand == HELP_COMMAND {
 		return objectHelpInfo
 	}

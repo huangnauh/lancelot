@@ -13,6 +13,7 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/command"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/store"
+	"gitlab.s.upyun.com/platform/lancelot/utils"
 )
 
 const (
@@ -43,7 +44,7 @@ func (s *Server) ConnHandle(command string, handler ConnHandle) {
 }
 
 func (s *Server) ServeRESP(conn redcon.Conn, cmd redcon.Command) {
-	command := strings.ToLower(string(cmd.Args[0]))
+	command := strings.ToLower(utils.B2S(cmd.Args[0]))
 	if handler, ok := s.connHandlers[command]; ok {
 		handler(conn, cmd)
 	} else if handler, ok := s.command.TxnHandle[command]; ok {
@@ -73,6 +74,19 @@ func NewServer(cfg *config.Config) *Server {
 
 	s.red = redcon.NewServer("", s.ServeRESP, s.Accept, s.Close)
 	return s
+}
+
+func (s *Server) Start(httpln, redln net.Listener) {
+	err := s.OpenStore()
+	if err != nil {
+		logrus.Fatalln("OpenStore:", err)
+	}
+
+	s.command.Start()
+
+	go s.HttpServe(httpln)
+	go s.RedisServe(redln)
+	go s.StartGC()
 }
 
 func (s *Server) OpenStore() error {

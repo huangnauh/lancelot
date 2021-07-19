@@ -76,23 +76,7 @@ func main() {
 		logrus.Fatalln("Http Server Can't listen :", err)
 	}
 	serv := server.NewServer(cfg)
-
-	err = serv.OpenStore()
-	if err != nil {
-		logrus.Fatalln("OpenStore:", err)
-	}
-
-	go func() {
-		serv.HttpServe(httpln)
-	}()
-
-	go func() {
-		serv.RedisServe(redln)
-	}()
-
-	go func() {
-		serv.StartGC()
-	}()
+	serv.Start(httpln, redln)
 
 	if err := upg.Ready(); err != nil {
 		panic(err)

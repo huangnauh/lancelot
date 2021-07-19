@@ -12,11 +12,16 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/tidwall/redcon"
 	lua "github.com/yuin/gopher-lua"
+	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/lua/cjson"
 	"gitlab.s.upyun.com/platform/lancelot/lua/cmsgpack"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
+)
+
+const (
+	ScriptHelpCommand = "SCRIPT HELP"
 )
 
 type LuaLib struct {
@@ -62,19 +67,17 @@ func (m *LScriptMap) Put(key string, script *lua.FunctionProto) {
 type LStatePool struct {
 	sync.Mutex
 	saved []*lua.LState
+	cfg   *config.Lua
 	total int
-	init  int
-	max   int
 }
 
-func NewLStatePool(init, max int) *LStatePool {
+func NewLStatePool(cfg *config.Lua) *LStatePool {
 	l := &LStatePool{
-		saved: make([]*lua.LState, init),
-		max:   max,
-		init:  init,
-		total: init,
+		saved: make([]*lua.LState, cfg.InitPoolSize),
+		cfg:   cfg,
+		total: cfg.InitPoolSize,
 	}
-	for i := 0; i < init; i++ {
+	for i := 0; i < cfg.InitPoolSize; i++ {
 		l.saved[i] = l.New()
 	}
 	return l
@@ -85,7 +88,7 @@ func (l *LStatePool) Get() (*lua.LState, error) {
 	defer l.Unlock()
 	n := len(l.saved)
 	if n == 0 {
-		if l.total >= l.max {
+		if l.total >= l.cfg.MaxPoolSize {
 			return nil, xerror.ErrNoLuasAvailable
 		}
 		l.total++
@@ -100,8 +103,8 @@ func (l *LStatePool) Prune() {
 	l.Lock()
 	defer l.Unlock()
 	n := len(l.saved)
-	if n > l.init+1 {
-		dropNum := (n - l.init) / 2
+	if n > l.cfg.InitPoolSize+1 {
+		dropNum := (n - l.cfg.InitPoolSize) / 2
 		newSaved := make([]*lua.LState, n-dropNum)
 		copy(newSaved, l.saved[dropNum:])
 		l.saved = newSaved
@@ -216,6 +219,81 @@ func sha1hex(ls *lua.LState) int {
 	shaSum := utils.Sha1Sum(utils.S2B(ls.ToString(1)))
 	ls.Push(lua.LString(shaSum))
 	return 1
+}
+
+// (scripting) SCRIPT LOAD script
+func (c *Command) ScriptLoad(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongSubArgs(LOAD_COMMAND, ScriptHelpCommand)
+	}
+	luaState, err := c.luapool.Get()
+	if err != nil {
+		return txn.SetError(err)
+	}
+	defer c.luapool.Put(luaState)
+
+	script := args[0]
+	shaSum := utils.Sha1Sum(script)
+	_, ok := c.scriptMap.Get(shaSum)
+	var fn *lua.LFunction
+	if !ok {
+		fn, err = luaState.Load(bytes.NewReader(script), "s_"+shaSum)
+		if err != nil {
+			return txn.SetError(xerror.MakeSafeErr(err))
+		}
+		c.scriptMap.Put(shaSum, fn.Proto)
+	}
+	return shaSum
+}
+
+// (scripting) SCRIPT EXISTS sha1 [sha1 ...]
+func (c *Command) ScriptExists(txn *store.Txn, args [][]byte) interface{} {
+	results := make([]int, len(args))
+	for i := range args {
+		_, ok := c.scriptMap.Get(utils.B2S(args[i]))
+		if ok {
+			results[i] = 1
+		} else {
+			results[i] = 0
+		}
+	}
+	return results
+}
+
+// (scripting) SCRIPT FLUSH [ASYNC|SYNC]
+func (c *Command) ScriptFlush(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) > 1 {
+		return txn.SetError(xerror.UnsupportFlushOption)
+	}
+
+	if len(args) == 1 {
+		opt := strings.ToLower(utils.B2S(args[0]))
+		if opt != ASYNC_OPTION && opt != SYNC_OPTION {
+			return txn.SetError(xerror.UnsupportFlushOption)
+		}
+	}
+	c.scriptMap.Lock()
+	c.scriptMap.scripts = make(map[string]*lua.FunctionProto)
+	c.scriptMap.Unlock()
+	return OK
+}
+
+func (c *Command) ScriptHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 1 {
+		return txn.SetWrongArgs(SCRIPT_COMMAND)
+	}
+
+	subCommand := strings.ToLower(utils.B2S(args[0]))
+	switch subCommand {
+	case LOAD_COMMAND:
+		return c.ScriptLoad(txn, args[1:])
+	case EXISTS_COMMAND:
+		return c.ScriptExists(txn, args[1:])
+	case FLUSH_COMMAND:
+		return c.ScriptFlush(txn, args[1:])
+	default:
+		return txn.SetWrongSubArgs(subCommand, ScriptHelpCommand)
+	}
 }
 
 // EVAL script numkeys [key [key ...]] [arg [arg ...]]

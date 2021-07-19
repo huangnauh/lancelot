@@ -19,6 +19,14 @@ const (
 	EVALSHA_COMMAND    = "evalsha"
 	EVAL_RO_COMMAND    = "eval_ro"
 	EVALSHA_RO_COMMAND = "evalsha_ro"
+	SCRIPT_COMMAND     = "script"
+	LOAD_COMMAND       = "load"
+	FLUSH_COMMAND      = "flush"
+	EXISTS_COMMAND     = "exists"
+	KILL_COMMAND       = "kill"
+
+	ASYNC_OPTION = "async"
+	SYNC_OPTION  = "sync"
 
 	OK     = redcon.SimpleString("OK")
 	Queued = redcon.SimpleString("QUEUED")

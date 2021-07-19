@@ -7,6 +7,7 @@ import (
 
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"gitlab.s.upyun.com/platform/lancelot/store"
+	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
 
@@ -95,7 +96,7 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 	var keepTTL, getArg bool
 	var check CheckType
 	for i := 2; i < len(args); i++ {
-		str := strings.ToLower(string(args[i]))
+		str := strings.ToLower(utils.B2S(args[i]))
 		intFlag := false
 		var unitDuration time.Duration
 		var unitInt64 int64

@@ -25,6 +25,9 @@
 - [x] (scripting) EVALSHA sha1 numkeys [key [key ...]] [arg [arg ...]]
 - [x] (scripting) EVALSHA_RO sha1 numkeys key [key ...] arg [arg ...]
 - [x] (scripting) EVAL_RO script numkeys key [key ...] arg [arg ...]
+- [x] (scripting) SCRIPT LOAD script
+- [x] (scripting) SCRIPT FLUSH [ASYNC|SYNC]
+- [x] (scripting) SCRIPT EXISTS sha1 [sha1 ...]
 
 #### Available libraries
 - [x] redis.call function.
