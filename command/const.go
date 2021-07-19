@@ -1,6 +1,6 @@
 package command
 
-import "github.com/tidwall/redcon"
+import "gitlab.s.upyun.com/platform/lancelot/redcon"
 
 const (
 	HSET_COMMAND       = "hset"

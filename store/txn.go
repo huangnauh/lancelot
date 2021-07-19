@@ -9,7 +9,7 @@ import (
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/util/execdetails"
 	"github.com/sirupsen/logrus"
-	"github.com/tidwall/redcon"
+	"gitlab.s.upyun.com/platform/lancelot/redcon"
 )
 
 // type RespFunc func(txn *Txn)

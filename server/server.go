@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/sirupsen/logrus"
-	"github.com/tidwall/redcon"
+	"gitlab.s.upyun.com/platform/lancelot/redcon"
 
 	"gitlab.s.upyun.com/platform/lancelot/command"
 	"gitlab.s.upyun.com/platform/lancelot/config"

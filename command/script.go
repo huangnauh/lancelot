@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/tidwall/redcon"
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/lua/cjson"
 	"gitlab.s.upyun.com/platform/lancelot/lua/cmsgpack"
+	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
