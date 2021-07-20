@@ -11,16 +11,16 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
 
-func (s *Server) detach(conn store.Txn, cmd redcon.Command) {
-	logrus.Debugf("detach: %v", cmd)
-	detachedConn := conn.Detach()
-	go func(c redcon.DetachedConn) {
-		defer c.Close()
+// func (s *Server) detach(conn store.Txn, cmd redcon.Command) {
+// 	logrus.Debugf("detach: %v", cmd)
+// 	detachedConn := conn.Detach()
+// 	go func(c redcon.DetachedConn) {
+// 		defer c.Close()
 
-		c.WriteAny(command.OK)
-		c.Flush()
-	}(detachedConn)
-}
+// 		c.WriteAny(command.OK)
+// 		c.Flush()
+// 	}(detachedConn)
+// }
 
 func (s *Server) ping(conn store.Txn, cmd redcon.Command) {
 	conn.WriteAny(command.PONG)
@@ -38,7 +38,7 @@ func (s *Server) shutdown(conn store.Txn, cmd redcon.Command) {
 	s.Shutdown(ctx)
 }
 
-func (s *Server) checkSingle(conn redcon.Conn) (*store.Txn, bool) {
+func (s *Server) checkSingle(conn *redcon.Conn) (*store.Txn, bool) {
 	connTxn := conn.Transaction()
 	var txn *store.Txn
 	if connTxn != nil {
@@ -54,7 +54,7 @@ func (s *Server) checkSingle(conn redcon.Conn) (*store.Txn, bool) {
 	return newTxn, true
 }
 
-func (s *Server) Handler(conn redcon.Conn, cmd redcon.Command, txnHandle command.TxnHandle) {
+func (s *Server) Handler(conn *redcon.Conn, cmd redcon.Command, txnHandle command.TxnHandle) {
 	args := cmd.Args[1:]
 	txn, single := s.checkSingle(conn)
 	logrus.Debugf("handler: %s, single: %t", cmd.Args, single)
@@ -95,7 +95,7 @@ func (s *Server) Handler(conn redcon.Conn, cmd redcon.Command, txnHandle command
 	}
 }
 
-func (s *Server) exec(conn redcon.Conn, cmd redcon.Command) {
+func (s *Server) exec(conn *redcon.Conn, cmd redcon.Command) {
 	logrus.Debugf("exec: %v", cmd)
 	args := cmd.Args[1:]
 	if len(args) != 0 {
@@ -146,7 +146,7 @@ func (s *Server) exec(conn redcon.Conn, cmd redcon.Command) {
 	// }
 }
 
-func (s *Server) getTransaction(conn redcon.Conn) (*store.Txn, bool) {
+func (s *Server) getTransaction(conn *redcon.Conn) (*store.Txn, bool) {
 	connTxn := conn.Transaction()
 	var txn *store.Txn
 	if connTxn != nil {
@@ -161,7 +161,7 @@ func (s *Server) getTransaction(conn redcon.Conn) (*store.Txn, bool) {
 	return txn, false
 }
 
-func (s *Server) multi(conn redcon.Conn, cmd redcon.Command) {
+func (s *Server) multi(conn *redcon.Conn, cmd redcon.Command) {
 	logrus.Debugf("multi: %v", cmd)
 	args := cmd.Args[1:]
 	if len(args) != 0 {
@@ -181,7 +181,7 @@ func (s *Server) multi(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteAny(command.OK)
 }
 
-func (s *Server) watch(conn redcon.Conn, cmd redcon.Command) {
+func (s *Server) watch(conn *redcon.Conn, cmd redcon.Command) {
 	logrus.Debugf("watch: %v", cmd)
 	args := cmd.Args[1:]
 	if len(args) == 0 {
@@ -220,6 +220,6 @@ func (s *Server) watch(conn redcon.Conn, cmd redcon.Command) {
 	conn.WriteAny(command.OK)
 }
 
-func writerConnError(conn redcon.Conn, err error) {
+func writerConnError(conn *redcon.Conn, err error) {
 	conn.WriteError("Err " + err.Error())
 }

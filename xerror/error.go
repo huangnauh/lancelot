@@ -33,11 +33,20 @@ var (
 	ErrValueTooShort = errors.New("ERR value is too short")
 	ErrNotTTL        = errors.New("ERR value is not ttl")
 
-	ErrNoLuasAvailable = errors.New("ERR no lua available")
+	ErrNoLuasAvailable  = errors.New("ERR no lua available")
+	ErrNotSupport       = errors.New("not support")
+	InvalidPassword     = errors.New("The password hash must be exactly 64 characters and contain only lowercase hexadecimal characters")
+	ErrNotExistPassword = errors.New("The password you are trying to remove from the user does not exist")
+	ErrTooManyPasswords = errors.New("Too many passwords")
+	UnknownCommand      = errors.New("Unknown command or category name in ACL")
 )
 
 func WrongArgsString(command string) string {
 	return fmt.Sprintf("ERR wrong number of arguments for '%s' command", command)
+}
+
+func WrongModifier(command, modifier string, err error) error {
+	return fmt.Errorf("ERROR Error in %s modifier '%s': %s", command, modifier, err.Error())
 }
 
 func WrongArgsError(command string) error {

@@ -24,7 +24,7 @@ const (
 	MULTI_COMMAND    = "multi"
 )
 
-type ConnHandle func(txn redcon.Conn, cmd redcon.Command)
+type ConnHandle func(conn *redcon.Conn, cmd redcon.Command)
 type Server struct {
 	sync.RWMutex
 	cfg          *config.Config
@@ -43,7 +43,7 @@ func (s *Server) ConnHandle(command string, handler ConnHandle) {
 	s.connHandlers[command] = handler
 }
 
-func (s *Server) ServeRESP(conn redcon.Conn, cmd redcon.Command) {
+func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 	command := strings.ToLower(utils.B2S(cmd.Args[0]))
 	if handler, ok := s.connHandlers[command]; ok {
 		handler(conn, cmd)
@@ -58,7 +58,7 @@ func NewServer(cfg *config.Config) *Server {
 	s := &Server{
 		cfg:          cfg,
 		http:         &http.Server{},
-		command:      command.NewCommand(&cfg.Lua),
+		command:      command.NewCommand(cfg),
 		connHandlers: make(map[string]ConnHandle),
 		closed:       make(chan bool),
 		gcClosed:     make(chan bool),
@@ -120,11 +120,11 @@ func (s *Server) Shutdown(ctx context.Context) {
 	}
 }
 
-func (s *Server) Accept(conn redcon.Conn) bool {
+func (s *Server) Accept(conn *redcon.Conn) bool {
 	logrus.Debugf("Accept %s", conn.RemoteAddr())
 	return true
 }
 
-func (s *Server) Close(conn redcon.Conn, err error) {
+func (s *Server) Close(conn *redcon.Conn, err error) {
 	logrus.Debugf("Close %s", conn.RemoteAddr())
 }

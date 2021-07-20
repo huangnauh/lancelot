@@ -20,6 +20,7 @@ const (
 	ZsetType ObjectType = 'z'
 	HashType ObjectType = 'h'
 	TTLType  ObjectType = 't'
+	UserType ObjectType = 'u'
 
 	EncodingRaw = ObjectEncoding(iota)
 	EncodingInt

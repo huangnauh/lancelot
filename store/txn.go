@@ -15,7 +15,7 @@ import (
 // type RespFunc func(txn *Txn)
 
 type Txn struct {
-	redcon.Conn
+	*redcon.Conn
 	client      *Client
 	txn         kv.Transaction
 	Multi       bool

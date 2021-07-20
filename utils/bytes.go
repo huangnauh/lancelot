@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/hex"
 	"reflect"
 	"unsafe"
 )
@@ -45,4 +46,21 @@ func S2B(s string) (b []byte) {
 	bh.Len = sh.Len
 	bh.Cap = sh.Len
 	return b
+}
+
+func HexEncode(src []byte) []byte {
+	dst := make([]byte, hex.EncodedLen(len(src)))
+	hex.Encode(dst, src)
+	return dst
+}
+
+func HexDecode(src []byte, dst []byte) error {
+	_, err := hex.Decode(dst, src)
+	return err
+}
+
+func GetHexDecode(src []byte) ([]byte, error) {
+	dst := make([]byte, hex.DecodedLen(len(src)))
+	_, err := hex.Decode(dst, src)
+	return dst, err
 }

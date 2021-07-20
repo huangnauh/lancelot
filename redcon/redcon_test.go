@@ -206,7 +206,7 @@ func TestRandomCommands(t *testing.T) {
 		fmt.Printf("%d commands in %s - %.0f ops/sec\n", cnt, dur, float64(cnt)/(float64(dur)/float64(time.Second)))
 	}
 }
-func testDetached(conn DetachedConn) {
+func testDetached(conn *DetachedConn) {
 	conn.WriteString("DETACHED")
 	if err := conn.Flush(); err != nil {
 		panic(err)
@@ -223,7 +223,7 @@ func TestServerUnix(t *testing.T) {
 
 func testServerNetwork(t *testing.T, network, laddr string) {
 	s := NewServerNetwork(network, laddr,
-		func(conn Conn, cmd Command) {
+		func(conn *Conn, cmd Command) {
 			switch strings.ToLower(string(cmd.Args[0])) {
 			default:
 				conn.WriteError("ERR unknown command '" + string(cmd.Args[0]) + "'")
@@ -250,11 +250,11 @@ func testServerNetwork(t *testing.T, network, laddr string) {
 				conn.WriteString("Hi!")
 			}
 		},
-		func(conn Conn) bool {
+		func(conn *Conn) bool {
 			//log.Printf("accept: %s", conn.RemoteAddr())
 			return true
 		},
-		func(conn Conn, err error) {
+		func(conn *Conn, err error) {
 			//log.Printf("closed: %s [%v]", conn.RemoteAddr(), err)
 		},
 	)
@@ -263,7 +263,7 @@ func testServerNetwork(t *testing.T, network, laddr string) {
 	// }
 	go func() {
 		time.Sleep(time.Second / 4)
-		if err := ListenAndServeNetwork(network, laddr, func(conn Conn, cmd Command) {}, nil, nil); err == nil {
+		if err := ListenAndServeNetwork(network, laddr, func(conn *Conn, cmd Command) {}, nil, nil); err == nil {
 			panic("expected an error, should not be able to listen on the same port")
 		}
 		time.Sleep(time.Second / 4)
@@ -595,7 +595,7 @@ func TestPubSub(t *testing.T) {
 				ps.Publish(channel, message)
 			}
 		}()
-		panic(ListenAndServe(addr, func(conn Conn, cmd Command) {
+		panic(ListenAndServe(addr, func(conn *Conn, cmd Command) {
 			switch strings.ToLower(string(cmd.Args[0])) {
 			default:
 				conn.WriteError("ERR unknown command '" +

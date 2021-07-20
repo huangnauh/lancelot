@@ -28,6 +28,11 @@ type Lua struct {
 	InitPoolSize int `yaml:"init-pool-size"`
 	MaxPoolSize  int `yaml:"max-pool-size"`
 }
+
+type Auth struct {
+	Root string `yaml:"root"`
+	Pass string `yaml:"pass"`
+}
 type Config struct {
 	LogLevel       string        `yaml:"log-level"`
 	PIDFile        string        `yaml:"pid-file"`
@@ -38,6 +43,7 @@ type Config struct {
 	GcTickInterval time.Duration `yaml:"gc-tick-interval"`
 	GcWorkers      int           `yaml:"gc-workers"`
 	Lua            Lua           `yaml:"lua"`
+	Auth           Auth          `yaml:"auth"`
 }
 
 var cfg = &Config{
@@ -63,6 +69,10 @@ var cfg = &Config{
 	Lua: Lua{
 		InitPoolSize: 10,
 		MaxPoolSize:  100,
+	},
+	Auth: Auth{
+		Root: "root",
+		Pass: "root",
 	},
 }
 
