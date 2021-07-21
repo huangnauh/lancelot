@@ -1,4 +1,4 @@
-package server
+package command
 
 import (
 	"bytes"
@@ -7,7 +7,6 @@ import (
 
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/sirupsen/logrus"
-	"gitlab.s.upyun.com/platform/lancelot/command"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 )
@@ -16,24 +15,24 @@ const (
 	GcSavedTs = "/lancelot/gcworker/saved_ts"
 )
 
-func (s *Server) StartGC() {
-	ticker := time.NewTicker(s.cfg.GcTickInterval)
+func (c *Command) startGC() {
+	ticker := time.NewTicker(c.cfg.GcTickInterval)
 	defer func() {
 		ticker.Stop()
-		close(s.gcClosed)
+		close(c.gcClosed)
 	}()
 	for {
 		select {
 		case <-ticker.C:
-			s.tickGC()
-		case <-s.closed:
+			c.tickGC()
+		case <-c.done:
 			return
 		}
 	}
 }
 
-func (s *Server) tickGC() {
-	ts, err := s.client.CurrentVersion()
+func (c *Command) tickGC() {
+	ts, err := c.client.CurrentVersion()
 	if err != nil {
 		logrus.Errorf("get current version err: %s", err)
 		return
@@ -41,7 +40,7 @@ func (s *Server) tickGC() {
 
 	ms := oracle.ExtractPhysical(ts)
 	now := time.Unix(ms/1e3, (ms%1e3)*1e6)
-	loadTS, err := s.client.LoadTS(GcSavedTs)
+	loadTS, err := c.client.LoadTS(GcSavedTs)
 	if err != nil {
 		logrus.Errorf("load ts err: %s", err)
 		return
@@ -51,32 +50,32 @@ func (s *Server) tickGC() {
 	if saved.Add(time.Minute).After(now) {
 		return
 	}
-	err = s.client.SaveTS(GcSavedTs, ts)
+	err = c.client.SaveTS(GcSavedTs, ts)
 	if err != nil {
 		logrus.Errorf("save ts err: %s", err)
 		return
 	}
 
-	cur := command.GetTTLPrefix(0)
-	endGC := command.GetTTLPrefix(ms)
-	touchTicker := time.NewTicker(s.cfg.GcTickInterval / 10)
+	cur := GetTTLPrefix(0)
+	endGC := GetTTLPrefix(ms)
+	touchTicker := time.NewTicker(c.cfg.GcTickInterval / 10)
 	defer touchTicker.Stop()
 
 LABLE:
 	for bytes.Compare(cur, endGC) < 0 {
 		var limit int
 		var wait bool
-		if atomic.LoadInt32(&s.gcWorkers) < int32(s.cfg.GcWorkers) {
-			cur, limit, wait, err = s.doGC(cur, endGC)
+		if atomic.LoadInt32(&c.gcWorkers) < int32(c.cfg.GcWorkers) {
+			cur, limit, wait, err = c.doGC(cur, endGC)
 			if err != nil {
 				break LABLE
 			}
-			if limit < s.cfg.Store.BatchLimit {
+			if limit < c.cfg.Store.BatchLimit {
 				break LABLE
 			}
 
 			select {
-			case <-s.closed:
+			case <-c.done:
 				break LABLE
 			default:
 				if !wait {
@@ -86,31 +85,31 @@ LABLE:
 		}
 
 		select {
-		case <-s.closed:
+		case <-c.done:
 			break LABLE
 		case <-touchTicker.C:
-			ts, err := s.client.CurrentVersion()
+			ts, err := c.client.CurrentVersion()
 			if err != nil {
 				break LABLE
 			}
-			err = s.client.SaveTS(GcSavedTs, ts)
+			err = c.client.SaveTS(GcSavedTs, ts)
 			if err != nil {
 				break LABLE
 			}
 		}
 	}
-	s.gcWait.Wait()
+	c.gcWait.Wait()
 }
 
-func (s *Server) DelteRange(start, end []byte, callback func(*store.Client)) {
-	s.client.DelteRange(start, end, callback)
-	s.gcWait.Done()
-	atomic.AddInt32(&s.gcWorkers, -1)
+func (c *Command) DelteRange(start, end []byte, callback func(*store.Client)) {
+	c.client.DelteRange(start, end, callback)
+	c.gcWait.Done()
+	atomic.AddInt32(&c.gcWorkers, -1)
 }
 
-func (s *Server) doGC(start, end []byte) ([]byte, int, bool, error) {
+func (c *Command) doGC(start, end []byte) ([]byte, int, bool, error) {
 	logrus.Infof("start gc %v %v", start, end)
-	txn := s.client.NewTxn()
+	txn := c.client.NewTxn()
 	err := txn.Begin()
 	if err != nil {
 		logrus.Errorf("new txn err: %s", err)
@@ -129,14 +128,14 @@ func (s *Server) doGC(start, end []byte) ([]byte, int, bool, error) {
 LABLE:
 	for it.Valid() && bytes.Compare(k, end) < 0 && bytes.Compare(k, start) >= 0 {
 		k = it.Key()
-		object, err := command.GetObjectFromTTL(k)
+		object, err := GetObjectFromTTL(k)
 		if err != nil {
 			logrus.Errorf("get key %s from ttl err: %s", k, err)
 			continue
 		}
 		switch object.Type {
-		case command.KeyType:
-			key := command.GetKeyBytes(object.Type, object.Key)
+		case KeyType:
+			key := GetKeyBytes(object.Type, object.Key)
 			logrus.Debugf("delete key: %s", key)
 			err = txn.Del(key)
 			if err != nil {
@@ -148,21 +147,21 @@ LABLE:
 				logrus.Errorf("del key %s err: %s", k, err)
 			}
 			count++
-			if count >= s.cfg.Store.BatchLimit {
+			if count >= c.cfg.Store.BatchLimit {
 				break LABLE
 			}
-		case command.HashType:
+		case HashType:
 			p := object.GetKeyBytesPrefix()
 			logrus.Debugf("delete hash: %s", p)
-			s.gcWait.Add(1)
-			gcWorkers := atomic.AddInt32(&s.gcWorkers, 1)
-			go s.DelteRange(p, utils.PrefixNext(p), func(c *store.Client) {
+			c.gcWait.Add(1)
+			gcWorkers := atomic.AddInt32(&c.gcWorkers, 1)
+			go c.DelteRange(p, utils.PrefixNext(p), func(c *store.Client) {
 				_ = c.Delete(k)
 			})
-			if int(gcWorkers) >= s.cfg.GcWorkers {
+			if int(gcWorkers) >= c.cfg.GcWorkers {
 				// limit the number of goroutines
 				wait = true
-				count = s.cfg.Store.BatchLimit
+				count = c.cfg.Store.BatchLimit
 				break LABLE
 			}
 		default:

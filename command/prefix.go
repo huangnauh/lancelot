@@ -13,6 +13,10 @@ func GetKeyBytes(otype ObjectType, key []byte) []byte {
 	return k
 }
 
+func GetKeyPrefix(otype ObjectType) []byte {
+	return []byte{byte(otype)}
+}
+
 func EncodeTTLValue(timestamp uint64) []byte {
 	b := make([]byte, 8)
 	binary.BigEndian.PutUint64(b, timestamp)

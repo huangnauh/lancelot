@@ -111,6 +111,48 @@ func (c *Client) SaveTS(savedPath string, t uint64) error {
 	return nil
 }
 
+type KVCallback func(key, value []byte) bool
+
+func (c *Client) List(start, end []byte, limit int, callback KVCallback) (err error) {
+	txn := c.NewTxn()
+	err = txn.Begin()
+	if err != nil {
+		logrus.Errorf("new txn err: %s", err)
+		return
+	}
+	defer txn.Rollback()
+	var it kv.Iterator
+	it, err = txn.Iter(start, end, false)
+	if err != nil {
+		logrus.Errorf("iter err: %s", err)
+		return
+	}
+	defer it.Close()
+
+	count := 0
+	for it.Valid() {
+		key := it.Key()
+		if bytes.Compare(key, start) < 0 || bytes.Compare(key, end) >= 0 {
+			return nil
+		}
+
+		ok := callback(key, it.Value())
+		if !ok {
+			return nil
+		}
+
+		count++
+		if limit > 0 && count >= limit {
+			return
+		}
+		err = it.Next()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type ClientCallback func(c *Client)
 
 func (c *Client) DelteRange(start, end []byte, callback ClientCallback) {

@@ -16,13 +16,12 @@ import (
 
 type Txn struct {
 	*redcon.Conn
-	client      *Client
-	txn         kv.Transaction
-	Multi       bool
-	Exec        bool
-	Err         error
-	PendingReq  []redcon.Command
-	PendingResp []interface{}
+	client     *Client
+	txn        kv.Transaction
+	Multi      bool
+	Exec       bool
+	Err        error
+	PendingReq []redcon.Command
 }
 
 // type Transaction interface {

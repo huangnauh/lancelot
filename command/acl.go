@@ -14,14 +14,13 @@ import (
 const (
 	AclHelpCommand = "ACL HELP"
 
-	MAX_PASSWORDS = 10
-
-	USER_FLAG_DISABLED    byte = 0
 	USER_FLAG_ENABLED     byte = 1 << 0
 	USER_FLAG_ALLKEYS     byte = 1 << 1
 	USER_FLAG_ALLCHANNELS byte = 1 << 2
 	USER_FLAG_ALLCOMMANDS byte = 1 << 3
 	USER_FLAG_NOPASS      byte = 1 << 4
+
+	UserFlagRoot byte = USER_FLAG_ENABLED | USER_FLAG_ALLKEYS | USER_FLAG_ALLCHANNELS | USER_FLAG_ALLCOMMANDS
 )
 
 type User struct {
@@ -31,7 +30,69 @@ type User struct {
 	Commands  *bitmap.Bitmap
 }
 
-func (c *Command) Resp(u *User) []interface{} {
+func (c *Command) RootUser() *User {
+	root := &User{
+		Name: c.cfg.Auth.Root,
+		Flag: UserFlagRoot,
+		Passwords: map[string]bool{
+			utils.Sha256Sum(utils.S2B(c.cfg.Auth.Pass)): true,
+		},
+		Commands: bitmap.New(MAX_COMMANDS),
+	}
+	root.Commands.SetFull()
+	return root
+}
+
+func (c *Command) ListResp(u *User) string {
+	var builder strings.Builder
+	builder.WriteString("user ")
+	builder.WriteString(u.Name)
+	if u.Flag&USER_FLAG_ENABLED != 0 {
+		builder.WriteString(" on")
+	} else {
+		builder.WriteString(" off")
+	}
+
+	if u.Flag&USER_FLAG_NOPASS != 0 {
+		builder.WriteString(" nopass")
+	} else {
+		for password := range u.Passwords {
+			builder.WriteString(" #")
+			builder.WriteString(password)
+		}
+	}
+
+	if u.Flag&USER_FLAG_ALLKEYS != 0 {
+		builder.WriteString(" ~*")
+	}
+
+	if u.Flag&USER_FLAG_ALLCHANNELS != 0 {
+		builder.WriteString(" &*")
+	}
+
+	if u.Flag&USER_FLAG_ALLCOMMANDS != 0 {
+		builder.WriteString(" +@all")
+		for name, handle := range c.TxnHandle {
+			ok := u.Commands.IsSet(handle.ID)
+			if !ok {
+				builder.WriteString(" -")
+				builder.WriteString(name)
+			}
+		}
+	} else {
+		builder.WriteString(" -@all")
+		for name, handle := range c.TxnHandle {
+			ok := u.Commands.IsSet(handle.ID)
+			if ok {
+				builder.WriteString(" +")
+				builder.WriteString(name)
+			}
+		}
+	}
+	return builder.String()
+}
+
+func (c *Command) GetResp(u *User) []interface{} {
 	b := make([]interface{}, 10)
 
 	b[0] = "flags"
@@ -150,9 +211,53 @@ func (c *Command) AclHandle(txn *store.Txn, args [][]byte) interface{} {
 		return c.AclSetUser(txn, args[1:])
 	case GETUSER_COMMAND:
 		return c.AclGetUser(txn, args[1:])
+	case LIST_COMMAND:
+		return c.AclList(txn, args[1:])
 	default:
 		return txn.SetWrongSubArgs(subCommand, AclHelpCommand)
 	}
+}
+
+func (c *Command) ListUsers() (map[string]*User, error) {
+	prefix := GetKeyPrefix(UserType)
+
+	users := make(map[string]*User)
+	callback := func(key, value []byte) bool {
+		u := &User{}
+		if err := UserDecode(value, u); err != nil {
+			return true
+		}
+		username := string(key[len(prefix):])
+		u.Name = username
+		users[username] = u
+		return true
+	}
+	err := c.client.List(prefix, utils.PrefixNext(prefix), c.cfg.Auth.MaxUsers, callback)
+	return users, err
+}
+
+func (c *Command) GetUser(txn *store.Txn, username string) (*User, error) {
+	key := GetKeyBytes(UserType, utils.S2B(username))
+	b, err := txn.Get(key)
+	if err != nil {
+		return nil, err
+	}
+	u := &User{}
+	err = UserDecode(b, u)
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+func (c *Command) AclList(txn *store.Txn, args [][]byte) interface{} {
+	b := make([]string, len(c.users))
+	i := 0
+	for _, user := range c.users {
+		b[i] = c.ListResp(user)
+		i++
+	}
+	return b
 }
 
 // (server) ACL GETUSER username
@@ -160,19 +265,12 @@ func (c *Command) AclGetUser(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongSubArgs(GETUSER_COMMAND, AclHelpCommand)
 	}
-	key := GetKeyBytes(UserType, args[0])
-	b, err := txn.Get(key)
-	if err == store.KeyNotFound {
+
+	u, ok := c.users[utils.B2S(args[0])]
+	if !ok {
 		return nil
-	} else if err != nil {
-		return txn.SetError(err)
 	}
-	u := &User{}
-	err = UserDecode(b, u)
-	if err != nil {
-		return txn.SetError(err)
-	}
-	return c.Resp(u)
+	return c.GetResp(u)
 }
 
 // (server) ACL SETUSER username [rule [rule ...]]
@@ -181,11 +279,18 @@ func (c *Command) AclSetUser(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongSubArgs(SETUSER_COMMAND, AclHelpCommand)
 	}
 
-	u := &User{
-		Name:      utils.B2S(args[0]),
-		Passwords: make(map[string]bool),
-		Commands:  bitmap.New(MAX_COMMANDS),
+	username := utils.B2S(args[0])
+	u, ok := c.users[username]
+	if !ok {
+		u = &User{
+			Name:      username,
+			Flag:      USER_FLAG_ALLCHANNELS,
+			Passwords: make(map[string]bool),
+			Commands:  bitmap.New(MAX_COMMANDS),
+		}
+		c.users[username] = u
 	}
+
 	rules := args[1:]
 	var err error
 	for i := range rules {
@@ -243,7 +348,7 @@ func (c *Command) aclSetRule(txn *store.Txn, u *User, rule string) error {
 	default:
 		if rule[0] == '>' {
 			password := utils.Sha256Sum(utils.S2B(rule[1:]))
-			if len(password) >= MAX_PASSWORDS {
+			if len(password) >= c.cfg.Auth.MaxPasswordsPerUser {
 				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND),
 					rule, xerror.ErrTooManyPasswords)
 			}
@@ -253,7 +358,7 @@ func (c *Command) aclSetRule(txn *store.Txn, u *User, rule string) error {
 			if err != nil {
 				return err
 			}
-			if len(password) >= MAX_PASSWORDS {
+			if len(password) >= c.cfg.Auth.MaxPasswordsPerUser {
 				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND),
 					rule, xerror.ErrTooManyPasswords)
 			}

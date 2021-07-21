@@ -8,11 +8,9 @@ import (
 	"sync"
 
 	"github.com/sirupsen/logrus"
-	"gitlab.s.upyun.com/platform/lancelot/redcon"
-
 	"gitlab.s.upyun.com/platform/lancelot/command"
 	"gitlab.s.upyun.com/platform/lancelot/config"
-	"gitlab.s.upyun.com/platform/lancelot/store"
+	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 )
 
@@ -24,31 +22,21 @@ const (
 	MULTI_COMMAND    = "multi"
 )
 
-type ConnHandle func(conn *redcon.Conn, cmd redcon.Command)
 type Server struct {
 	sync.RWMutex
-	cfg          *config.Config
-	http         *http.Server
-	red          *redcon.Server
-	command      *command.Command
-	connHandlers map[string]ConnHandle
-	client       *store.Client
-	closed       chan bool
-	gcWait       *sync.WaitGroup
-	gcWorkers    int32
-	gcClosed     chan bool
-}
-
-func (s *Server) ConnHandle(command string, handler ConnHandle) {
-	s.connHandlers[command] = handler
+	cfg     *config.Config
+	http    *http.Server
+	red     *redcon.Server
+	command *command.Command
+	closed  chan bool
 }
 
 func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 	command := strings.ToLower(utils.B2S(cmd.Args[0]))
-	if handler, ok := s.connHandlers[command]; ok {
-		handler(conn, cmd)
+	if handler, ok := s.command.ConnHandle[command]; ok {
+		handler.Func(conn, cmd)
 	} else if handler, ok := s.command.TxnHandle[command]; ok {
-		s.Handler(conn, cmd, handler.Func)
+		s.command.TxnHandler(conn, cmd, handler.Func)
 	} else {
 		conn.WriteError("ERR unknown command '" + command + "'")
 	}
@@ -56,43 +44,24 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 
 func NewServer(cfg *config.Config) *Server {
 	s := &Server{
-		cfg:          cfg,
-		http:         &http.Server{},
-		command:      command.NewCommand(cfg),
-		connHandlers: make(map[string]ConnHandle),
-		closed:       make(chan bool),
-		gcClosed:     make(chan bool),
-		gcWait:       &sync.WaitGroup{},
+		cfg:     cfg,
+		http:    &http.Server{},
+		command: command.NewCommand(cfg),
+		closed:  make(chan bool),
 	}
-
-	// s.ConnHandle("detach", s.detach)
-	// s.ConnHandle("quit", s.quit)
-	// s.ConnHandle(SHUTDONW_COMMAND, s.shutdown)
-	s.ConnHandle(WATCH_COMMAND, s.watch)
-	s.ConnHandle(EXEC_COMMAND, s.exec)
-	s.ConnHandle(MULTI_COMMAND, s.multi)
 
 	s.red = redcon.NewServer("", s.ServeRESP, s.Accept, s.Close)
 	return s
 }
 
 func (s *Server) Start(httpln, redln net.Listener) {
-	err := s.OpenStore()
+	err := s.command.Start()
 	if err != nil {
-		logrus.Fatalln("OpenStore:", err)
+		logrus.Fatalln("Server:", err)
 	}
-
-	s.command.Start()
 
 	go s.HttpServe(httpln)
 	go s.RedisServe(redln)
-	go s.StartGC()
-}
-
-func (s *Server) OpenStore() error {
-	var err error
-	s.client, err = store.Open(&s.cfg.Store)
-	return err
 }
 
 func (s *Server) HttpServe(ln net.Listener) {
@@ -113,11 +82,7 @@ func (s *Server) Shutdown(ctx context.Context) {
 	close(s.closed)
 	_ = s.red.Close(ctx)
 	_ = s.http.Shutdown(ctx)
-	s.command.Shutdown()
-	select {
-	case <-s.gcClosed:
-	case <-ctx.Done():
-	}
+	s.command.Shutdown(ctx)
 }
 
 func (s *Server) Accept(conn *redcon.Conn) bool {

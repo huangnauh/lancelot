@@ -30,8 +30,10 @@ type Lua struct {
 }
 
 type Auth struct {
-	Root string `yaml:"root"`
-	Pass string `yaml:"pass"`
+	Root                string `yaml:"root"`
+	Pass                string `yaml:"pass"`
+	MaxUsers            int    `yaml:"max-users"`
+	MaxPasswordsPerUser int    `yaml:"max-passwords-per-user"`
 }
 type Config struct {
 	LogLevel       string        `yaml:"log-level"`
@@ -71,8 +73,10 @@ var cfg = &Config{
 		MaxPoolSize:  100,
 	},
 	Auth: Auth{
-		Root: "root",
-		Pass: "root",
+		Root:                "root",
+		Pass:                "root",
+		MaxUsers:            1000,
+		MaxPasswordsPerUser: 10,
 	},
 }
 

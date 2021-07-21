@@ -56,6 +56,12 @@ const (
 	USERS_COMMAND      = "users"
 	LIST_COMMAND       = "list"
 	SAVE_COMMAND       = "save"
+	PING_COMMAND       = "ping"
+	SHUTDONW_COMMAND   = "shutdown"
+	WATCH_COMMAND      = "watch"
+	EXEC_COMMAND       = "exec"
+	MULTI_COMMAND      = "multi"
+	DISCARD_COMMAND    = "discard"
 
 	MAX_COMMANDS = 1024
 

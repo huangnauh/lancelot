@@ -1,44 +1,16 @@
-package server
+package command
 
 import (
-	"context"
-	"time"
+	"strings"
 
 	"github.com/sirupsen/logrus"
-	"gitlab.s.upyun.com/platform/lancelot/command"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
+	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
 
-// func (s *Server) detach(conn store.Txn, cmd redcon.Command) {
-// 	logrus.Debugf("detach: %v", cmd)
-// 	detachedConn := conn.Detach()
-// 	go func(c redcon.DetachedConn) {
-// 		defer c.Close()
-
-// 		c.WriteAny(command.OK)
-// 		c.Flush()
-// 	}(detachedConn)
-// }
-
-func (s *Server) ping(conn store.Txn, cmd redcon.Command) {
-	conn.WriteAny(command.PONG)
-}
-
-func (s *Server) quit(conn store.Txn, cmd redcon.Command) {
-	conn.WriteAny(command.OK)
-	conn.Close()
-}
-
-func (s *Server) shutdown(conn store.Txn, cmd redcon.Command) {
-	conn.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	s.Shutdown(ctx)
-}
-
-func (s *Server) checkSingle(conn *redcon.Conn) (*store.Txn, bool) {
+func (c *Command) checkSingle(conn *redcon.Conn) (*store.Txn, bool) {
 	connTxn := conn.Transaction()
 	var txn *store.Txn
 	if connTxn != nil {
@@ -49,14 +21,14 @@ func (s *Server) checkSingle(conn *redcon.Conn) (*store.Txn, bool) {
 		}
 		// after WATCH command but before MULTI command
 	}
-	newTxn := s.client.NewTxn()
+	newTxn := c.client.NewTxn()
 	newTxn.Conn = conn
 	return newTxn, true
 }
 
-func (s *Server) Handler(conn *redcon.Conn, cmd redcon.Command, txnHandle command.TxnHandle) {
+func (c *Command) TxnHandler(conn *redcon.Conn, cmd redcon.Command, txnHandle TxnHandle) {
 	args := cmd.Args[1:]
-	txn, single := s.checkSingle(conn)
+	txn, single := c.checkSingle(conn)
 	logrus.Debugf("handler: %s, single: %t", cmd.Args, single)
 	if single {
 		err := txn.Begin()
@@ -79,23 +51,25 @@ func (s *Server) Handler(conn *redcon.Conn, cmd redcon.Command, txnHandle comman
 		return
 	}
 
-	if txn.Exec {
-		if !txn.HasTransaction() {
-			txn.Err = xerror.InvalidTxn
-			writerConnError(conn, xerror.InvalidTxn)
-			return
-		}
-		resp := txnHandle(txn, args)
-		if txn.Err == nil {
-			txn.PendingResp = append(txn.PendingResp, resp)
-		}
-	} else {
-		txn.PendingReq = append(txn.PendingReq, cmd)
-		conn.WriteAny(command.Queued)
-	}
+	txn.PendingReq = append(txn.PendingReq, cmd)
+	conn.WriteAny(Queued)
+
+	// if txn.Exec {
+	// 	if !txn.HasTransaction() {
+	// 		txn.Err = xerror.InvalidTxn
+	// 		writerConnError(conn, xerror.InvalidTxn)
+	// 		return
+	// 	}
+	// 	resp := txnHandle(txn, args)
+	// 	if txn.Err == nil {
+	// 		txn.PendingResp = append(txn.PendingResp, resp)
+	// 	}
+	// } else {
+
+	// }
 }
 
-func (s *Server) exec(conn *redcon.Conn, cmd redcon.Command) {
+func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) {
 	logrus.Debugf("exec: %v", cmd)
 	args := cmd.Args[1:]
 	if len(args) != 0 {
@@ -103,7 +77,7 @@ func (s *Server) exec(conn *redcon.Conn, cmd redcon.Command) {
 		return
 	}
 
-	txn, alreadyExist := s.getTransaction(conn)
+	txn, alreadyExist := c.getTransaction(conn)
 	defer conn.SetTransaction(nil)
 
 	if !txn.Multi || !alreadyExist {
@@ -119,16 +93,24 @@ func (s *Server) exec(conn *redcon.Conn, cmd redcon.Command) {
 			return
 		}
 	}
+	defer txn.Rollback()
 
 	// pennding
 	txn.Exec = true
+	ret := make([]interface{}, 0)
 	for _, cmd := range txn.PendingReq {
-		s.ServeRESP(conn, cmd)
+		command := strings.ToLower(utils.B2S(cmd.Args[0]))
+		txnHandler, ok := c.TxnHandle[command]
+		if !ok {
+			conn.WriteError("ERR unknown command '" + command + "'")
+			return
+		}
+		resp := txnHandler.Func(txn, cmd.Args[1:])
 		if txn.Err != nil {
-			txn.Rollback()
 			writerConnError(conn, txn.Err)
 			return
 		}
+		ret = append(ret, resp)
 	}
 
 	// commit
@@ -139,14 +121,10 @@ func (s *Server) exec(conn *redcon.Conn, cmd redcon.Command) {
 	}
 
 	// response
-	txn.WriteAny(txn.PendingResp)
-	// txn.WriteArray(len(txn.PendingResp))
-	// for i := range txn.PendingResp {
-	// 	txn.WriteAny(txn.PendingResp[i])
-	// }
+	txn.WriteAny(ret)
 }
 
-func (s *Server) getTransaction(conn *redcon.Conn) (*store.Txn, bool) {
+func (c *Command) getTransaction(conn *redcon.Conn) (*store.Txn, bool) {
 	connTxn := conn.Transaction()
 	var txn *store.Txn
 	if connTxn != nil {
@@ -156,19 +134,19 @@ func (s *Server) getTransaction(conn *redcon.Conn) (*store.Txn, bool) {
 			return txn, true
 		}
 	}
-	txn = s.client.NewTxn()
+	txn = c.client.NewTxn()
 	txn.Conn = conn
 	return txn, false
 }
 
-func (s *Server) multi(conn *redcon.Conn, cmd redcon.Command) {
+func (c *Command) multi(conn *redcon.Conn, cmd redcon.Command) {
 	logrus.Debugf("multi: %v", cmd)
 	args := cmd.Args[1:]
 	if len(args) != 0 {
 		conn.WriteError(xerror.WrongArgsString(string(cmd.Args[0])))
 		return
 	}
-	txn, alreadyExist := s.getTransaction(conn)
+	txn, alreadyExist := c.getTransaction(conn)
 	if txn.Multi {
 		conn.WriteError(xerror.ErrMultiNested)
 		return
@@ -178,10 +156,10 @@ func (s *Server) multi(conn *redcon.Conn, cmd redcon.Command) {
 	if !alreadyExist {
 		conn.SetTransaction(txn)
 	}
-	conn.WriteAny(command.OK)
+	conn.WriteAny(OK)
 }
 
-func (s *Server) watch(conn *redcon.Conn, cmd redcon.Command) {
+func (c *Command) watch(conn *redcon.Conn, cmd redcon.Command) {
 	logrus.Debugf("watch: %v", cmd)
 	args := cmd.Args[1:]
 	if len(args) == 0 {
@@ -189,7 +167,7 @@ func (s *Server) watch(conn *redcon.Conn, cmd redcon.Command) {
 		return
 	}
 
-	txn, alreadyExist := s.getTransaction(conn)
+	txn, alreadyExist := c.getTransaction(conn)
 	if txn.Multi {
 		conn.WriteError(xerror.ErrWatchInsideMulti)
 		return
@@ -217,7 +195,7 @@ func (s *Server) watch(conn *redcon.Conn, cmd redcon.Command) {
 	if !alreadyExist {
 		conn.SetTransaction(txn)
 	}
-	conn.WriteAny(command.OK)
+	conn.WriteAny(OK)
 }
 
 func writerConnError(conn *redcon.Conn, err error) {

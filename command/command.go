@@ -1,14 +1,19 @@
 package command
 
 import (
+	"context"
+	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
+	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 )
 
 type TxnHandle func(txn *store.Txn, args [][]byte) interface{}
+type ConnHandle func(conn *redcon.Conn, cmd redcon.Command)
 
 type TxnHandler struct {
 	Func            TxnHandle
@@ -17,21 +22,64 @@ type TxnHandler struct {
 	ID              int
 }
 
-type Command struct {
-	cfg       *config.Auth
-	done      chan struct{}
-	luapool   *LStatePool
-	TxnHandle map[string]TxnHandler
-	scriptMap *LScriptMap
+type ConnHandler struct {
+	Func ConnHandle
+	ID   int
 }
 
-func (c *Command) Shutdown() {
+type Command struct {
+	cfg        *config.Config
+	done       chan struct{}
+	luapool    *LStatePool
+	TxnHandle  map[string]TxnHandler
+	ConnHandle map[string]ConnHandler
+	scriptMap  *LScriptMap
+	users      map[string]*User
+	client     *store.Client
+	gcWait     *sync.WaitGroup
+	gcWorkers  int32
+	gcClosed   chan bool
+}
+
+func (c *Command) Shutdown(ctx context.Context) {
 	close(c.done)
 	c.luapool.Shutdown()
+	select {
+	case <-c.gcClosed:
+	case <-ctx.Done():
+	}
 }
 
-func (c *Command) Start() {
+func (c *Command) Start() error {
+	var err error
+	c.client, err = store.Open(&c.cfg.Store)
+	if err != nil {
+		return err
+	}
+
 	go c.watchLuaStatePool()
+	go c.watchUser()
+	go c.startGC()
+	return nil
+}
+
+func (c *Command) watchUser() {
+	t := time.NewTicker(10 * time.Minute)
+	defer t.Stop()
+	for {
+		users, err := c.ListUsers()
+		if err != nil {
+			logrus.Errorf("watchUser: %s", err)
+			continue
+		}
+		c.users = users
+		c.users[c.cfg.Auth.Root] = c.RootUser()
+		select {
+		case <-t.C:
+		case <-c.done:
+			return
+		}
+	}
 }
 
 func (c *Command) watchLuaStatePool() {
@@ -49,11 +97,29 @@ func (c *Command) watchLuaStatePool() {
 
 func NewCommand(cfg *config.Config) *Command {
 	c := &Command{
-		cfg:     &cfg.Auth,
+		cfg:     cfg,
 		done:    make(chan struct{}),
 		luapool: NewLStatePool(&cfg.Lua),
 		scriptMap: &LScriptMap{
 			scripts: make(map[string]*lua.FunctionProto),
+		},
+		users:    make(map[string]*User),
+		gcClosed: make(chan bool),
+		gcWait:   &sync.WaitGroup{},
+	}
+
+	c.ConnHandle = map[string]ConnHandler{
+		WATCH_COMMAND: {
+			Func: c.watch,
+			ID:   1023,
+		},
+		MULTI_COMMAND: {
+			Func: c.multi,
+			ID:   1022,
+		},
+		EXEC_COMMAND: {
+			Func: c.exec,
+			ID:   1021,
 		},
 	}
 
@@ -88,6 +154,11 @@ func NewCommand(cfg *config.Config) *Command {
 		ACL_COMMAND: {
 			Func: c.AclHandle,
 			ID:   6,
+		},
+		AUTH_COMMAND: {
+			Func:            c.AuthHandle,
+			ID:              7,
+			NoSupportScript: true,
 		},
 		EVAL_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
