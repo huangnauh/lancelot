@@ -15,6 +15,10 @@
 - [x] (string) SET key value [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp|KEEPTTL [NX|XX] [GET]
 - [x] (hash) HSET key field value
 - [x] (hash) HGET key field
+- [x] (server) ACL GETUSER username
+- [x] (server) ACL SETUSER username [rule [rule ...]]
+- [x] (server) ACL LIST
+- [x] (connection) AUTH [username] password
 - [x] (transactions) WATCH key
 - [x] (transactions) MULTI
 - [x] (transactions) EXEC

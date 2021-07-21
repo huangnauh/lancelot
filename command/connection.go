@@ -1,8 +1,6 @@
 package command
 
 import (
-	"bytes"
-
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
@@ -25,12 +23,18 @@ func (c *Command) AuthHandle(txn *store.Txn, args [][]byte) interface{} {
 		password = args[1]
 	}
 
-	if bytes.Equal(password, utils.S2B(c.cfg.Auth.Pass)) {
-		if username == "" {
-			username = c.cfg.Auth.Root
-		} else if username != c.cfg.Auth.Root {
-			return txn
+	pass := utils.Sha256Sum(password)
+
+	users := c.GetLocalUsers()
+	for _, user := range users {
+		if username == "" || user.Name == username {
+			for p := range user.Passwords {
+				if p == pass {
+					txn.Auth = true
+					return OK
+				}
+			}
 		}
 	}
-	return nil
+	return txn.SetError(xerror.WRONGPASS)
 }

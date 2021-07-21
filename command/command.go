@@ -35,6 +35,8 @@ type Command struct {
 	ConnHandle map[string]ConnHandler
 	scriptMap  *LScriptMap
 	users      map[string]*User
+	root       *User
+	ulock      sync.RWMutex
 	client     *store.Client
 	gcWait     *sync.WaitGroup
 	gcWorkers  int32
@@ -63,6 +65,36 @@ func (c *Command) Start() error {
 	return nil
 }
 
+func (c *Command) SetLocalUsers(users map[string]*User) {
+	c.ulock.Lock()
+	c.users = users
+	c.users[c.root.Name] = c.root
+	c.ulock.Unlock()
+}
+
+func (c *Command) SetLocalUser(user *User) {
+	c.ulock.Lock()
+	c.users[user.Name] = user
+	c.ulock.Unlock()
+}
+
+func (c *Command) GetLocalUser(username string) (*User, bool) {
+	c.ulock.RLock()
+	user, ok := c.users[username]
+	c.ulock.RUnlock()
+	return user, ok
+}
+
+func (c *Command) GetLocalUsers() []*User {
+	c.ulock.RLock()
+	users := make([]*User, 0, len(c.users))
+	for _, user := range c.users {
+		users = append(users, user)
+	}
+	c.ulock.RUnlock()
+	return users
+}
+
 func (c *Command) watchUser() {
 	t := time.NewTicker(10 * time.Minute)
 	defer t.Stop()
@@ -72,8 +104,7 @@ func (c *Command) watchUser() {
 			logrus.Errorf("watchUser: %s", err)
 			continue
 		}
-		c.users = users
-		c.users[c.cfg.Auth.Root] = c.RootUser()
+		c.SetLocalUsers(users)
 		select {
 		case <-t.C:
 		case <-c.done:
@@ -107,6 +138,7 @@ func NewCommand(cfg *config.Config) *Command {
 		gcClosed: make(chan bool),
 		gcWait:   &sync.WaitGroup{},
 	}
+	c.root = c.RootUser()
 
 	c.ConnHandle = map[string]ConnHandler{
 		WATCH_COMMAND: {

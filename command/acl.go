@@ -3,6 +3,7 @@ package command
 import (
 	"encoding/binary"
 	"fmt"
+	"sort"
 	"strings"
 
 	"gitlab.s.upyun.com/platform/lancelot/store"
@@ -28,6 +29,19 @@ type User struct {
 	Flag      byte
 	Passwords map[string]bool
 	Commands  *bitmap.Bitmap
+}
+
+type ByName []*User
+
+func (a ByName) Len() int {
+	return len(a)
+}
+func (a ByName) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
+}
+
+func (a ByName) Less(i, j int) bool {
+	return a[j].Name < a[i].Name
 }
 
 func (c *Command) RootUser() *User {
@@ -170,7 +184,7 @@ func UserEncode(u *User) []byte {
 	k[1] = byte(len(u.Passwords))
 	i := 0
 	for password := range u.Passwords {
-		utils.HexDecode(utils.S2B(password), k[2+i*32:])
+		_ = utils.HexDecode(utils.S2B(password), k[2+i*32:])
 		i++
 	}
 	for i, segment := range u.Commands.GetSegments() {
@@ -188,6 +202,8 @@ func UserDecode(b []byte, u *User) error {
 	if len(b) < 2+MAX_COMMANDS/8+n*32 {
 		return xerror.ErrValueTooShort
 	}
+
+	u.Passwords = make(map[string]bool, n)
 	for i := 0; i < n; i++ {
 		password := utils.B2S(utils.HexEncode(b[2+i*32 : 2+i*32+32]))
 		u.Passwords[password] = true
@@ -196,6 +212,7 @@ func UserDecode(b []byte, u *User) error {
 	for i := 0; i < MAX_COMMANDS/64; i++ {
 		segments[i] = binary.BigEndian.Uint64(b[2+n*32+i*8:])
 	}
+	u.Commands = new(bitmap.Bitmap)
 	u.Commands.SetSegments(segments)
 	return nil
 }
@@ -223,12 +240,11 @@ func (c *Command) ListUsers() (map[string]*User, error) {
 
 	users := make(map[string]*User)
 	callback := func(key, value []byte) bool {
-		u := &User{}
+		username := string(key[len(prefix):])
+		u := &User{Name: username}
 		if err := UserDecode(value, u); err != nil {
 			return true
 		}
-		username := string(key[len(prefix):])
-		u.Name = username
 		users[username] = u
 		return true
 	}
@@ -242,7 +258,7 @@ func (c *Command) GetUser(txn *store.Txn, username string) (*User, error) {
 	if err != nil {
 		return nil, err
 	}
-	u := &User{}
+	u := &User{Name: username}
 	err = UserDecode(b, u)
 	if err != nil {
 		return nil, err
@@ -250,10 +266,13 @@ func (c *Command) GetUser(txn *store.Txn, username string) (*User, error) {
 	return u, nil
 }
 
+// (server) ACL LIST
 func (c *Command) AclList(txn *store.Txn, args [][]byte) interface{} {
-	b := make([]string, len(c.users))
+	users := c.GetLocalUsers()
+	sort.Sort(ByName(users))
+	b := make([]string, len(users))
 	i := 0
-	for _, user := range c.users {
+	for _, user := range users {
 		b[i] = c.ListResp(user)
 		i++
 	}
@@ -266,7 +285,7 @@ func (c *Command) AclGetUser(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongSubArgs(GETUSER_COMMAND, AclHelpCommand)
 	}
 
-	u, ok := c.users[utils.B2S(args[0])]
+	u, ok := c.GetLocalUser(utils.B2S(args[0]))
 	if !ok {
 		return nil
 	}
@@ -280,19 +299,20 @@ func (c *Command) AclSetUser(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	username := utils.B2S(args[0])
-	u, ok := c.users[username]
-	if !ok {
+	u, err := c.GetUser(txn, username)
+	if err == store.KeyNotFound {
 		u = &User{
 			Name:      username,
 			Flag:      USER_FLAG_ALLCHANNELS,
 			Passwords: make(map[string]bool),
 			Commands:  bitmap.New(MAX_COMMANDS),
 		}
-		c.users[username] = u
+	} else if err != nil {
+		return txn.SetError(err)
 	}
+	c.SetLocalUser(u)
 
 	rules := args[1:]
-	var err error
 	for i := range rules {
 		err = c.aclSetRule(txn, u, strings.ToLower(utils.B2S(rules[i])))
 		if err != nil {

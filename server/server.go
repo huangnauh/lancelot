@@ -12,6 +12,7 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
 
 const (
@@ -32,13 +33,17 @@ type Server struct {
 }
 
 func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
-	command := strings.ToLower(utils.B2S(cmd.Args[0]))
-	if handler, ok := s.command.ConnHandle[command]; ok {
+	comma := strings.ToLower(utils.B2S(cmd.Args[0]))
+	if comma != command.AUTH_COMMAND && !conn.Auth {
+		conn.WriteError(xerror.ErrAuthentication.Error())
+		return
+	}
+	if handler, ok := s.command.ConnHandle[comma]; ok {
 		handler.Func(conn, cmd)
-	} else if handler, ok := s.command.TxnHandle[command]; ok {
+	} else if handler, ok := s.command.TxnHandle[comma]; ok {
 		s.command.TxnHandler(conn, cmd, handler.Func)
 	} else {
-		conn.WriteError("ERR unknown command '" + command + "'")
+		conn.WriteError("ERR unknown command '" + comma + "'")
 	}
 }
 
