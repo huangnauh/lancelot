@@ -15,6 +15,7 @@ type ObjectType byte
 
 const (
 	KeyType  ObjectType = 'k'
+	JsonType ObjectType = 'j'
 	ListType ObjectType = 'l'
 	SetType  ObjectType = 's'
 	ZsetType ObjectType = 'z'
@@ -95,7 +96,7 @@ type Object struct {
 }
 
 func (o *Object) IsSimple() bool {
-	return o.Type == KeyType
+	return o.Type == KeyType || o.Type == JsonType
 }
 
 func (o *Object) GetKeyBytes(field []byte) []byte {

@@ -1,2 +1,2 @@
 redis-port: 16379
-gc-tick-interval: 1s
+gc-tick-interval: 10s

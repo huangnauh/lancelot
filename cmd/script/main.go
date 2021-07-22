@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
+	"github.com/valyala/fastjson"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -16,7 +19,42 @@ end
 `
 )
 
+const (
+	json     = `{"name":{"first":"Janet","last":"Prichard"},"age"::47}`
+	children = `["Sara","Alex","Jack"]`
+)
+
+func main4() {
+	v := fastjson.MustParse(`{"foo":1,"bar":[2,3]}`)
+
+	// Replace `foo` value with "xyz"
+	v.Set("foo", fastjson.MustParse(`"xyz"`))
+	// Add "newv":123
+	v.Set("newv", fastjson.MustParse(`123`))
+	fmt.Printf("%s\n", v)
+
+	// Replace `bar.1` with {"x":"y"}
+	v.Get("bar").Set("1", fastjson.MustParse(`{"x":"y"}`))
+	fmt.Printf("%s\n", v)
+	// Add `bar.3="qwe"
+	v.Get("bar").Set("3", fastjson.MustParse(`"qwe"`))
+	fmt.Printf("%s\n", v)
+	fmt.Printf("%s\n", v.Get("bar", "1"))
+
+}
+
 func main() {
+
+	j, _ := sjson.Set("", "name", json)
+	results := gjson.Get(children, "..#")
+	// json1, _ := sjson.Set("", "name", results[0].Value())
+	// json1, _ = sjson.Set(json1, "age", results[1].Value())
+	fmt.Println(j)
+	fmt.Println(results.Raw)
+	// fmt.Println(json1)
+}
+
+func main1() {
 	L := lua.NewState()
 	defer L.Close()
 	err := L.DoString("return a")

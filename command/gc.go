@@ -47,7 +47,7 @@ func (c *Command) tickGC() {
 	}
 
 	saved := oracle.GetTimeFromTS(loadTS)
-	if saved.Add(time.Minute).After(now) {
+	if saved.Add(c.cfg.GcTickInterval).After(now) {
 		return
 	}
 	err = c.client.SaveTS(GcSavedTs, ts)
@@ -134,8 +134,8 @@ LABLE:
 			continue
 		}
 		switch object.Type {
-		case KeyType:
-			key := GetKeyBytes(object.Type, object.Key)
+		case KeyType, JsonType:
+			key := GetKeyBytes(KeyType, object.Key)
 			logrus.Debugf("delete key: %s", key)
 			err = txn.Del(key)
 			if err != nil {

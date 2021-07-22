@@ -43,7 +43,7 @@ func GetObjectFromTTL(ttl []byte) (*Object, error) {
 		Type: ObjectType(ttl[9]),
 	}
 
-	if o.Type == KeyType {
+	if o.IsSimple() {
 		o.Key = ttl[10:]
 	} else {
 		o.Value = ttl[10:]

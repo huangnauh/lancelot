@@ -83,19 +83,21 @@ func (c *Command) GetHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 }
 
-// https://redis.io/commands/set
-// (string) SET key value [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp|KEEPTTL] [NX|XX] [GET]
-func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) < 2 {
-		return txn.SetWrongArgs(SET_COMMAND)
-	}
+type SetOption struct {
+	KeepTTL bool
+	Get     bool
+	Expire  int64
+	Check   CheckType
+	StartTs uint64
+}
 
+func checkSetOption(txn *store.Txn, cmd string, key []byte, args [][]byte) (*Object, *SetOption, error) {
 	startTs := txn.StartTS()
 	now := oracle.GetTimeFromTS(startTs)
 	var expire int64
 	var keepTTL, getArg bool
 	var check CheckType
-	for i := 2; i < len(args); i++ {
+	for i := 0; i < len(args); i++ {
 		str := strings.ToLower(utils.B2S(args[i]))
 		intFlag := false
 		var unitDuration time.Duration
@@ -103,31 +105,31 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 		switch str {
 		case EX:
 			if (unitDuration != 0 && unitDuration != time.Second) || keepTTL {
-				return txn.SetError(xerror.ErrSyntax)
+				return nil, nil, xerror.ErrSyntax
 			}
 			intFlag = true
 			unitDuration = time.Second
 		case PX:
 			if (unitDuration != 0 && unitDuration != time.Millisecond) || keepTTL {
-				return txn.SetError(xerror.ErrSyntax)
+				return nil, nil, xerror.ErrSyntax
 			}
 			intFlag = true
 			unitDuration = time.Millisecond
 		case EXAT:
 			if (unitInt64 != 0 && unitInt64 != 1000) || keepTTL {
-				return txn.SetError(xerror.ErrSyntax)
+				return nil, nil, xerror.ErrSyntax
 			}
 			intFlag = true
 			unitInt64 = 1000
 		case PXAT:
 			if (unitInt64 != 0 && unitInt64 != 1) || keepTTL {
-				return txn.SetError(xerror.ErrSyntax)
+				return nil, nil, xerror.ErrSyntax
 			}
 			intFlag = true
 			unitInt64 = 1
 		case KEEPTTL:
 			if unitDuration > 0 || unitInt64 > 0 {
-				return txn.SetError(xerror.ErrSyntax)
+				return nil, nil, xerror.ErrSyntax
 			}
 			keepTTL = true
 		case NX:
@@ -137,20 +139,20 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 		case GET:
 			getArg = true
 		default:
-			return txn.SetError(xerror.ErrSyntax)
+			return nil, nil, xerror.ErrSyntax
 		}
 
 		if intFlag {
 			if i+1 == len(args) {
-				return txn.SetWrongArgs(SET_COMMAND)
+				return nil, nil, xerror.WrongArgsError(cmd)
 			}
 			intArg, err := strconv.ParseInt(string(args[i+1]), 10, 64)
 			if err != nil {
-				return txn.SetError(xerror.ErrNotInteger)
+				return nil, nil, xerror.ErrNotInteger
 			}
 
 			if intArg <= 0 {
-				return txn.SetError(xerror.ErrInvalidExpire)
+				return nil, nil, xerror.ErrInvalidExpire
 			}
 
 			if unitDuration > 0 {
@@ -162,16 +164,20 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 	}
 
-	oldObject, err := getTxnKey(txn, KeyType, args[0])
+	oldObject, err := getTxnObject(txn, KeyType, key)
 	if err == store.KeyNotFound {
 		if CheckExist == check {
-			return nil
+			return nil, nil, xerror.ErrCheckFailed
 		}
 	} else if err != nil && err != store.KeyNotFound {
-		return txn.SetError(err)
+		return nil, nil, err
 	} else {
+		if oldObject.Type != CommandObjectTypes[cmd] {
+			return nil, nil, xerror.WrongTypeError
+		}
+
 		if CheckNotExist == check {
-			return nil
+			return nil, nil, xerror.ErrCheckFailed
 		}
 	}
 
@@ -183,26 +189,48 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if keepTTL && oldExpire > 0 {
 		expire = oldExpire
 	}
+	keepTTL = expire == oldExpire
+
+	if oldExpire > 0 && !keepTTL {
+		ttlKey := oldObject.GetTTLKeyBytes()
+		err := txn.Del(ttlKey)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return oldObject, &SetOption{
+		KeepTTL: keepTTL,
+		Get:     getArg,
+		Expire:  expire,
+		Check:   check,
+		StartTs: startTs,
+	}, nil
+}
+
+// https://redis.io/commands/set
+// (string) SET key value [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp|KEEPTTL] [NX|XX] [GET]
+func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 2 {
+		return txn.SetWrongArgs(SET_COMMAND)
+	}
+
+	oldObject, setOption, err := checkSetOption(txn, SET_COMMAND, args[0], args[2:])
+	if err != nil {
+		return txn.SetError(err)
+	}
 
 	object := &Object{
 		Key:       args[0],
 		Type:      KeyType,
-		TTL:       expire,
-		Timestamp: startTs,
+		TTL:       setOption.Expire,
+		Timestamp: setOption.StartTs,
 		Value:     args[1],
 	}
 
-	if expire > 0 && expire != oldExpire {
+	if !setOption.KeepTTL && setOption.Expire > 0 {
 		ttlKey := object.GetTTLKeyBytes()
 		err := txn.Put(ttlKey, []byte{1})
-		if err != nil {
-			return txn.SetError(err)
-		}
-	}
-
-	if oldExpire > 0 && expire != oldExpire {
-		ttlKey := oldObject.GetTTLKeyBytes()
-		err := txn.Del(ttlKey)
 		if err != nil {
 			return txn.SetError(err)
 		}
@@ -212,7 +240,7 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 	err = txn.Put(key, ObjectEncode(object))
 	if err != nil {
 		return txn.SetError(err)
-	} else if getArg {
+	} else if setOption.Get {
 		if oldObject != nil && oldObject.Value != nil {
 			return oldObject.Value
 		} else {

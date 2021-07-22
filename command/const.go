@@ -25,6 +25,8 @@ const (
 	TRANSCATION_CATEGORY = "transaction"
 	SCRIPTING_CATEGORY   = "scripting"
 
+	JSONSET_COMMAND    = "json.set"
+	JSONGET_COMMAND    = "json.get"
 	HSET_COMMAND       = "hset"
 	HGET_COMMAND       = "hget"
 	SET_COMMAND        = "set"
@@ -71,6 +73,17 @@ const (
 	OK     = redcon.SimpleString("OK")
 	Queued = redcon.SimpleString("QUEUED")
 	PONG   = redcon.SimpleString("PONG")
+)
+
+var (
+	CommandObjectTypes = map[string]ObjectType{
+		JSONSET_COMMAND: JsonType,
+		JSONGET_COMMAND: JsonType,
+		HSET_COMMAND:    HashType,
+		HGET_COMMAND:    HashType,
+		SET_COMMAND:     KeyType,
+		GET_COMMAND:     KeyType,
+	}
 )
 
 func SimpleInt(n int) redcon.SimpleInt {

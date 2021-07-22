@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/valyala/fastjson"
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
@@ -41,6 +42,121 @@ type Command struct {
 	gcWait     *sync.WaitGroup
 	gcWorkers  int32
 	gcClosed   chan bool
+	parsepool  *fastjson.ParserPool
+}
+
+func NewCommand(cfg *config.Config) *Command {
+	c := &Command{
+		cfg:     cfg,
+		done:    make(chan struct{}),
+		luapool: NewLStatePool(&cfg.Lua),
+		scriptMap: &LScriptMap{
+			scripts: make(map[string]*lua.FunctionProto),
+		},
+		users:     make(map[string]*User),
+		gcClosed:  make(chan bool),
+		gcWait:    &sync.WaitGroup{},
+		parsepool: &fastjson.ParserPool{},
+	}
+	c.root = c.RootUser()
+
+	c.ConnHandle = map[string]ConnHandler{
+		WATCH_COMMAND: {
+			Func: c.watch,
+			ID:   512,
+		},
+		MULTI_COMMAND: {
+			Func: c.multi,
+			ID:   511,
+		},
+		EXEC_COMMAND: {
+			Func: c.exec,
+			ID:   510,
+		},
+	}
+
+	c.TxnHandle = map[string]TxnHandler{
+		GET_COMMAND: {
+			Func:     c.GetHandle,
+			ReadOnly: true,
+			ID:       0,
+		},
+		SET_COMMAND: {
+			Func: c.SetHandle,
+			ID:   1,
+		},
+		DEL_COMMAND: {
+			Func: c.DELHandle,
+			ID:   2,
+		},
+		TTL_COMMAND: {
+			Func:     c.TTLHandle,
+			ReadOnly: true,
+			ID:       3,
+		},
+		HGET_COMMAND: {
+			Func:     c.HGetHandle,
+			ReadOnly: true,
+			ID:       4,
+		},
+		HSET_COMMAND: {
+			Func: c.HSetHandle,
+			ID:   5,
+		},
+		ACL_COMMAND: {
+			Func: c.AclHandle,
+			ID:   6,
+		},
+		AUTH_COMMAND: {
+			Func:            c.AuthHandle,
+			ID:              7,
+			NoSupportScript: true,
+		},
+		EVAL_COMMAND: {
+			Func: func(txn *store.Txn, args [][]byte) interface{} {
+				return c.evalHandle(txn, args, EVAL_COMMAND)
+			},
+			NoSupportScript: true,
+			ID:              59,
+		},
+		EVALSHA_COMMAND: {
+			Func: func(txn *store.Txn, args [][]byte) interface{} {
+				return c.evalHandle(txn, args, EVALSHA_COMMAND)
+			},
+			NoSupportScript: true,
+			ID:              60,
+		},
+		EVAL_RO_COMMAND: {
+			Func: func(txn *store.Txn, args [][]byte) interface{} {
+				return c.evalHandle(txn, args, EVAL_RO_COMMAND)
+			},
+			ReadOnly:        true,
+			NoSupportScript: true,
+			ID:              61,
+		},
+		EVALSHA_RO_COMMAND: {
+			Func: func(txn *store.Txn, args [][]byte) interface{} {
+				return c.evalHandle(txn, args, EVALSHA_COMMAND)
+			},
+			ReadOnly:        true,
+			NoSupportScript: true,
+			ID:              62,
+		},
+		SCRIPT_COMMAND: {
+			Func:            c.ScriptHandle,
+			NoSupportScript: true,
+			ID:              63,
+		},
+		JSONSET_COMMAND: {
+			Func: c.JsonSetHandle,
+			ID:   1023,
+		},
+		JSONGET_COMMAND: {
+			Func: c.JsonGetHandle,
+			ID:   1022,
+		},
+	}
+	return c
 }
 
 func (c *Command) Shutdown(ctx context.Context) {
@@ -124,109 +240,4 @@ func (c *Command) watchLuaStatePool() {
 			return
 		}
 	}
-}
-
-func NewCommand(cfg *config.Config) *Command {
-	c := &Command{
-		cfg:     cfg,
-		done:    make(chan struct{}),
-		luapool: NewLStatePool(&cfg.Lua),
-		scriptMap: &LScriptMap{
-			scripts: make(map[string]*lua.FunctionProto),
-		},
-		users:    make(map[string]*User),
-		gcClosed: make(chan bool),
-		gcWait:   &sync.WaitGroup{},
-	}
-	c.root = c.RootUser()
-
-	c.ConnHandle = map[string]ConnHandler{
-		WATCH_COMMAND: {
-			Func: c.watch,
-			ID:   1023,
-		},
-		MULTI_COMMAND: {
-			Func: c.multi,
-			ID:   1022,
-		},
-		EXEC_COMMAND: {
-			Func: c.exec,
-			ID:   1021,
-		},
-	}
-
-	c.TxnHandle = map[string]TxnHandler{
-		GET_COMMAND: {
-			Func:     c.GetHandle,
-			ReadOnly: true,
-			ID:       0,
-		},
-		SET_COMMAND: {
-			Func: c.SetHandle,
-			ID:   1,
-		},
-		DEL_COMMAND: {
-			Func: c.DELHandle,
-			ID:   2,
-		},
-		TTL_COMMAND: {
-			Func:     c.TTLHandle,
-			ReadOnly: true,
-			ID:       3,
-		},
-		HGET_COMMAND: {
-			Func:     c.HGetHandle,
-			ReadOnly: true,
-			ID:       4,
-		},
-		HSET_COMMAND: {
-			Func: c.HSetHandle,
-			ID:   5,
-		},
-		ACL_COMMAND: {
-			Func: c.AclHandle,
-			ID:   6,
-		},
-		AUTH_COMMAND: {
-			Func:            c.AuthHandle,
-			ID:              7,
-			NoSupportScript: true,
-		},
-		EVAL_COMMAND: {
-			Func: func(txn *store.Txn, args [][]byte) interface{} {
-				return c.evalHandle(txn, args, EVAL_COMMAND)
-			},
-			NoSupportScript: true,
-			ID:              59,
-		},
-		EVALSHA_COMMAND: {
-			Func: func(txn *store.Txn, args [][]byte) interface{} {
-				return c.evalHandle(txn, args, EVALSHA_COMMAND)
-			},
-			NoSupportScript: true,
-			ID:              60,
-		},
-		EVAL_RO_COMMAND: {
-			Func: func(txn *store.Txn, args [][]byte) interface{} {
-				return c.evalHandle(txn, args, EVAL_RO_COMMAND)
-			},
-			ReadOnly:        true,
-			NoSupportScript: true,
-			ID:              61,
-		},
-		EVALSHA_RO_COMMAND: {
-			Func: func(txn *store.Txn, args [][]byte) interface{} {
-				return c.evalHandle(txn, args, EVALSHA_COMMAND)
-			},
-			ReadOnly:        true,
-			NoSupportScript: true,
-			ID:              62,
-		},
-		SCRIPT_COMMAND: {
-			Func:            c.ScriptHandle,
-			NoSupportScript: true,
-			ID:              63,
-		},
-	}
-	return c
 }
