@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/valyala/fastjson"
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
@@ -42,7 +41,6 @@ type Command struct {
 	gcWait     *sync.WaitGroup
 	gcWorkers  int32
 	gcClosed   chan bool
-	parsepool  *fastjson.ParserPool
 }
 
 func NewCommand(cfg *config.Config) *Command {
@@ -53,10 +51,9 @@ func NewCommand(cfg *config.Config) *Command {
 		scriptMap: &LScriptMap{
 			scripts: make(map[string]*lua.FunctionProto),
 		},
-		users:     make(map[string]*User),
-		gcClosed:  make(chan bool),
-		gcWait:    &sync.WaitGroup{},
-		parsepool: &fastjson.ParserPool{},
+		users:    make(map[string]*User),
+		gcClosed: make(chan bool),
+		gcWait:   &sync.WaitGroup{},
 	}
 	c.root = c.RootUser()
 
