@@ -29,6 +29,41 @@ func (c *Command) TTLHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 }
 
+func (c *Command) DeleteKeyReturn(txn *store.Txn, object *Object, now int64) interface{} {
+	err := c.DeleteKey(txn, object, now)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return 1
+}
+
+func (c *Command) DeleteKey(txn *store.Txn, object *Object, now int64) error {
+	var err error
+	if object.TTL > 0 {
+		ttlKey := object.GetTTLKeyBytes()
+		err = txn.Del(ttlKey)
+		if err != nil {
+			return err
+		}
+	}
+
+	if !object.IsSimple() {
+		object.TTL = now
+		ttlKey := object.GetTTLKeyBytes()
+		err = txn.Put(ttlKey, []byte{1})
+		if err != nil {
+			return err
+		}
+	}
+
+	key := GetKeyBytes(KeyType, object.Key)
+	err = txn.Del(key)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // (generic) DEL key [key ...]
 func (c *Command) DELHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) == 0 {
@@ -46,25 +81,7 @@ func (c *Command) DELHandle(txn *store.Txn, args [][]byte) interface{} {
 			return txn.SetError(err)
 		}
 		count++
-		if object.TTL > 0 {
-			ttlKey := object.GetTTLKeyBytes()
-			err = txn.Del(ttlKey)
-			if err != nil {
-				return txn.SetError(err)
-			}
-		}
-
-		if !object.IsSimple() {
-			object.TTL = now
-			ttlKey := object.GetTTLKeyBytes()
-			err = txn.Put(ttlKey, []byte{1})
-			if err != nil {
-				return txn.SetError(err)
-			}
-		}
-
-		key := GetKeyBytes(KeyType, object.Key)
-		err = txn.Del(key)
+		err = c.DeleteKey(txn, object, now)
 		if err != nil {
 			return txn.SetError(err)
 		}

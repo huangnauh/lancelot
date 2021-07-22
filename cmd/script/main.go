@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 
-	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 	"github.com/valyala/fastjson"
 	lua "github.com/yuin/gopher-lua"
@@ -46,11 +45,12 @@ func main4() {
 func main() {
 
 	j, _ := sjson.Set("", "name", json)
-	results := gjson.Get(children, "..#")
+	json1, err := sjson.Delete(json, "aaaa")
 	// json1, _ := sjson.Set("", "name", results[0].Value())
 	// json1, _ = sjson.Set(json1, "age", results[1].Value())
 	fmt.Println(j)
-	fmt.Println(results.Raw)
+	fmt.Println(json1)
+	fmt.Println(err)
 	// fmt.Println(json1)
 }
 

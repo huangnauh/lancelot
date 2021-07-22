@@ -27,6 +27,7 @@ const (
 
 	JSONSET_COMMAND    = "json.set"
 	JSONGET_COMMAND    = "json.get"
+	JSONDEL_COMMAND    = "json.del"
 	HSET_COMMAND       = "hset"
 	HGET_COMMAND       = "hget"
 	SET_COMMAND        = "set"

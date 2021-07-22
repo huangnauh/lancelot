@@ -3,6 +3,7 @@ package command
 import (
 	"encoding/json"
 
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 	"gitlab.s.upyun.com/platform/lancelot/store"
@@ -21,6 +22,60 @@ func trimPath(path string) string {
 		}
 	}
 	return path
+}
+
+// (json) JSON.DEL key path [path ...]
+func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 2 {
+		return txn.SetWrongArgs(JSONDEL_COMMAND)
+	}
+
+	startTs := txn.StartTS()
+	now := oracle.ExtractPhysical(startTs)
+	object, err := getTxnObject(txn, KeyType, args[0])
+	if err == store.KeyNotFound {
+		return 0
+	} else if err != nil {
+		return txn.SetError(err)
+	}
+
+	if object.Type != JsonType {
+		return txn.SetError(xerror.WrongTypeError)
+	}
+
+	if object.Value == nil {
+		return c.DeleteKeyReturn(txn, object, now)
+	}
+
+	value := object.Value
+	count := 0
+	for i := 1; i < len(args); i++ {
+		path := trimPath(utils.B2S(args[i]))
+		if path == "" {
+			return c.DeleteKeyReturn(txn, object, 0)
+		}
+		origin := len(value)
+		value, err = sjson.DeleteBytes(value, path)
+		if err != nil {
+			return txn.SetError(err)
+		}
+		if origin != len(value) {
+			count++
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+
+	object.Timestamp = startTs
+	object.Value = value
+	key := GetKeyBytes(KeyType, object.Key)
+	err = txn.Put(key, ObjectEncode(object))
+	if err != nil {
+		return txn.SetError(err)
+	} else {
+		return count
+	}
 }
 
 // (json) JSON.SET <key> <path> <json> [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp|KEEPTTL] [NX|XX] [GET]

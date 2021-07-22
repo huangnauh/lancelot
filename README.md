@@ -17,6 +17,7 @@
 - [x] (hash) HGET key field
 - [x] (json) JSON.SET key value [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp|KEEPTTL [NX|XX] [GET]
 - [x] (json) JSON.GET key [path [path ...]]
+- [x] (json) JSON.DEL key path [path ...]
 - [x] (server) ACL GETUSER username
 - [x] (server) ACL SETUSER username [rule [rule ...]]
 - [x] (server) ACL LIST

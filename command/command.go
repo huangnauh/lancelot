@@ -152,6 +152,10 @@ func NewCommand(cfg *config.Config) *Command {
 			Func: c.JsonGetHandle,
 			ID:   1022,
 		},
+		JSONDEL_COMMAND: {
+			Func: c.JsonDelHandle,
+			ID:   1021,
+		},
 	}
 	return c
 }
