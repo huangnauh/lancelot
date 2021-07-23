@@ -42,4 +42,5 @@
 - [x] redis.error_reply function.
 - [x] redis.status_reply function.
 - [x] redis.sha1hex function.
-- [x] json/cjson lib.
+- [x] cjson lib.
+- [x] cmsgpack lib.

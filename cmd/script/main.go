@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/tidwall/sjson"
 	"github.com/valyala/fastjson"
+	"github.com/vmihailenco/msgpack/v5"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -42,6 +44,10 @@ func main4() {
 
 }
 
+type ExtTest struct {
+	S string
+}
+
 func main() {
 
 	j, _ := sjson.Set("", "name", json)
@@ -52,6 +58,16 @@ func main() {
 	fmt.Println(json1)
 	fmt.Println(err)
 	// fmt.Println(json1)
+
+	v := ExtTest{S: "test"}
+	body, err := msgpack.Marshal(&v)
+	fmt.Printf("%v\n", body)
+	fmt.Println(err)
+	var v1 interface{}
+	err = msgpack.Unmarshal(body, &v1)
+	fmt.Println(err)
+
+	fmt.Printf("%#v, %s", v1, reflect.TypeOf(v1))
 }
 
 func main1() {

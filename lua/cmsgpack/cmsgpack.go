@@ -1,7 +1,9 @@
 package cmsgpack
 
 import (
+	"bytes"
 	"errors"
+	"reflect"
 
 	"github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack/v5"
@@ -42,7 +44,7 @@ func OpenMsgpack(L *lua.LState) int {
 
 var api = map[string]lua.LGFunction{
 	"pack":   apiPack,
-	"unpack": apiPack,
+	"unpack": apiUnPack,
 }
 
 func apiPack(L *lua.LState) int {
@@ -54,6 +56,19 @@ func apiPack(L *lua.LState) int {
 		return 2
 	}
 	L.Push(lua.LString(string(data)))
+	return 1
+}
+
+func apiUnPack(L *lua.LState) int {
+	str := L.CheckString(1)
+
+	value, err := Decode(L, []byte(str))
+	if err != nil {
+		L.Push(lua.LNil)
+		L.Push(lua.LString(err.Error()))
+		return 2
+	}
+	L.Push(value)
 	return 1
 }
 
@@ -147,4 +162,51 @@ func Encode(value lua.LValue) ([]byte, error) {
 		LValue:  value,
 		visited: make(map[*lua.LTable]bool),
 	})
+}
+
+func Decode(L *lua.LState, data []byte) (lua.LValue, error) {
+	var value interface{}
+	dec := msgpack.GetDecoder()
+	defer msgpack.PutDecoder(dec)
+
+	dec.Reset(bytes.NewReader(data))
+	dec.UseLooseInterfaceDecoding(true)
+	err := dec.Decode(&value)
+	if err != nil {
+		logrus.Errorf("msgpack: decoding error: %v", err)
+		return nil, err
+	}
+	logrus.Debugf("msgpack: decoding %v %s", value, reflect.TypeOf(value))
+	return DecodeValue(L, value), nil
+}
+
+func DecodeValue(L *lua.LState, value interface{}) lua.LValue {
+	switch converted := value.(type) {
+	case bool:
+		return lua.LBool(converted)
+	case float64:
+		return lua.LNumber(converted)
+	case int64:
+		return lua.LNumber(float64(converted))
+	case uint64:
+		return lua.LNumber(float64(converted))
+	case string:
+		return lua.LString(converted)
+	case []interface{}:
+		arr := L.CreateTable(len(converted), 0)
+		for _, item := range converted {
+			arr.Append(DecodeValue(L, item))
+		}
+		return arr
+	case map[string]interface{}:
+		tbl := L.CreateTable(0, len(converted))
+		for key, item := range converted {
+			tbl.RawSetString(key, DecodeValue(L, item))
+		}
+		return tbl
+	case nil:
+		return lua.LNil
+	}
+
+	return lua.LNil
 }

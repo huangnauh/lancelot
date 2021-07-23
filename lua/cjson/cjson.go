@@ -169,7 +169,7 @@ func DecodeValue(L *lua.LState, value interface{}) lua.LValue {
 	case map[string]interface{}:
 		tbl := L.CreateTable(0, len(converted))
 		for key, item := range converted {
-			tbl.RawSetH(lua.LString(key), DecodeValue(L, item))
+			tbl.RawSetString(key, DecodeValue(L, item))
 		}
 		return tbl
 	case nil:
