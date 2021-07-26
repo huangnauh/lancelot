@@ -115,67 +115,57 @@ func (o *Object) IsSimple() bool {
 	return o.Type == KeyType || o.Type == JsonType
 }
 
-func (o *Object) GetKeyBytes() []byte {
-	k := make([]byte, 1+2+1+1+len(o.Key))
+func (o *Object) getBytes(typo ObjectType, data ...[]byte) []byte {
+	count := 0
+	for _, v := range data {
+		count += len(v)
+	}
+	k := make([]byte, 1+2+1+count)
 	k[0] = DataPrefix
 	binary.BigEndian.PutUint16(k[1:], o.UserId)
 	k[3] = byte(o.Db)
-	k[4] = byte(KeyType)
-	copy(k[5:], o.Key)
+	k[4] = byte(typo)
+	start := 5
+	for _, v := range data {
+		copy(k[start:], v)
+		start += len(v)
+	}
 	return k
+}
+
+func (o *Object) GetKeyBytes() []byte {
+	return o.getBytes(KeyType, o.Key)
 }
 
 func (o *Object) GetObjectKeyBytes() []byte {
-	k := make([]byte, 1+2+1+1+len(o.Key))
-	k[0] = DataPrefix
-	binary.BigEndian.PutUint16(k[1:], o.UserId)
-	k[3] = byte(o.Db)
-	k[4] = byte(o.Type)
-	copy(k[5:], o.Key)
-	return k
+	return o.getBytes(o.Type, o.Key)
 }
 
 func (o *Object) GetKeyFieldBytes(field []byte) []byte {
-	k := make([]byte, 1+2+1+len(o.Value)+len(field))
-	k[0] = DataPrefix
-	binary.BigEndian.PutUint16(k[1:], o.UserId)
-	k[3] = byte(o.Db)
-	// k[4] = byte(o.Type)
-	// binary.BigEndian.PutUint64(k[1:], uint64(o.Timestamp))
-	copy(k[4:], o.Value)
-	copy(k[4+len(o.Value):], field)
-	return k
+	return o.getBytes(o.Type, o.Value, field)
 }
 
 func (o *Object) GetValueBytesPrefix() []byte {
-	k := make([]byte, 1+2+1+len(o.Value))
-	k[0] = DataPrefix
-	binary.BigEndian.PutUint16(k[1:], o.UserId)
-	k[3] = byte(o.Db)
-	copy(k[4:], o.Value)
+	return o.getBytes(o.Type, o.Value)
+}
+
+func (o *Object) getTTLBytes(ttlType TTL, data []byte) []byte {
+	k := make([]byte, 1+8+2+1+1+len(data))
+	k[0] = TTLPrefix
+	binary.BigEndian.PutUint64(k[1:], uint64(o.TTL))
+	binary.BigEndian.PutUint16(k[9:], o.UserId)
+	k[11] = byte(o.Db)
+	k[12] = byte(ttlType)
+	copy(k[13:], data)
 	return k
 }
 
 func (o *Object) GetTTLKeyBytes() []byte {
-	k := make([]byte, 1+8+2+1+1+len(o.Key))
-	k[0] = TTLPrefix
-	binary.BigEndian.PutUint64(k[1:], uint64(o.TTL))
-	binary.BigEndian.PutUint16(k[9:], o.UserId)
-	k[11] = byte(o.Db)
-	k[12] = byte(KeyTTL)
-	copy(k[13:], o.Key)
-	return k
+	return o.getTTLBytes(KeyTTL, o.Key)
 }
 
 func (o *Object) GetTTLValueBytes() []byte {
-	k := make([]byte, 1+8+2+1+1+len(o.Value))
-	k[0] = TTLPrefix
-	binary.BigEndian.PutUint64(k[1:], uint64(o.TTL))
-	binary.BigEndian.PutUint16(k[9:], o.UserId)
-	k[11] = byte(o.Db)
-	k[12] = byte(ValueTTL)
-	copy(k[13:], o.Value)
-	return k
+	return o.getTTLBytes(ValueTTL, o.Value)
 }
 
 func GetObjectFromTTL(ttl []byte) (*Object, error) {
