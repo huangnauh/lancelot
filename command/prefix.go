@@ -6,15 +6,21 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
 
-func GetKeyBytes(otype ObjectType, key []byte) []byte {
-	k := make([]byte, len(key)+1)
-	k[0] = byte(otype)
-	copy(k[1:], key)
+func GetKeyBytes(userId uint16, db uint8, otype ObjectType, key []byte) []byte {
+	k := make([]byte, 2+1+1+len(key))
+	binary.BigEndian.PutUint16(k, userId)
+	k[2] = byte(db)
+	k[3] = byte(otype)
+	copy(k[4:], key)
 	return k
 }
 
-func GetKeyPrefix(otype ObjectType) []byte {
-	return []byte{byte(otype)}
+func GetKeyPrefix(userId uint16, db uint8, otype ObjectType) []byte {
+	k := make([]byte, 2+1+1)
+	binary.BigEndian.PutUint16(k, userId)
+	k[2] = byte(db)
+	k[3] = byte(otype)
+	return k
 }
 
 func EncodeTTLValue(timestamp uint64) []byte {
@@ -28,27 +34,6 @@ func DecodeTTLValue(b []byte) (uint64, error) {
 		return 0, xerror.ErrValueTooShort
 	}
 	return binary.BigEndian.Uint64(b), nil
-}
-
-func GetObjectFromTTL(ttl []byte) (*Object, error) {
-	if len(ttl) <= 9 {
-		return nil, xerror.ErrValueTooShort
-	}
-	if ttl[0] != byte(TTLType) {
-		return nil, xerror.ErrNotTTL
-	}
-
-	o := &Object{
-		TTL:  int64(binary.BigEndian.Uint64(ttl[1:9])),
-		Type: ObjectType(ttl[9]),
-	}
-
-	if o.IsSimple() {
-		o.Key = ttl[10:]
-	} else {
-		o.Value = ttl[10:]
-	}
-	return o, nil
 }
 
 func GetTTLPrefix(expire int64) []byte {

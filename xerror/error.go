@@ -32,8 +32,9 @@ var (
 	InvalidTxn        = errors.New("invalid transcation")
 	WrongNumberOfArgs = errors.New("wrong number of arguments")
 
-	ErrValueTooShort = errors.New("ERR value is too short")
-	ErrNotTTL        = errors.New("ERR value is not ttl")
+	ErrValueTooShort       = errors.New("ERR value is too short")
+	ErrNotTTL              = errors.New("ERR value is not ttl")
+	ErrTTLInvalidValueType = errors.New("ERR ttl invalid value type")
 
 	ErrNoLuasAvailable   = errors.New("ERR no lua available")
 	ErrNotSupport        = errors.New("not support")

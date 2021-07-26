@@ -25,6 +25,7 @@ const (
 )
 
 type User struct {
+	ID        uint16
 	Name      string
 	Flag      byte
 	Passwords map[string]bool
@@ -179,38 +180,40 @@ func (c *Command) GetResp(u *User) []interface{} {
 }
 
 func UserEncode(u *User) []byte {
-	k := make([]byte, 1+1+len(u.Passwords)*32+MAX_COMMANDS/8)
-	k[0] = byte(u.Flag)
-	k[1] = byte(len(u.Passwords))
+	k := make([]byte, 2+1+1+len(u.Passwords)*32+MAX_COMMANDS/8)
+	binary.BigEndian.PutUint16(k, u.ID)
+	k[2] = byte(u.Flag)
+	k[3] = byte(len(u.Passwords))
 	i := 0
 	for password := range u.Passwords {
-		_ = utils.HexDecode(utils.S2B(password), k[2+i*32:])
+		_ = utils.HexDecode(utils.S2B(password), k[4+i*32:])
 		i++
 	}
 	for i, segment := range u.Commands.GetSegments() {
-		binary.BigEndian.PutUint64(k[2+len(u.Passwords)*32+i*8:], segment)
+		binary.BigEndian.PutUint64(k[4+len(u.Passwords)*32+i*8:], segment)
 	}
 	return k
 }
 
 func UserDecode(b []byte, u *User) error {
-	if len(b) < 2+MAX_COMMANDS/8 {
+	if len(b) < 4+MAX_COMMANDS/8 {
 		return xerror.ErrValueTooShort
 	}
-	u.Flag = b[0]
-	n := int(b[1])
-	if len(b) < 2+MAX_COMMANDS/8+n*32 {
+	u.ID = binary.BigEndian.Uint16(b)
+	u.Flag = b[2]
+	n := int(b[3])
+	if len(b) < 4+MAX_COMMANDS/8+n*32 {
 		return xerror.ErrValueTooShort
 	}
 
 	u.Passwords = make(map[string]bool, n)
 	for i := 0; i < n; i++ {
-		password := utils.B2S(utils.HexEncode(b[2+i*32 : 2+i*32+32]))
+		password := utils.B2S(utils.HexEncode(b[4+i*32 : 2+i*32+32]))
 		u.Passwords[password] = true
 	}
 	segments := make([]uint64, MAX_COMMANDS/64)
 	for i := 0; i < MAX_COMMANDS/64; i++ {
-		segments[i] = binary.BigEndian.Uint64(b[2+n*32+i*8:])
+		segments[i] = binary.BigEndian.Uint64(b[4+n*32+i*8:])
 	}
 	u.Commands = new(bitmap.Bitmap)
 	u.Commands.SetSegments(segments)
@@ -236,7 +239,7 @@ func (c *Command) AclHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) ListUsers() (map[string]*User, error) {
-	prefix := GetKeyPrefix(UserType)
+	prefix := c.GetUserPrefix()
 
 	users := make(map[string]*User)
 	callback := func(key, value []byte) bool {
@@ -252,9 +255,27 @@ func (c *Command) ListUsers() (map[string]*User, error) {
 	return users, err
 }
 
+func (c *Command) GetUserPrefix() []byte {
+	return []byte{UserPrefix}
+}
+
+func (c *Command) GetUserBytes(username []byte) []byte {
+	k := make([]byte, 1+len(username))
+	k[0] = byte(UserPrefix)
+	copy(k[1:], username)
+	return k
+}
+
+func (c *Command) GetCountBytes(typo ObjectType) []byte {
+	k := make([]byte, 1+1)
+	k[0] = byte(CountPrefix)
+	k[1] = byte(typo)
+	return k
+}
+
 func (c *Command) GetUser(txn *store.Txn, username string) (*User, error) {
-	key := GetKeyBytes(UserType, utils.S2B(username))
-	b, err := txn.Get(key)
+	userKey := c.GetUserBytes(utils.S2B(username))
+	b, err := txn.Get(userKey)
 	if err != nil {
 		return nil, err
 	}
@@ -264,6 +285,25 @@ func (c *Command) GetUser(txn *store.Txn, username string) (*User, error) {
 		return nil, err
 	}
 	return u, nil
+}
+
+func (c *Command) SetUserCount(txn *store.Txn, count uint16) error {
+	key := c.GetCountBytes(UserType)
+	b := make([]byte, 2)
+	binary.BigEndian.PutUint16(b, count)
+	return txn.Put(key, b)
+}
+
+func (c *Command) GetUserCount(txn *store.Txn) (uint16, error) {
+	key := c.GetCountBytes(UserType)
+	b, err := txn.Get(key)
+	if err == store.KeyNotFound {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	}
+	count := binary.BigEndian.Uint16(b)
+	return count, nil
 }
 
 // (server) ACL LIST
@@ -300,8 +340,18 @@ func (c *Command) AclSetUser(txn *store.Txn, args [][]byte) interface{} {
 
 	username := utils.B2S(args[0])
 	u, err := c.GetUser(txn, username)
+	var count uint16
+	var newUser bool
 	if err == store.KeyNotFound {
+		newUser = true
+
+		count, err = c.GetUserCount(txn)
+		if err != nil {
+			return txn.SetError(err)
+		}
+		count++
 		u = &User{
+			ID:        count,
 			Name:      username,
 			Flag:      USER_FLAG_ALLCHANNELS,
 			Passwords: make(map[string]bool),
@@ -319,10 +369,17 @@ func (c *Command) AclSetUser(txn *store.Txn, args [][]byte) interface{} {
 			return txn.SetError(err)
 		}
 	}
-	key := GetKeyBytes(UserType, args[0])
+
+	key := c.GetUserBytes(args[0])
 	err = txn.Put(key, UserEncode(u))
 	if err != nil {
 		return txn.SetError(err)
+	}
+	if newUser {
+		err = c.SetUserCount(txn, count)
+		if err != nil {
+			return txn.SetError(err)
+		}
 	}
 	return OK
 }

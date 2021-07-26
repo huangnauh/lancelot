@@ -32,19 +32,17 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	startTs := txn.StartTS()
 	now := oracle.ExtractPhysical(startTs)
-	object, err := getTxnObject(txn, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, JsonType, args[0])
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object)
 	if err == store.KeyNotFound {
 		return 0
 	} else if err != nil {
 		return txn.SetError(err)
 	}
 
-	if object.Type != JsonType {
-		return txn.SetError(xerror.WrongTypeError)
-	}
-
 	if object.Value == nil {
-		return c.DeleteKeyReturn(txn, object, now)
+		return c.DeleteKeyReturn(txn, key, object, now)
 	}
 
 	value := object.Value
@@ -52,7 +50,7 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	for i := 1; i < len(args); i++ {
 		path := trimPath(utils.B2S(args[i]))
 		if path == "" {
-			return c.DeleteKeyReturn(txn, object, 0)
+			return c.DeleteKeyReturn(txn, key, object, 0)
 		}
 		origin := len(value)
 		value, err = sjson.DeleteBytes(value, path)
@@ -69,7 +67,6 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	object.Timestamp = startTs
 	object.Value = value
-	key := GetKeyBytes(KeyType, object.Key)
 	err = txn.Put(key, ObjectEncode(object))
 	if err != nil {
 		return txn.SetError(err)
@@ -94,12 +91,9 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 
-	object := &Object{
-		Key:       args[0],
-		Type:      JsonType,
-		TTL:       setOption.Expire,
-		Timestamp: setOption.StartTs,
-	}
+	object := NewObject(txn.UserId, txn.DBId, JsonType, args[0])
+	object.TTL = setOption.Expire
+	object.Timestamp = setOption.StartTs
 
 	var oldValue []byte
 	if oldObject == nil || oldObject.Value == nil {
@@ -138,7 +132,7 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 	}
 
-	key := GetKeyBytes(KeyType, object.Key)
+	key := object.GetKeyBytes()
 	err = txn.Put(key, ObjectEncode(object))
 	if err != nil {
 		return txn.SetError(err)
@@ -155,15 +149,13 @@ func (c *Command) JsonGetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(JSONGET_COMMAND)
 	}
 
-	object, err := getTxnObject(txn, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, JsonType, args[0])
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object)
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {
 		return txn.SetError(err)
-	}
-
-	if object.Type != JsonType {
-		return txn.SetError(xerror.WrongTypeError)
 	}
 
 	if len(args) == 1 {

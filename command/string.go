@@ -37,34 +37,25 @@ const (
 	CheckNotExist CheckType = 2
 )
 
-func getTxnObject(txn *store.Txn, objectType ObjectType, origin []byte) (*Object, error) {
-	key := GetKeyBytes(KeyType, origin)
+func getTxnObject(txn *store.Txn, key []byte, object *Object) error {
+	getType := object.Type
 	value, err := txn.Get(key)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	object := &Object{Key: origin, Type: objectType}
 	err = ObjectDecode(value, object)
 	if err != nil {
-		return nil, store.KeyNotFound
+		return store.KeyNotFound
 	}
 
 	if object.TTL > 0 && time.Unix(object.TTL/1e3, (object.TTL%1e3)*1e6).Before(time.Now()) {
-		return nil, store.KeyNotFound
-	}
-	return object, nil
-}
-
-func getTxnKey(txn *store.Txn, objectType ObjectType, origin []byte) (*Object, error) {
-	object, err := getTxnObject(txn, objectType, origin)
-	if err != nil {
-		return nil, err
+		return store.KeyNotFound
 	}
 
-	if object.Type != objectType {
-		return nil, xerror.WrongTypeError
+	if getType != object.Type {
+		return xerror.WrongTypeError
 	}
-	return object, nil
+	return nil
 }
 
 // https://redis.io/commands/get
@@ -73,7 +64,9 @@ func (c *Command) GetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(GET_COMMAND)
 	}
-	object, err := getTxnKey(txn, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	key := object.GetObjectKeyBytes()
+	err := getTxnObject(txn, key, object)
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {
@@ -164,7 +157,9 @@ func checkSetOption(txn *store.Txn, cmd string, key []byte, args [][]byte) (*Obj
 		}
 	}
 
-	oldObject, err := getTxnObject(txn, KeyType, key)
+	oldObject := NewObject(txn.UserId, txn.DBId, CommandObjectTypes[cmd], key)
+	objectKey := oldObject.GetObjectKeyBytes()
+	err := getTxnObject(txn, objectKey, oldObject)
 	if err == store.KeyNotFound {
 		if CheckExist == check {
 			return nil, nil, xerror.ErrCheckFailed
@@ -172,10 +167,6 @@ func checkSetOption(txn *store.Txn, cmd string, key []byte, args [][]byte) (*Obj
 	} else if err != nil && err != store.KeyNotFound {
 		return nil, nil, err
 	} else {
-		if oldObject.Type != CommandObjectTypes[cmd] {
-			return nil, nil, xerror.WrongTypeError
-		}
-
 		if CheckNotExist == check {
 			return nil, nil, xerror.ErrCheckFailed
 		}
@@ -220,13 +211,10 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 
-	object := &Object{
-		Key:       args[0],
-		Type:      KeyType,
-		TTL:       setOption.Expire,
-		Timestamp: setOption.StartTs,
-		Value:     args[1],
-	}
+	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	object.Value = args[1]
+	object.TTL = setOption.Expire
+	object.Timestamp = setOption.StartTs
 
 	if !setOption.KeepTTL && setOption.Expire > 0 {
 		ttlKey := object.GetTTLKeyBytes()
@@ -236,7 +224,7 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 	}
 
-	key := GetKeyBytes(KeyType, object.Key)
+	key := object.GetKeyBytes()
 	err = txn.Put(key, ObjectEncode(object))
 	if err != nil {
 		return txn.SetError(err)

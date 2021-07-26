@@ -74,6 +74,11 @@ const (
 	OK     = redcon.SimpleString("OK")
 	Queued = redcon.SimpleString("QUEUED")
 	PONG   = redcon.SimpleString("PONG")
+
+	DataPrefix  = 'd'
+	UserPrefix  = 'u'
+	CountPrefix = 'c'
+	TTLPrefix   = 't'
 )
 
 var (

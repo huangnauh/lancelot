@@ -12,15 +12,15 @@ func (c *Command) HGetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(HGET_COMMAND)
 	}
 	field := args[1]
-	object, err := getTxnObject(txn, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object)
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {
 		return txn.SetError(err)
-	} else if object.Type != HashType {
-		return txn.SetError(xerror.WrongTypeError)
 	}
-	hkey := object.GetKeyBytes(field)
+	hkey := object.GetKeyFieldBytes(field)
 	value, err := txn.Get(hkey)
 	if err == store.KeyNotFound {
 		return nil
@@ -39,20 +39,17 @@ func (c *Command) HSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	field := args[1]
 	value := args[2]
 	ret := 0
-	object, err := getTxnObject(txn, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object)
 	if err == store.KeyNotFound {
 		id, err := uuid.NewUUID()
 		if err != nil {
 			return txn.SetError(err)
 		}
-		object = &Object{
-			Key:       args[0],
-			Type:      HashType,
-			Timestamp: startTs,
-			Value:     id[:],
-		}
+		object.Timestamp = startTs
+		object.Value = id[:]
 		ret = 1
-		key := GetKeyBytes(KeyType, object.Key)
 		err = txn.Put(key, ObjectEncode(object))
 		if err != nil {
 			return txn.SetError(err)
@@ -63,7 +60,7 @@ func (c *Command) HSetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.WrongTypeError)
 	}
 
-	hkey := object.GetKeyBytes(field)
+	hkey := object.GetKeyFieldBytes(field)
 	_, err = txn.Get(hkey)
 	if err == store.KeyNotFound {
 		ret = 1

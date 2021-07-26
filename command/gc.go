@@ -133,9 +133,8 @@ LABLE:
 			logrus.Errorf("get key %s from ttl err: %s", k, err)
 			continue
 		}
-		switch object.Type {
-		case KeyType, JsonType:
-			key := GetKeyBytes(KeyType, object.Key)
+		if len(object.Key) > 0 {
+			key := object.GetKeyBytes()
 			logrus.Debugf("delete key: %s", key)
 			err = txn.Del(key)
 			if err != nil {
@@ -150,8 +149,10 @@ LABLE:
 			if count >= c.cfg.Store.BatchLimit {
 				break LABLE
 			}
-		case HashType:
-			p := object.GetKeyBytesPrefix()
+		}
+
+		if len(object.Value) > 0 {
+			p := object.GetValueBytesPrefix()
 			logrus.Debugf("delete hash: %s", p)
 			c.gcWait.Add(1)
 			gcWorkers := atomic.AddInt32(&c.gcWorkers, 1)
@@ -164,8 +165,6 @@ LABLE:
 				count = c.cfg.Store.BatchLimit
 				break LABLE
 			}
-		default:
-			logrus.Errorf("not support object: %s", object.ObjectEncoding())
 		}
 
 		err = it.Next()

@@ -412,15 +412,14 @@ func handle(s *Server, c *Conn) {
 
 type Transaction interface{}
 
-type DB byte
-
 // conn represents a client connection
 type Conn struct {
 	conn      net.Conn
 	Auth      bool
 	ID        int64
 	Name      string
-	DB        DB
+	DBId      uint8
+	UserId    uint16
 	wr        *Writer
 	rd        *Reader
 	addr      string

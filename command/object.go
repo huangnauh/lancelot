@@ -12,16 +12,21 @@ import (
 
 type ObjectEncoding byte
 type ObjectType byte
+type TTL byte
 
 const (
-	KeyType  ObjectType = 'k'
-	JsonType ObjectType = 'j'
-	ListType ObjectType = 'l'
-	SetType  ObjectType = 's'
-	ZsetType ObjectType = 'z'
-	HashType ObjectType = 'h'
-	TTLType  ObjectType = 't'
-	UserType ObjectType = 'u'
+	KeyType   ObjectType = 'k'
+	JsonType  ObjectType = 'j'
+	ListType  ObjectType = 'l'
+	SetType   ObjectType = 's'
+	ZsetType  ObjectType = 'z'
+	HashType  ObjectType = 'h'
+	TTLType   ObjectType = 't'
+	UserType  ObjectType = 'u'
+	CountType ObjectType = 'c'
+
+	KeyTTL   TTL = 'k'
+	ValueTTL TTL = 'v'
 
 	EncodingRaw = ObjectEncoding(iota)
 	EncodingInt
@@ -88,6 +93,8 @@ var (
 )
 
 type Object struct {
+	UserId    uint16
+	Db        uint8
 	Key       []byte
 	Type      ObjectType
 	TTL       int64
@@ -95,41 +102,103 @@ type Object struct {
 	Value     []byte
 }
 
+func NewObject(user uint16, db uint8, typo ObjectType, key []byte) *Object {
+	return &Object{
+		UserId: user,
+		Db:     db,
+		Key:    key,
+		Type:   typo,
+	}
+}
+
 func (o *Object) IsSimple() bool {
 	return o.Type == KeyType || o.Type == JsonType
 }
 
-func (o *Object) GetKeyBytes(field []byte) []byte {
-	k := make([]byte, 1+len(o.Value)+len(field))
-	k[0] = byte(o.Type)
+func (o *Object) GetKeyBytes() []byte {
+	k := make([]byte, 1+2+1+1+len(o.Key))
+	k[0] = DataPrefix
+	binary.BigEndian.PutUint16(k[1:], o.UserId)
+	k[3] = byte(o.Db)
+	k[4] = byte(KeyType)
+	copy(k[5:], o.Key)
+	return k
+}
+
+func (o *Object) GetObjectKeyBytes() []byte {
+	k := make([]byte, 1+2+1+1+len(o.Key))
+	k[0] = DataPrefix
+	binary.BigEndian.PutUint16(k[1:], o.UserId)
+	k[3] = byte(o.Db)
+	k[4] = byte(o.Type)
+	copy(k[5:], o.Key)
+	return k
+}
+
+func (o *Object) GetKeyFieldBytes(field []byte) []byte {
+	k := make([]byte, 1+2+1+len(o.Value)+len(field))
+	k[0] = DataPrefix
+	binary.BigEndian.PutUint16(k[1:], o.UserId)
+	k[3] = byte(o.Db)
+	// k[4] = byte(o.Type)
 	// binary.BigEndian.PutUint64(k[1:], uint64(o.Timestamp))
-	copy(k[1:], o.Value)
-	copy(k[1+len(o.Value):], field)
+	copy(k[4:], o.Value)
+	copy(k[4+len(o.Value):], field)
+	return k
+}
+
+func (o *Object) GetValueBytesPrefix() []byte {
+	k := make([]byte, 1+2+1+len(o.Value))
+	k[0] = DataPrefix
+	binary.BigEndian.PutUint16(k[1:], o.UserId)
+	k[3] = byte(o.Db)
+	copy(k[4:], o.Value)
 	return k
 }
 
 func (o *Object) GetTTLKeyBytes() []byte {
-	if o.IsSimple() {
-		k := make([]byte, 1+8+1+len(o.Key))
-		k[0] = byte(TTLType)
-		binary.BigEndian.PutUint64(k[1:], uint64(o.TTL))
-		k[9] = byte(o.Type)
-		copy(k[10:], o.Key)
-		return k
-	}
-	k := make([]byte, 1+8+1+len(o.Value))
-	k[0] = byte(TTLType)
+	k := make([]byte, 1+8+2+1+1+len(o.Key))
+	k[0] = TTLPrefix
 	binary.BigEndian.PutUint64(k[1:], uint64(o.TTL))
-	k[9] = byte(o.Type)
-	copy(k[10:], o.Value)
+	binary.BigEndian.PutUint16(k[9:], o.UserId)
+	k[11] = byte(o.Db)
+	k[12] = byte(KeyTTL)
+	copy(k[13:], o.Key)
 	return k
 }
 
-func (o *Object) GetKeyBytesPrefix() []byte {
-	k := make([]byte, 1+len(o.Value))
-	k[0] = byte(o.Type)
-	copy(k[1:], o.Value)
+func (o *Object) GetTTLValueBytes() []byte {
+	k := make([]byte, 1+8+2+1+1+len(o.Value))
+	k[0] = TTLPrefix
+	binary.BigEndian.PutUint64(k[1:], uint64(o.TTL))
+	binary.BigEndian.PutUint16(k[9:], o.UserId)
+	k[11] = byte(o.Db)
+	k[12] = byte(ValueTTL)
+	copy(k[13:], o.Value)
 	return k
+}
+
+func GetObjectFromTTL(ttl []byte) (*Object, error) {
+	if len(ttl) <= 9 {
+		return nil, xerror.ErrValueTooShort
+	}
+	if ttl[0] != byte(TTLPrefix) {
+		return nil, xerror.ErrNotTTL
+	}
+
+	o := &Object{
+		TTL:    int64(binary.BigEndian.Uint64(ttl[1:9])),
+		UserId: binary.BigEndian.Uint16(ttl[9:11]),
+		Db:     ttl[11],
+	}
+	if ttl[12] == byte(KeyTTL) {
+		o.Key = ttl[13:]
+	} else if ttl[12] == byte(ValueTTL) {
+		o.Value = ttl[13:]
+	} else {
+		return nil, xerror.ErrNotTTL
+	}
+	return o, nil
 }
 
 func (o *Object) ObjectEncoding() ObjectEncoding {
@@ -175,15 +244,17 @@ func ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongSubArgs(subcommand, ObjectHelpCommand)
 	}
 
+	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	key := object.GetKeyBytes()
 	switch subcommand {
 	case ENCODING_COMMAND:
-		object, err := getTxnObject(txn, KeyType, args[0])
+		err := getTxnObject(txn, key, object)
 		if err != nil {
 			return nil
 		}
 		return SimpleString(object.ObjectEncoding().String())
 	case IDLETIME_COMMAND:
-		object, err := getTxnObject(txn, KeyType, args[0])
+		err := getTxnObject(txn, key, object)
 		if err != nil {
 			return nil
 		}
