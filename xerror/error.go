@@ -45,6 +45,7 @@ var (
 	ErrCheckFailed       = errors.New("check failed")
 	InvalidJsonError     = errors.New("invalid json")
 	InvalidJsonPathError = errors.New("invalid json path")
+	InvalidCursor        = errors.New("invalid cursor")
 )
 
 func WrongArgsString(command string) string {

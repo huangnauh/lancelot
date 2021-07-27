@@ -47,6 +47,7 @@ func (a ByName) Less(i, j int) bool {
 
 func (c *Command) RootUser() *User {
 	root := &User{
+		ID:   0,
 		Name: c.cfg.Auth.Root,
 		Flag: UserFlagRoot,
 		Passwords: map[string]bool{

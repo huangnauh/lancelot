@@ -13,7 +13,7 @@
 
 - [x] (string) GET key
 - [x] (string) SET key value [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp|KEEPTTL [NX|XX] [GET]
-- [x] (hash) HSET key field value
+- [x] (hash) HSET key field value [field value ...]
 - [x] (hash) HGET key field
 - [x] (json) JSON.SET key value [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp|KEEPTTL [NX|XX] [GET]
 - [x] (json) JSON.GET key [path [path ...]]
@@ -28,6 +28,7 @@
 - [x] (generic) OBJECT subcommand [arguments [arguments ...]]
 - [x] (generic) TTL key
 - [x] (generic) DEL key [key ...]
+- [x] (generic) SCAN cursor [MATCH pattern] [COUNT count] [TYPE type] [CURSOR cursor]
 - [x] (scripting) EVAL script numkeys [key [key ...]] [arg [arg ...]]
 - [x] (scripting) EVALSHA sha1 numkeys [key [key ...]] [arg [arg ...]]
 - [x] (scripting) EVALSHA_RO sha1 numkeys key [key ...] arg [arg ...]

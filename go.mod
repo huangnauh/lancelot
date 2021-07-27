@@ -8,6 +8,7 @@ require (
 	github.com/gomodule/redigo v1.8.5
 	github.com/google/uuid v1.1.1
 	github.com/nitishm/go-rejson/v4 v4.0.0
+	github.com/patrickmn/go-cache v2.1.1-0.20191004192108-46f407853014+incompatible
 	github.com/pingcap/tidb v1.1.0-beta.0.20201222032702-32d8cad845d6
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.1.3 // indirect

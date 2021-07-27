@@ -65,7 +65,7 @@ func (c *Command) GetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(GET_COMMAND)
 	}
 	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
-	key := object.GetObjectKeyBytes()
+	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object)
 	if err == store.KeyNotFound {
 		return nil
@@ -158,7 +158,7 @@ func checkSetOption(txn *store.Txn, cmd string, key []byte, args [][]byte) (*Obj
 	}
 
 	oldObject := NewObject(txn.UserId, txn.DBId, CommandObjectTypes[cmd], key)
-	objectKey := oldObject.GetObjectKeyBytes()
+	objectKey := oldObject.GetKeyBytes()
 	err := getTxnObject(txn, objectKey, oldObject)
 	if err == store.KeyNotFound {
 		if CheckExist == check {

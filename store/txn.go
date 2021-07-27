@@ -75,7 +75,6 @@ func (t *Txn) Commit() error {
 }
 
 func (t *Txn) Get(key []byte) ([]byte, error) {
-	logrus.Debugf("%p get %s", t, key)
 	start := time.Now()
 	startTs := t.txn.StartTS()
 	snapshot := t.txn.GetSnapshot()
@@ -89,25 +88,25 @@ func (t *Txn) Get(key []byte) ([]byte, error) {
 
 	spend := time.Since(start)
 	if spend > t.client.Conf.SlowRequest {
-		logrus.Warnf("get %s, start_ts %d, slow request %s %s, snapshot %s",
+		logrus.Warnf("get %v, start_ts %d, slow request %s %s, snapshot %s",
 			key, startTs, spend, execDetailsString(execDetail), snapshotStats)
 	}
 
 	if kv.IsErrNotFound(err) {
-		logrus.Debugf("%p get %s not found", t, key)
+		logrus.Debugf("%p get %v not found", t, key)
 		return nil, KeyNotFound
 	}
 	if err != nil {
-		logrus.Errorf("get %s failed %s", key, err)
+		logrus.Errorf("get %v failed %s", key, err)
 		return nil, err
 	}
 
-	logrus.Debugf("%p get %s %s", t, key, v)
+	logrus.Debugf("%p get %v %s", t, key, v)
 	return v, nil
 }
 
 func (t *Txn) Put(key, val []byte) error {
-	logrus.Debugf("%p set %s %s", t, key, val)
+	logrus.Debugf("%p set %v %s", t, key, val)
 	err := t.txn.Set(key, val)
 	if err != nil {
 		logrus.Errorf("set %s failed %s", key, err)
@@ -117,7 +116,7 @@ func (t *Txn) Put(key, val []byte) error {
 }
 
 func (t *Txn) Del(key []byte) error {
-	logrus.Debugf("%p del %s", t, key)
+	logrus.Debugf("%p del %v", t, key)
 	err := t.txn.Delete(key)
 	if err != nil {
 		logrus.Errorf("del %s failed %s", key, err)
@@ -153,6 +152,39 @@ func (t *Txn) Iter(start, end []byte, reversed bool) (*Iterator, error) {
 		return nil, err
 	}
 	return &Iterator{start, end, it, t}, nil
+}
+
+func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
+	it, err := t.Iter(start, end, false)
+	if err != nil {
+		logrus.Errorf("iter err: %s", err)
+		return err
+	}
+	defer it.Close()
+
+	count := 0
+	for it.Valid() {
+		key := it.Key()
+		if bytes.Compare(key, start) < 0 || bytes.Compare(key, end) >= 0 {
+			return nil
+		}
+		val := it.Value()
+		logrus.Debugf("%p list %s %s", t, []byte(key), val)
+		ok := callback(key, val)
+		if !ok {
+			return nil
+		}
+
+		count++
+		if limit > 0 && count >= limit {
+			return ReachLimit
+		}
+		err = it.Next()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (t *Iterator) DeleteUntil(limit int) (key []byte, count int, err error) {

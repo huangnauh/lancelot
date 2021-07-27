@@ -2,9 +2,11 @@ package command
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/patrickmn/go-cache"
 	"github.com/sirupsen/logrus"
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
@@ -41,6 +43,7 @@ type Command struct {
 	gcWait     *sync.WaitGroup
 	gcWorkers  int32
 	gcClosed   chan bool
+	cache      *cache.Cache
 }
 
 func NewCommand(cfg *config.Config) *Command {
@@ -54,6 +57,7 @@ func NewCommand(cfg *config.Config) *Command {
 		users:    make(map[string]*User),
 		gcClosed: make(chan bool),
 		gcWait:   &sync.WaitGroup{},
+		cache:    cache.New(cfg.Key.CursorExpiration, cfg.Key.CursorExpiration/2),
 	}
 	c.root = c.RootUser()
 
@@ -100,13 +104,27 @@ func NewCommand(cfg *config.Config) *Command {
 			Func: c.HSetHandle,
 			ID:   5,
 		},
+		HDEL_COMMAND: {
+			Func: c.HDelHandle,
+			ID:   6,
+		},
+		HEXISTS_COMMAND: {
+			Func:     c.HExistsHandle,
+			ID:       7,
+			ReadOnly: true,
+		},
+		SCAN_COMMAND: {
+			Func:     c.ScanHandle,
+			ReadOnly: true,
+			ID:       62,
+		},
 		ACL_COMMAND: {
 			Func: c.AclHandle,
-			ID:   6,
+			ID:   63,
 		},
 		AUTH_COMMAND: {
 			Func:            c.AuthHandle,
-			ID:              7,
+			ID:              127,
 			NoSupportScript: true,
 		},
 		EVAL_COMMAND: {
@@ -114,14 +132,14 @@ func NewCommand(cfg *config.Config) *Command {
 				return c.evalHandle(txn, args, EVAL_COMMAND)
 			},
 			NoSupportScript: true,
-			ID:              59,
+			ID:              254,
 		},
 		EVALSHA_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
 				return c.evalHandle(txn, args, EVALSHA_COMMAND)
 			},
 			NoSupportScript: true,
-			ID:              60,
+			ID:              255,
 		},
 		EVAL_RO_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
@@ -129,7 +147,7 @@ func NewCommand(cfg *config.Config) *Command {
 			},
 			ReadOnly:        true,
 			NoSupportScript: true,
-			ID:              61,
+			ID:              509,
 		},
 		EVALSHA_RO_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
@@ -137,12 +155,12 @@ func NewCommand(cfg *config.Config) *Command {
 			},
 			ReadOnly:        true,
 			NoSupportScript: true,
-			ID:              62,
+			ID:              510,
 		},
 		SCRIPT_COMMAND: {
 			Func:            c.ScriptHandle,
 			NoSupportScript: true,
-			ID:              63,
+			ID:              511,
 		},
 		JSONSET_COMMAND: {
 			Func: c.JsonSetHandle,
@@ -241,4 +259,18 @@ func (c *Command) watchLuaStatePool() {
 			return
 		}
 	}
+}
+
+func (c *Command) GetCursor(cursor uint64) ([]byte, bool) {
+	key := fmt.Sprintf("c%d", cursor)
+	v, ok := c.cache.Get(key)
+	if !ok {
+		return nil, false
+	}
+	return v.([]byte), true
+}
+
+func (c *Command) SetCursor(cursor uint64, data []byte) {
+	key := fmt.Sprintf("c%d", cursor)
+	c.cache.Set(key, data, c.cfg.Key.CursorExpiration)
 }

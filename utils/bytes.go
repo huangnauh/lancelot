@@ -6,6 +6,13 @@ import (
 	"unsafe"
 )
 
+func NextKey(key []byte) []byte {
+	buf := make([]byte, len(key)+1)
+	copy(buf, key)
+	buf[len(key)] = 0x00
+	return buf
+}
+
 func PrefixNext(prefix []byte) []byte {
 	buf := make([]byte, len(prefix))
 	copy(buf, prefix)

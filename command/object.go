@@ -15,15 +15,16 @@ type ObjectType byte
 type TTL byte
 
 const (
-	KeyType   ObjectType = 'k'
-	JsonType  ObjectType = 'j'
-	ListType  ObjectType = 'l'
-	SetType   ObjectType = 's'
-	ZsetType  ObjectType = 'z'
-	HashType  ObjectType = 'h'
-	TTLType   ObjectType = 't'
-	UserType  ObjectType = 'u'
-	CountType ObjectType = 'c'
+	KeyType     ObjectType = 'k'
+	JsonType    ObjectType = 'j'
+	ListType    ObjectType = 'l'
+	SetType     ObjectType = 's'
+	ZsetType    ObjectType = 'z'
+	HashType    ObjectType = 'h'
+	TTLType     ObjectType = 't'
+	UserType    ObjectType = 'u'
+	CountType   ObjectType = 'c'
+	UnknownType ObjectType = '?'
 
 	KeyTTL   TTL = 'k'
 	ValueTTL TTL = 'v'
@@ -42,6 +43,34 @@ const (
 
 	ObjectHelpCommand = "OBJECT HELP"
 )
+
+var ObjectNameMap = map[string]ObjectType{
+	"string": KeyType,
+	"json":   JsonType,
+	"list":   ListType,
+	"hash":   HashType,
+	"zset":   ZsetType,
+	"set":    SetType,
+}
+
+func (o ObjectType) Type() string {
+	switch o {
+	case KeyType:
+		return "string"
+	case JsonType:
+		return "json"
+	case ListType:
+		return "list"
+	case HashType:
+		return "hash"
+	case ZsetType:
+		return "zset"
+	case SetType:
+		return "set"
+	default:
+		return "unknown"
+	}
+}
 
 func (e ObjectEncoding) String() string {
 	switch e {
@@ -100,6 +129,7 @@ type Object struct {
 	TTL       int64
 	Timestamp uint64
 	Value     []byte
+	Count     int
 }
 
 func NewObject(user uint16, db uint8, typo ObjectType, key []byte) *Object {
@@ -111,16 +141,26 @@ func NewObject(user uint16, db uint8, typo ObjectType, key []byte) *Object {
 	}
 }
 
+func GetDataPrefix(user uint16, db uint8, typo ObjectType, data []byte) []byte {
+	k := make([]byte, 1+2+1+1+len(data))
+	k[0] = DataPrefix
+	binary.BigEndian.PutUint16(k[1:], user)
+	k[3] = byte(db)
+	k[4] = byte(typo)
+	copy(k[5:], data)
+	return k
+}
+
 func (o *Object) IsSimple() bool {
 	return o.Type == KeyType || o.Type == JsonType
 }
 
-func (o *Object) getBytes(typo ObjectType, data ...[]byte) []byte {
+func (o *Object) getKeyBytes(typo ObjectType, data ...[]byte) []byte {
 	count := 0
 	for _, v := range data {
 		count += len(v)
 	}
-	k := make([]byte, 1+2+1+count)
+	k := make([]byte, 1+2+1+1+count)
 	k[0] = DataPrefix
 	binary.BigEndian.PutUint16(k[1:], o.UserId)
 	k[3] = byte(o.Db)
@@ -133,20 +173,40 @@ func (o *Object) getBytes(typo ObjectType, data ...[]byte) []byte {
 	return k
 }
 
-func (o *Object) GetKeyBytes() []byte {
-	return o.getBytes(KeyType, o.Key)
+func GetObjectFromKV(key, value []byte) (*Object, error) {
+	if len(key) < 5 || len(value) < 1 {
+		return nil, xerror.ErrValueTooShort
+	}
+	o := &Object{}
+	o.Key = key[5:]
+	err := ObjectDecode(value, o)
+	if err != nil {
+		return nil, err
+	}
+	return o, nil
 }
 
-func (o *Object) GetObjectKeyBytes() []byte {
-	return o.getBytes(o.Type, o.Key)
+func (o *Object) GetKeyBytes() []byte {
+	return o.getKeyBytes(KeyType, o.Key)
 }
+
+// func (o *Object) GetObjectKeyBytes() []byte {
+// 	return o.getKeyBytes(o.Type, o.Key)
+// }
 
 func (o *Object) GetKeyFieldBytes(field []byte) []byte {
-	return o.getBytes(o.Type, o.Value, field)
+	return o.getKeyBytes(o.Type, o.Value, field)
 }
 
 func (o *Object) GetValueBytesPrefix() []byte {
-	return o.getBytes(o.Type, o.Value)
+	return o.getKeyBytes(o.Type, o.Value)
+}
+
+func GetTTLPrefix(expire int64) []byte {
+	k := make([]byte, 1+8)
+	k[0] = byte(TTLPrefix)
+	binary.BigEndian.PutUint64(k[1:], uint64(expire))
+	return k
 }
 
 func (o *Object) getTTLBytes(ttlType TTL, data []byte) []byte {
@@ -201,22 +261,24 @@ func (o *Object) ObjectEncoding() ObjectEncoding {
 }
 
 func ObjectEncode(o *Object) []byte {
-	b := make([]byte, len(o.Value)+1+8+8)
+	b := make([]byte, len(o.Value)+1+8+8+8)
 	b[0] = byte(o.Type)
 	binary.BigEndian.PutUint64(b[1:], uint64(o.TTL))
 	binary.BigEndian.PutUint64(b[9:], o.Timestamp)
-	copy(b[1+8+8:], o.Value)
+	binary.BigEndian.PutUint64(b[17:], uint64(o.Count))
+	copy(b[1+8+8+8:], o.Value)
 	return b
 }
 
 func ObjectDecode(b []byte, o *Object) error {
-	if len(b) < 1+8+8 {
+	if len(b) < 1+8+8+8 {
 		return xerror.ErrValueTooShort
 	}
 	o.Type = ObjectType(b[0])
 	o.TTL = int64(binary.BigEndian.Uint64(b[1:9]))
 	o.Timestamp = binary.BigEndian.Uint64(b[9:17])
-	o.Value = b[1+8+8:]
+	o.Count = int(binary.BigEndian.Uint64(b[17:25]))
+	o.Value = b[25:]
 	return nil
 }
 

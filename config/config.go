@@ -35,6 +35,11 @@ type Auth struct {
 	MaxUsers            int    `yaml:"max-users"`
 	MaxPasswordsPerUser int    `yaml:"max-passwords-per-user"`
 }
+
+type Key struct {
+	ScanMaxCount     int           `yaml:"scan-max-count"`
+	CursorExpiration time.Duration `yaml:"cursor-expiration"`
+}
 type Config struct {
 	LogLevel       string        `yaml:"log-level"`
 	PIDFile        string        `yaml:"pid-file"`
@@ -46,6 +51,7 @@ type Config struct {
 	GcWorkers      int           `yaml:"gc-workers"`
 	Lua            Lua           `yaml:"lua"`
 	Auth           Auth          `yaml:"auth"`
+	Key            Key           `yaml:"key"`
 }
 
 var cfg = &Config{
@@ -77,6 +83,10 @@ var cfg = &Config{
 		Pass:                "root",
 		MaxUsers:            1000,
 		MaxPasswordsPerUser: 10,
+	},
+	Key: Key{
+		ScanMaxCount:     10000,
+		CursorExpiration: time.Hour,
 	},
 }
 
