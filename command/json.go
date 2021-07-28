@@ -87,7 +87,9 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.InvalidJsonError)
 	}
 	oldObject, setOption, err := checkSetOption(txn, JSONSET_COMMAND, args[0], args[3:])
-	if err != nil {
+	if err == xerror.ErrCheckFailed {
+		return nil
+	} else if err != nil {
 		return txn.SetError(err)
 	}
 

@@ -23,7 +23,7 @@ const (
 	//PXAT milliseconds-timestamp
 	PXAT = "pxat"
 	//KEEPTTL
-	KEEPTTL = "keepall"
+	KEEPTTL = "keepttl"
 	//NX
 	NX = "nx"
 	//XX
@@ -157,20 +157,24 @@ func checkSetOption(txn *store.Txn, cmd string, key []byte, args [][]byte) (*Obj
 		}
 	}
 
-	oldObject := NewObject(txn.UserId, txn.DBId, CommandObjectTypes[cmd], key)
-	objectKey := oldObject.GetKeyBytes()
-	err := getTxnObject(txn, objectKey, oldObject)
-	if err == store.KeyNotFound {
-		if CheckExist == check {
-			return nil, nil, xerror.ErrCheckFailed
-		}
-	} else if err != nil && err != store.KeyNotFound {
+	oldObject, err := checkExist(txn, cmd, key, check)
+	if err != store.KeyNotFound && err != nil {
 		return nil, nil, err
-	} else {
-		if CheckNotExist == check {
-			return nil, nil, xerror.ErrCheckFailed
-		}
 	}
+	// oldObject := NewObject(txn.UserId, txn.DBId, CommandObjectTypes[cmd], key)
+	// objectKey := oldObject.GetKeyBytes()
+	// err := getTxnObject(txn, objectKey, oldObject)
+	// if err == store.KeyNotFound {
+	// 	if CheckExist == check {
+	// 		return nil, nil, xerror.ErrCheckFailed
+	// 	}
+	// } else if err != nil && err != store.KeyNotFound {
+	// 	return nil, nil, err
+	// } else {
+	// 	if CheckNotExist == check {
+	// 		return nil, nil, xerror.ErrCheckFailed
+	// 	}
+	// }
 
 	var oldExpire int64
 	if oldObject != nil && oldObject.TTL > 0 {
@@ -199,6 +203,58 @@ func checkSetOption(txn *store.Txn, cmd string, key []byte, args [][]byte) (*Obj
 	}, nil
 }
 
+func checkExist(txn *store.Txn, cmd string, key []byte, check CheckType) (*Object, error) {
+	oldObject := NewObject(txn.UserId, txn.DBId, CommandObjectTypes[cmd], key)
+	objectKey := oldObject.GetKeyBytes()
+	err := getTxnObject(txn, objectKey, oldObject)
+	if err == store.KeyNotFound {
+		if CheckExist == check {
+			return nil, xerror.ErrCheckFailed
+		}
+	} else if err != nil && err != store.KeyNotFound {
+		return nil, err
+	} else {
+		if CheckNotExist == check {
+			return nil, xerror.ErrCheckFailed
+		}
+	}
+	return oldObject, nil
+}
+
+// (string) SETNX key value
+func (c *Command) SetNXHandle(txn *store.Txn, args [][]byte) interface{} {
+	return c.checkSetHandle(txn, args, CheckNotExist)
+}
+
+// (string) SETXX key value
+func (c *Command) SetXXHandle(txn *store.Txn, args [][]byte) interface{} {
+	return c.checkSetHandle(txn, args, CheckExist)
+}
+
+func (c *Command) checkSetHandle(txn *store.Txn, args [][]byte, check CheckType) interface{} {
+	if len(args) != 2 {
+		return txn.SetWrongArgs(SETNX_COMMAND)
+	}
+	_, err := checkExist(txn, SETNX_COMMAND, args[0], CheckNotExist)
+	if err == xerror.ErrCheckFailed {
+		return SimpleInt(0)
+	} else if err != nil && err != store.KeyNotFound {
+		return txn.SetError(err)
+	}
+
+	startTs := txn.StartTS()
+	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	object.Value = args[1]
+	object.Timestamp = startTs
+	key := object.GetKeyBytes()
+	err = txn.Put(key, ObjectEncode(object))
+	if err != nil {
+		return txn.SetError(err)
+	} else {
+		return SimpleInt(1)
+	}
+}
+
 // https://redis.io/commands/set
 // (string) SET key value [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp|KEEPTTL] [NX|XX] [GET]
 func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
@@ -207,7 +263,9 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	oldObject, setOption, err := checkSetOption(txn, SET_COMMAND, args[0], args[2:])
-	if err != nil {
+	if err == xerror.ErrCheckFailed {
+		return nil
+	} else if err != nil {
 		return txn.SetError(err)
 	}
 

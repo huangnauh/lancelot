@@ -35,8 +35,10 @@ type Server struct {
 func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 	comma := strings.ToLower(utils.B2S(cmd.Args[0]))
 	if comma != command.AUTH_COMMAND && !conn.Auth {
-		conn.WriteError(xerror.ErrAuthentication.Error())
-		return
+		if !s.command.Default.NoPass() {
+			conn.WriteError(xerror.ErrAuthentication.Error())
+			return
+		}
 	}
 	if handler, ok := s.command.ConnHandle[comma]; ok {
 		handler.Func(conn, cmd)

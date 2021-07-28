@@ -37,7 +37,8 @@ type Command struct {
 	ConnHandle map[string]ConnHandler
 	scriptMap  *LScriptMap
 	users      map[string]*User
-	root       *User
+	Root       *User
+	Default    *User
 	ulock      sync.RWMutex
 	client     *store.Client
 	gcWait     *sync.WaitGroup
@@ -59,7 +60,10 @@ func NewCommand(cfg *config.Config) *Command {
 		gcWait:   &sync.WaitGroup{},
 		cache:    cache.New(cfg.Key.CursorExpiration, cfg.Key.CursorExpiration/2),
 	}
-	c.root = c.RootUser()
+	c.Root = c.rootUser()
+	c.users[c.Root.Name] = c.Root
+	c.Default = c.defaultUser()
+	c.users[c.Default.Name] = c.Default
 
 	c.ConnHandle = map[string]ConnHandler{
 		WATCH_COMMAND: {
@@ -86,31 +90,43 @@ func NewCommand(cfg *config.Config) *Command {
 			Func: c.SetHandle,
 			ID:   1,
 		},
+		SETXX_COMMAND: {
+			Func: c.SetXXHandle,
+			ID:   2,
+		},
+		SETNX_COMMAND: {
+			Func: c.SetNXHandle,
+			ID:   3,
+		},
 		DEL_COMMAND: {
 			Func: c.DELHandle,
-			ID:   2,
+			ID:   16,
 		},
 		TTL_COMMAND: {
 			Func:     c.TTLHandle,
 			ReadOnly: true,
-			ID:       3,
+			ID:       17,
+		},
+		EXPIRE_COMMAND: {
+			Func: c.ExpireHandle,
+			ID:   18,
 		},
 		HGET_COMMAND: {
 			Func:     c.HGetHandle,
 			ReadOnly: true,
-			ID:       4,
+			ID:       32,
 		},
 		HSET_COMMAND: {
 			Func: c.HSetHandle,
-			ID:   5,
+			ID:   33,
 		},
 		HDEL_COMMAND: {
 			Func: c.HDelHandle,
-			ID:   6,
+			ID:   34,
 		},
 		HEXISTS_COMMAND: {
 			Func:     c.HExistsHandle,
-			ID:       7,
+			ID:       35,
 			ReadOnly: true,
 		},
 		SCAN_COMMAND: {
@@ -121,6 +137,14 @@ func NewCommand(cfg *config.Config) *Command {
 		ACL_COMMAND: {
 			Func: c.AclHandle,
 			ID:   63,
+		},
+		FLUSHALL_COMMAND: {
+			Func: c.FlushAllHandle,
+			ID:   64,
+		},
+		FLUSHDB_COMMAND: {
+			Func: c.FlushDBHandle,
+			ID:   65,
 		},
 		AUTH_COMMAND: {
 			Func:            c.AuthHandle,
@@ -203,7 +227,8 @@ func (c *Command) Start() error {
 func (c *Command) SetLocalUsers(users map[string]*User) {
 	c.ulock.Lock()
 	c.users = users
-	c.users[c.root.Name] = c.root
+	c.users[c.Root.Name] = c.Root
+	c.users[c.Default.Name] = c.Default
 	c.ulock.Unlock()
 }
 

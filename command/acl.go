@@ -21,7 +21,8 @@ const (
 	USER_FLAG_ALLCOMMANDS byte = 1 << 3
 	USER_FLAG_NOPASS      byte = 1 << 4
 
-	UserFlagRoot byte = USER_FLAG_ENABLED | USER_FLAG_ALLKEYS | USER_FLAG_ALLCHANNELS | USER_FLAG_ALLCOMMANDS
+	UserFlagRoot    byte = USER_FLAG_ENABLED | USER_FLAG_ALLKEYS | USER_FLAG_ALLCHANNELS | USER_FLAG_ALLCOMMANDS
+	UserFlagDefault byte = USER_FLAG_ENABLED | USER_FLAG_ALLKEYS | USER_FLAG_ALLCHANNELS | USER_FLAG_ALLCOMMANDS | USER_FLAG_NOPASS
 )
 
 type User struct {
@@ -45,9 +46,13 @@ func (a ByName) Less(i, j int) bool {
 	return a[j].Name < a[i].Name
 }
 
-func (c *Command) RootUser() *User {
+func (u *User) NoPass() bool {
+	return u.Flag&USER_FLAG_NOPASS != 0
+}
+
+func (c *Command) rootUser() *User {
 	root := &User{
-		ID:   0,
+		ID:   1,
 		Name: c.cfg.Auth.Root,
 		Flag: UserFlagRoot,
 		Passwords: map[string]bool{
@@ -57,6 +62,17 @@ func (c *Command) RootUser() *User {
 	}
 	root.Commands.SetFull()
 	return root
+}
+
+func (c *Command) defaultUser() *User {
+	user := &User{
+		ID:       0,
+		Name:     "default",
+		Flag:     UserFlagDefault,
+		Commands: bitmap.New(MAX_COMMANDS),
+	}
+	user.Commands.SetFull()
+	return user
 }
 
 func (c *Command) ListResp(u *User) string {

@@ -420,6 +420,7 @@ type Conn struct {
 	Name      string
 	DBId      uint8
 	UserId    uint16
+	UserName  string
 	wr        *Writer
 	rd        *Reader
 	addr      string

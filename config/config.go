@@ -57,8 +57,8 @@ type Config struct {
 var cfg = &Config{
 	LogLevel:  "debug",
 	PIDFile:   "redis.pid",
-	Host:      "0.0.0.0",
-	RedisPort: 6379,
+	Host:      "127.0.0.1",
+	RedisPort: 16379,
 	HttpPort:  6380,
 	Store: Store{
 		Path:               "mocktikv://",

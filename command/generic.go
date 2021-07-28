@@ -21,9 +21,65 @@ func IsExpired(txn *store.Txn, o *Object) (int, bool) {
 	startTs := txn.StartTS()
 	now := oracle.ExtractPhysical(startTs)
 	if o.TTL > now {
-		return int(o.TTL - now), false
+		return int((o.TTL - now) / 1000), false
 	}
 	return 0, true
+}
+
+// (generic) EXPIRE key seconds
+func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 2 {
+		return txn.SetWrongArgs(EXPIRE_COMMAND)
+	}
+
+	expire, err := strconv.ParseInt(string(args[1]), 10, 64)
+	if err != nil {
+		return txn.SetError(xerror.ErrNotInteger)
+	}
+
+	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	key := object.GetKeyBytes()
+	err = getTxnObject(txn, key, object)
+	if err == store.KeyNotFound {
+		return SimpleInt(0)
+	} else if err != nil && err != xerror.WrongTypeError {
+		return txn.SetError(err)
+	}
+
+	startTs := txn.StartTS()
+	now := oracle.ExtractPhysical(startTs)
+	if expire <= 0 {
+		err = c.DeleteKey(txn, key, object, now)
+		if err != nil {
+			return txn.SetError(err)
+		}
+		return SimpleInt(1)
+	}
+	newTTL := now + expire*1000
+	if object.TTL == newTTL {
+		return SimpleInt(1)
+	}
+
+	if object.TTL > 0 {
+		ttlKey := object.GetTTLKeyBytes()
+		err = txn.Del(ttlKey)
+		if err != nil {
+			return err
+		}
+	}
+
+	object.TTL = newTTL
+	object.Timestamp = startTs
+	ttlKey := object.GetTTLKeyBytes()
+	err = txn.Put(ttlKey, []byte{1})
+	if err != nil {
+		return txn.SetError(err)
+	}
+	err = txn.Put(key, ObjectEncode(object))
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return SimpleInt(1)
 }
 
 // (generic) TTL key

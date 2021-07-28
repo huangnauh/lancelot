@@ -33,10 +33,13 @@ const (
 	HEXISTS_COMMAND    = "hexists"
 	HDEL_COMMAND       = "hdel"
 	SET_COMMAND        = "set"
+	SETNX_COMMAND      = "setnx"
+	SETXX_COMMAND      = "setxx"
 	GET_COMMAND        = "get"
 	DEL_COMMAND        = "del"
 	SCAN_COMMAND       = "scan"
 	TTL_COMMAND        = "ttl"
+	EXPIRE_COMMAND     = "expire"
 	OBJECT_COMMAND     = "object"
 	HELP_COMMAND       = "help"
 	ENCODING_COMMAND   = "encoding"
@@ -53,6 +56,8 @@ const (
 	EXISTS_COMMAND     = "exists"
 	KILL_COMMAND       = "kill"
 	AUTH_COMMAND       = "auth"
+	FLUSHALL_COMMAND   = "flushall"
+	FLUSHDB_COMMAND    = "flushdb"
 	ACL_COMMAND        = "acl"
 	CAT_COMMAND        = "cat"
 	DELUSER_COMMAND    = "deluser"
@@ -92,6 +97,8 @@ var (
 		HGET_COMMAND:    HashType,
 		SET_COMMAND:     KeyType,
 		GET_COMMAND:     KeyType,
+		SETNX_COMMAND:   KeyType,
+		SETXX_COMMAND:   KeyType,
 	}
 )
 

@@ -12,6 +12,7 @@ require (
 	github.com/pingcap/tidb v1.1.0-beta.0.20201222032702-32d8cad845d6
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.1.3 // indirect
+	github.com/stretchr/testify v1.7.0 // indirect
 	github.com/tidwall/btree v0.5.0
 	github.com/tidwall/gjson v1.8.1
 	github.com/tidwall/match v1.0.3
