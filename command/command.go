@@ -144,21 +144,32 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:   11,
 			Type: KeyType,
 		},
+		GETRANGE_COMMAND: {
+			Func: c.GetRangeHandle,
+			ID:   12,
+			Type: KeyType,
+		},
 		DEL_COMMAND: {
 			Func: c.DELHandle,
 			ID:   31,
-			Type: GeneralType,
+			Type: KeyType,
 		},
 		TTL_COMMAND: {
 			Func:     c.TTLHandle,
 			ReadOnly: true,
 			ID:       32,
-			Type:     GeneralType,
+			Type:     KeyType,
 		},
 		EXPIRE_COMMAND: {
 			Func: c.ExpireHandle,
 			ID:   33,
-			Type: GeneralType,
+			Type: KeyType,
+		},
+		EXISTS_COMMAND: {
+			Func:     c.ExistsHandle,
+			ReadOnly: true,
+			ID:       34,
+			Type:     KeyType,
 		},
 		HGET_COMMAND: {
 			Func:     c.HGetHandle,
@@ -196,7 +207,7 @@ func NewCommand(cfg *config.Config) *Command {
 			Func:     c.ScanHandle,
 			ReadOnly: true,
 			ID:       66,
-			Type:     GeneralType,
+			Type:     KeyType,
 		},
 		ACL_COMMAND: {
 			Func: c.AclHandle,

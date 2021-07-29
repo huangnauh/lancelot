@@ -24,6 +24,7 @@ import (
 type Client struct {
 	store kv.Storage
 	Conf  *config.Store
+	mock  bool
 }
 
 func Open(conf *config.Store) (*Client, error) {
@@ -39,7 +40,7 @@ func Open(conf *config.Store) (*Client, error) {
 			logrus.Errorf("mocktikv driver open %s", err)
 			return nil, err
 		}
-		return &Client{s, conf}, nil
+		return &Client{s, conf, true}, nil
 	}
 
 	driver := tikv.Driver{}
@@ -56,7 +57,7 @@ func Open(conf *config.Store) (*Client, error) {
 		logrus.Errorf("tikv driver open %s", err)
 		return nil, err
 	}
-	return &Client{s, conf}, nil
+	return &Client{s, conf, false}, nil
 }
 
 func (c *Client) NewTxn() *Txn {
@@ -76,14 +77,8 @@ func (c *Client) CurrentVersion() (uint64, error) {
 }
 
 func (c *Client) GetSafePointKV() tikv.SafePointKV {
-	store, ok := c.store.(tikv.Storage)
-	var kv tikv.SafePointKV
-	if !ok {
-		kv = tikv.NewMockSafePointKV()
-	} else {
-		kv = store.GetSafePointKV()
-	}
-	return kv
+	store := c.store.(tikv.Storage)
+	return store.GetSafePointKV()
 }
 
 func (c *Client) LoadTS(savedPath string) (uint64, error) {
@@ -197,10 +192,11 @@ func (c *Client) Delete(key []byte) error {
 }
 
 func (c *Client) UnsafeDeleteRange(ctx context.Context, startKey, endKey []byte, concurrency int) error {
-	storage, ok := c.store.(tikv.Storage)
-	if !ok {
+	if c.mock {
 		return c.DelteRange(startKey, endKey, nil)
 	}
+
+	storage := c.store.(tikv.Storage)
 	stores, err := storage.GetRegionCache().PDClient().GetAllStores(ctx)
 	if err != nil {
 		return err

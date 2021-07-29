@@ -82,6 +82,24 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 	return SimpleInt(1)
 }
 
+// (generic) EXISTS key
+func (c *Command) ExistsHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongArgs(EXISTS_COMMAND)
+	}
+	startTs := txn.StartTS()
+	now := oracle.ExtractPhysical(startTs)
+	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, now, true)
+	if err == store.KeyNotFound {
+		return SimpleInt(0)
+	} else if err != nil && err != xerror.WrongTypeError {
+		return txn.SetError(err)
+	}
+	return SimpleInt(1)
+}
+
 // (generic) TTL key
 func (c *Command) TTLHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {

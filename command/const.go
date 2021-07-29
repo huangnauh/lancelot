@@ -38,6 +38,7 @@ const (
 	GET_COMMAND        = "get"
 	GETDEL_COMMAND     = "getdel"
 	GETEX_COMMAND      = "getex"
+	GETRANGE_COMMAND   = "getrange"
 	STRLEN_COMMAND     = "strlen"
 	APPEND_COMMAND     = "append"
 	INCR_COMMAND       = "incr"
@@ -87,9 +88,10 @@ const (
 	ASYNC_OPTION = "async"
 	SYNC_OPTION  = "sync"
 
-	OK     = redcon.SimpleString("OK")
-	Queued = redcon.SimpleString("QUEUED")
-	PONG   = redcon.SimpleString("PONG")
+	OK          = redcon.SimpleString("OK")
+	Queued      = redcon.SimpleString("QUEUED")
+	PONG        = redcon.SimpleString("PONG")
+	EmptyString = redcon.SimpleString("")
 
 	DataPrefix  = 'd'
 	UserPrefix  = 'u'

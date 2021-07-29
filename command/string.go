@@ -472,3 +472,52 @@ func (c *Command) GetExHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	return object.Value
 }
+
+// (string) GETRANGE key start end
+func (c *Command) GetRangeHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 3 {
+		return txn.SetWrongArgs(GETRANGE_COMMAND)
+	}
+	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	key := object.GetKeyBytes()
+	start, err := strconv.Atoi(utils.B2S(args[1]))
+	if err != nil {
+		return txn.SetError(xerror.ErrNotInteger)
+	}
+	end, err := strconv.Atoi(utils.B2S(args[2]))
+	if err != nil {
+		return txn.SetError(xerror.ErrNotInteger)
+	}
+	startTs := txn.StartTS()
+	now := oracle.ExtractPhysical(startTs)
+	err = getTxnObject(txn, key, object, now, false)
+	if err == store.KeyNotFound {
+		return EmptyString
+	} else if err != nil {
+		return txn.SetError(err)
+	}
+	value := object.Value
+	if start < 0 {
+		start = len(value) + start
+		if start < 0 {
+			start = 0
+		}
+	}
+
+	if end < 0 {
+		end = len(value) + end
+		if end < 0 {
+			end = 0
+		}
+	}
+
+	if start > len(value) {
+		return EmptyString
+	}
+
+	if end > len(value)-1 {
+		end = len(value) - 1
+	}
+
+	return value[start : end+1]
+}
