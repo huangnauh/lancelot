@@ -37,19 +37,19 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
 
+	startTs := txn.StartTS()
+	now := oracle.ExtractPhysical(startTs)
 	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
 	key := object.GetKeyBytes()
-	err = getTxnObject(txn, key, object, true)
+	err = getTxnObject(txn, key, object, now, true)
 	if err == store.KeyNotFound {
 		return SimpleInt(0)
 	} else if err != nil && err != xerror.WrongTypeError {
 		return txn.SetError(err)
 	}
 
-	startTs := txn.StartTS()
-	now := oracle.ExtractPhysical(startTs)
 	if expire <= 0 {
-		err = c.DeleteKey(txn, key, object, now)
+		err = DeleteKey(txn, key, object, now)
 		if err != nil {
 			return txn.SetError(err)
 		}
@@ -89,7 +89,9 @@ func (c *Command) TTLHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
+	startTs := txn.StartTS()
+	now := oracle.ExtractPhysical(startTs)
+	err := getTxnObject(txn, key, object, now, false)
 	if err == store.KeyNotFound {
 		return SimpleInt(-2)
 	} else if err != nil && err != xerror.WrongTypeError {
@@ -107,14 +109,14 @@ func (c *Command) TTLHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) DeleteKeyReturn(txn *store.Txn, key []byte, object *Object, now int64) interface{} {
-	err := c.DeleteKey(txn, key, object, now)
+	err := DeleteKey(txn, key, object, now)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	return 1
 }
 
-func (c *Command) DeleteKey(txn *store.Txn, key []byte, object *Object, now int64) error {
+func DeleteKey(txn *store.Txn, key []byte, object *Object, now int64) error {
 	var err error
 	if object.TTL > 0 {
 		ttlKey := object.GetTTLKeyBytes()
@@ -152,14 +154,14 @@ func (c *Command) DELHandle(txn *store.Txn, args [][]byte) interface{} {
 	for i := range args {
 		object := NewObject(txn.UserId, txn.DBId, KeyType, args[i])
 		key := object.GetKeyBytes()
-		err := getTxnObject(txn, key, object, true)
+		err := getTxnObject(txn, key, object, now, true)
 		if err == store.KeyNotFound {
 			continue
 		} else if err != nil && err != xerror.WrongTypeError {
 			return txn.SetError(err)
 		}
 		count++
-		err = c.DeleteKey(txn, key, object, now)
+		err = DeleteKey(txn, key, object, now)
 		if err != nil {
 			return txn.SetError(err)
 		}

@@ -305,6 +305,34 @@ func ObjectDecode(b []byte, o *Object) error {
 	return nil
 }
 
+func getTxnObject(txn *store.Txn, key []byte, object *Object, now int64, clear bool) error {
+	getType := object.Type
+	value, err := txn.Get(key)
+	if err != nil {
+		return err
+	}
+	err = ObjectDecode(value, object)
+	if err != nil {
+		return store.KeyNotFound
+	}
+
+	if object.TTL > 0 && object.TTL < now {
+		if clear {
+			err = DeleteKey(txn, key, object, object.TTL)
+			if err != nil {
+				return err
+			}
+		}
+		object.CleanValue(getType)
+		return store.KeyNotFound
+	}
+
+	if getType != object.Type {
+		return xerror.WrongTypeError
+	}
+	return nil
+}
+
 // (generic) OBJECT subcommand [arguments [arguments ...]]
 func ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) == 0 {
@@ -321,15 +349,17 @@ func ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
 	key := object.GetKeyBytes()
+	startTs := txn.StartTS()
+	now := oracle.ExtractPhysical(startTs)
 	switch subcommand {
 	case ENCODING_COMMAND:
-		err := getTxnObject(txn, key, object, false)
+		err := getTxnObject(txn, key, object, now, false)
 		if err != nil {
 			return nil
 		}
 		return SimpleString(object.ObjectEncoding().String())
 	case IDLETIME_COMMAND:
-		err := getTxnObject(txn, key, object, false)
+		err := getTxnObject(txn, key, object, now, false)
 		if err != nil {
 			return nil
 		}

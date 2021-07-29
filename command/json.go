@@ -34,7 +34,7 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	now := oracle.ExtractPhysical(startTs)
 	object := NewObject(txn.UserId, txn.DBId, JsonType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, true)
+	err := getTxnObject(txn, key, object, now, true)
 	if err == store.KeyNotFound {
 		return 0
 	} else if err != nil {
@@ -151,9 +151,11 @@ func (c *Command) JsonGetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(JSONGET_COMMAND)
 	}
 
+	startTs := txn.StartTS()
+	now := oracle.ExtractPhysical(startTs)
 	object := NewObject(txn.UserId, txn.DBId, JsonType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
+	err := getTxnObject(txn, key, object, now, false)
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {
