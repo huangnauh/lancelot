@@ -36,6 +36,8 @@ const (
 	SETNX_COMMAND      = "setnx"
 	SETXX_COMMAND      = "setxx"
 	GET_COMMAND        = "get"
+	STRLEN_COMMAND     = "strlen"
+	APPEND_COMMAND     = "append"
 	DEL_COMMAND        = "del"
 	SCAN_COMMAND       = "scan"
 	TTL_COMMAND        = "ttl"

@@ -1,4 +1,4 @@
-package server
+package server_test
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ func TestRedisgoString(t *testing.T) {
 		i := i
 		t.Run("redisgo"+tt.Key, func(t *testing.T) {
 			t.Parallel()
-			c, err := redisgo.Dial("tcp", fmt.Sprintf("%s:%d", server.cfg.Host, server.cfg.RedisPort),
+			c, err := redisgo.Dial("tcp", fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
 				redisgo.DialReadTimeout(time.Second),
 				redisgo.DialWriteTimeout(time.Second),
 			)
@@ -29,8 +29,8 @@ func TestRedisgoString(t *testing.T) {
 				}
 			}()
 
-			reply, err := redisgo.String(c.Do("Auth", server.cfg.Auth.Pass))
-			assert.NoError(t, err, fmt.Sprintf("redis auth %s error", server.cfg.Auth.Pass))
+			reply, err := redisgo.String(c.Do("Auth", cfg.Auth.Pass))
+			assert.NoError(t, err, fmt.Sprintf("redis auth %s error", cfg.Auth.Pass))
 			assert.Equal(t, "OK", reply)
 			key := "redisgo" + tt.Key
 

@@ -2,15 +2,20 @@ package store
 
 import (
 	"bytes"
+	"context"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 
+	"github.com/pingcap/kvproto/pkg/kvrpcpb"
+	"github.com/pingcap/kvproto/pkg/metapb"
 	tikvConfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/pingcap/tidb/store/tikv/tikvrpc"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/sirupsen/logrus"
 	"gitlab.s.upyun.com/platform/lancelot/config"
@@ -127,14 +132,14 @@ func (c *Client) List(start, end []byte, limit int, callback KVCallback) error {
 
 type ClientCallback func(c *Client)
 
-func (c *Client) DelteRange(start, end []byte, callback ClientCallback) {
+func (c *Client) DelteRange(start, end []byte, callback ClientCallback) error {
 	cur := start
 	var count int
 	var err error
 	for bytes.Compare(cur, start) >= 0 && bytes.Compare(cur, end) < 0 {
 		cur, count, err = c.DeleteUntil(cur, end, c.Conf.BatchLimit)
 		if err != nil {
-			return
+			return err
 		}
 		if count < c.Conf.BatchLimit {
 			break
@@ -143,6 +148,7 @@ func (c *Client) DelteRange(start, end []byte, callback ClientCallback) {
 	if callback != nil {
 		callback(c)
 	}
+	return nil
 }
 
 func (c *Client) DeleteUntil(start, end []byte, limit int) ([]byte, int, error) {
@@ -186,6 +192,73 @@ func (c *Client) Delete(key []byte) error {
 	if err = txn.Commit(); err != nil {
 		logrus.Errorf("commit err: %s", err)
 		return err
+	}
+	return nil
+}
+
+func (c *Client) UnsafeDeleteRange(ctx context.Context, startKey, endKey []byte, concurrency int) error {
+	storage, ok := c.store.(tikv.Storage)
+	if !ok {
+		return c.DelteRange(startKey, endKey, nil)
+	}
+	stores, err := storage.GetRegionCache().PDClient().GetAllStores(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := tikvrpc.NewRequest(tikvrpc.CmdUnsafeDestroyRange, &kvrpcpb.UnsafeDestroyRangeRequest{
+		StartKey: startKey,
+		EndKey:   endKey,
+	})
+	tikvCli := storage.GetTiKVClient()
+
+	var wg sync.WaitGroup
+	failed := false
+	for _, s := range stores {
+		if s.State != metapb.StoreState_Up {
+			continue
+		}
+
+		address := s.Address
+		storeID := s.Id
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			resp, err := tikvCli.SendRequest(ctx, address, req, tikv.UnsafeDestroyRangeTimeout)
+			if err != nil {
+				failed = true
+				logrus.Errorf("unsafe destroy range store %d, err %s", storeID, err)
+				return
+			}
+			if resp == nil || resp.Resp == nil {
+				failed = true
+				logrus.Errorf("unsafe destroy range returns nil response from store %v", storeID)
+				return
+			}
+
+			errStr := (resp.Resp.(*kvrpcpb.UnsafeDestroyRangeResponse)).Error
+			if len(errStr) > 0 {
+				failed = true
+				logrus.Errorf("unsafe destroy range failed on store %d: %s", storeID, errStr)
+				return
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	if failed {
+		logrus.Errorf("unsafe destroy range failed")
+		return UnsafeDestroyRangeFailed
+	}
+
+	// Notify all affected regions in the range that UnsafeDestroyRange occurs.
+	notifyTask := tikv.NewNotifyDeleteRangeTask(storage, startKey, endKey, concurrency)
+	err = notifyTask.Execute(ctx)
+	if err != nil {
+		logrus.Errorf("failed notifying regions affected by UnsafeDestroyRange, %s", err)
+		return UnsafeDestroyRangeFailed
 	}
 	return nil
 }

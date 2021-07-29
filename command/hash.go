@@ -14,7 +14,7 @@ func (c *Command) HExistsHandle(txn *store.Txn, args [][]byte) interface{} {
 	field := args[1]
 	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return 0
 	} else if err != nil {
@@ -38,7 +38,7 @@ func (c *Command) HGetHandle(txn *store.Txn, args [][]byte) interface{} {
 	field := args[1]
 	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {
@@ -61,7 +61,7 @@ func (c *Command) HDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object)
+	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		return SimpleInt(0)
 	} else if err != nil {
@@ -98,7 +98,7 @@ func (c *Command) HSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	ret := 0
 	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object)
+	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		id, err := uuid.NewUUID()
 		if err != nil {

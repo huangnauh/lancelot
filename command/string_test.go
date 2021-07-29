@@ -1,4 +1,4 @@
-package command
+package command_test
 
 import (
 	"testing"
@@ -7,7 +7,8 @@ import (
 )
 
 func TestSetHandle(t *testing.T) {
-	txn := cmd.client.NewTxn()
+	client := cmd.GetClient()
+	txn := client.NewTxn()
 	err := txn.Begin()
 	assert.Nil(t, err, "txn begin")
 	defer txn.Rollback()

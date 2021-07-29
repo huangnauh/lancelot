@@ -37,7 +37,7 @@ const (
 	CheckNotExist CheckType = 2
 )
 
-func getTxnObject(txn *store.Txn, key []byte, object *Object) error {
+func getTxnObject(txn *store.Txn, key []byte, object *Object, clear bool) error {
 	getType := object.Type
 	value, err := txn.Get(key)
 	if err != nil {
@@ -49,6 +49,13 @@ func getTxnObject(txn *store.Txn, key []byte, object *Object) error {
 	}
 
 	if object.TTL > 0 && time.Unix(object.TTL/1e3, (object.TTL%1e3)*1e6).Before(time.Now()) {
+		if clear {
+			err = clearTimeout(txn, object)
+			if err != nil {
+				return err
+			}
+		}
+		object.CleanValue(getType)
 		return store.KeyNotFound
 	}
 
@@ -66,13 +73,82 @@ func (c *Command) GetHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {
 		return txn.SetError(err)
 	} else {
 		return object.Value
+	}
+}
+
+// (string) STRLEN key
+func (c *Command) StrLenHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongArgs(STRLEN_COMMAND)
+	}
+	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return SimpleInt(0)
+	} else if err != nil {
+		return txn.SetError(err)
+	} else {
+		return SimpleInt(len(object.Value))
+	}
+}
+
+func clearTimeout(txn *store.Txn, object *Object) error {
+	key := object.GetKeyBytes()
+	err := txn.Del(key)
+	if err != nil {
+		return err
+	}
+	ttlKey := object.GetTTLKeyBytes()
+	err = txn.Del(ttlKey)
+	if err != nil {
+		return err
+	}
+	if !object.IsSimple() {
+		ttlValue := object.GetTTLValueBytes()
+		err = txn.Put(ttlValue, []byte{1})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// (string) APPEND key value
+func (c *Command) AppendHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 2 {
+		return txn.SetWrongArgs(APPEND_COMMAND)
+	}
+	startTs := txn.StartTS()
+	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, true)
+	if err == store.KeyNotFound {
+		object = NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+		object.Timestamp = startTs
+		object.Value = args[1]
+		err = txn.Put(key, ObjectEncode(object))
+		if err != nil {
+			return txn.SetError(err)
+		}
+		return SimpleInt(len(object.Value))
+	} else if err != nil {
+		return txn.SetError(err)
+	} else {
+		object.Timestamp = startTs
+		object.Value = append(object.Value, args[1]...)
+		err = txn.Put(key, ObjectEncode(object))
+		if err != nil {
+			return txn.SetError(err)
+		}
+		return SimpleInt(len(object.Value))
 	}
 }
 
@@ -161,20 +237,6 @@ func checkSetOption(txn *store.Txn, cmd string, key []byte, args [][]byte) (*Obj
 	if err != store.KeyNotFound && err != nil {
 		return nil, nil, err
 	}
-	// oldObject := NewObject(txn.UserId, txn.DBId, CommandObjectTypes[cmd], key)
-	// objectKey := oldObject.GetKeyBytes()
-	// err := getTxnObject(txn, objectKey, oldObject)
-	// if err == store.KeyNotFound {
-	// 	if CheckExist == check {
-	// 		return nil, nil, xerror.ErrCheckFailed
-	// 	}
-	// } else if err != nil && err != store.KeyNotFound {
-	// 	return nil, nil, err
-	// } else {
-	// 	if CheckNotExist == check {
-	// 		return nil, nil, xerror.ErrCheckFailed
-	// 	}
-	// }
 
 	var oldExpire int64
 	if oldObject != nil && oldObject.TTL > 0 {
@@ -186,11 +248,13 @@ func checkSetOption(txn *store.Txn, cmd string, key []byte, args [][]byte) (*Obj
 	}
 	keepTTL = expire == oldExpire
 
-	if oldExpire > 0 && !keepTTL {
-		ttlKey := oldObject.GetTTLKeyBytes()
-		err := txn.Del(ttlKey)
-		if err != nil {
-			return nil, nil, err
+	if oldExpire > 0 {
+		if !keepTTL {
+			ttlKey := oldObject.GetTTLKeyBytes()
+			err := txn.Del(ttlKey)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 
@@ -206,19 +270,19 @@ func checkSetOption(txn *store.Txn, cmd string, key []byte, args [][]byte) (*Obj
 func checkExist(txn *store.Txn, cmd string, key []byte, check CheckType) (*Object, error) {
 	oldObject := NewObject(txn.UserId, txn.DBId, CommandObjectTypes[cmd], key)
 	objectKey := oldObject.GetKeyBytes()
-	err := getTxnObject(txn, objectKey, oldObject)
+	err := getTxnObject(txn, objectKey, oldObject, true)
 	if err == store.KeyNotFound {
 		if CheckExist == check {
 			return nil, xerror.ErrCheckFailed
 		}
-	} else if err != nil && err != store.KeyNotFound {
+	} else if err != nil {
 		return nil, err
 	} else {
 		if CheckNotExist == check {
 			return nil, xerror.ErrCheckFailed
 		}
 	}
-	return oldObject, nil
+	return oldObject, err
 }
 
 // (string) SETNX key value

@@ -39,7 +39,7 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
 	key := object.GetKeyBytes()
-	err = getTxnObject(txn, key, object)
+	err = getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		return SimpleInt(0)
 	} else if err != nil && err != xerror.WrongTypeError {
@@ -89,7 +89,7 @@ func (c *Command) TTLHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return SimpleInt(-2)
 	} else if err != nil && err != xerror.WrongTypeError {
@@ -152,7 +152,7 @@ func (c *Command) DELHandle(txn *store.Txn, args [][]byte) interface{} {
 	for i := range args {
 		object := NewObject(txn.UserId, txn.DBId, KeyType, args[i])
 		key := object.GetKeyBytes()
-		err := getTxnObject(txn, key, object)
+		err := getTxnObject(txn, key, object, true)
 		if err == store.KeyNotFound {
 			continue
 		} else if err != nil && err != xerror.WrongTypeError {

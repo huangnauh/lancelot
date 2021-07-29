@@ -141,6 +141,21 @@ func NewObject(user uint16, db uint8, typo ObjectType, key []byte) *Object {
 	}
 }
 
+func GetUserPrefix(user uint16) []byte {
+	k := make([]byte, 1+2)
+	k[0] = DataPrefix
+	binary.BigEndian.PutUint16(k[1:], user)
+	return k
+}
+
+func GetUserDBPrefix(user uint16, db uint8) []byte {
+	k := make([]byte, 1+2+1)
+	k[0] = DataPrefix
+	binary.BigEndian.PutUint16(k[1:], user)
+	k[3] = byte(db)
+	return k
+}
+
 func GetDataPrefix(user uint16, db uint8, typo ObjectType, data []byte) []byte {
 	k := make([]byte, 1+2+1+1+len(data))
 	k[0] = DataPrefix
@@ -270,6 +285,14 @@ func ObjectEncode(o *Object) []byte {
 	return b
 }
 
+func (o *Object) CleanValue(typo ObjectType) {
+	o.Type = typo
+	o.TTL = 0
+	o.Timestamp = 0
+	o.Count = 0
+	o.Value = nil
+}
+
 func ObjectDecode(b []byte, o *Object) error {
 	if len(b) < 1+8+8+8 {
 		return xerror.ErrValueTooShort
@@ -300,13 +323,13 @@ func ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 	key := object.GetKeyBytes()
 	switch subcommand {
 	case ENCODING_COMMAND:
-		err := getTxnObject(txn, key, object)
+		err := getTxnObject(txn, key, object, false)
 		if err != nil {
 			return nil
 		}
 		return SimpleString(object.ObjectEncoding().String())
 	case IDLETIME_COMMAND:
-		err := getTxnObject(txn, key, object)
+		err := getTxnObject(txn, key, object, false)
 		if err != nil {
 			return nil
 		}

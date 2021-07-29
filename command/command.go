@@ -98,6 +98,11 @@ func NewCommand(cfg *config.Config) *Command {
 			Func: c.SetNXHandle,
 			ID:   3,
 		},
+		STRLEN_COMMAND: {
+			Func:     c.StrLenHandle,
+			ID:       4,
+			ReadOnly: true,
+		},
 		DEL_COMMAND: {
 			Func: c.DELHandle,
 			ID:   16,
@@ -222,6 +227,10 @@ func (c *Command) Start() error {
 	go c.watchUser()
 	go c.startGC()
 	return nil
+}
+
+func (c *Command) GetClient() *store.Client {
+	return c.client
 }
 
 func (c *Command) SetLocalUsers(users map[string]*User) {

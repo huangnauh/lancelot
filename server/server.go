@@ -28,22 +28,22 @@ type Server struct {
 	cfg     *config.Config
 	http    *http.Server
 	red     *redcon.Server
-	command *command.Command
+	Command *command.Command
 	closed  chan bool
 }
 
 func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 	comma := strings.ToLower(utils.B2S(cmd.Args[0]))
 	if comma != command.AUTH_COMMAND && !conn.Auth {
-		if !s.command.Default.NoPass() {
+		if !s.Command.Default.NoPass() {
 			conn.WriteError(xerror.ErrAuthentication.Error())
 			return
 		}
 	}
-	if handler, ok := s.command.ConnHandle[comma]; ok {
+	if handler, ok := s.Command.ConnHandle[comma]; ok {
 		handler.Func(conn, cmd)
-	} else if handler, ok := s.command.TxnHandle[comma]; ok {
-		s.command.TxnHandler(conn, cmd, handler.Func)
+	} else if handler, ok := s.Command.TxnHandle[comma]; ok {
+		s.Command.TxnHandler(conn, cmd, handler.Func)
 	} else {
 		conn.WriteError("ERR unknown command '" + comma + "'")
 	}
@@ -53,7 +53,7 @@ func NewServer(cfg *config.Config) *Server {
 	s := &Server{
 		cfg:     cfg,
 		http:    &http.Server{},
-		command: command.NewCommand(cfg),
+		Command: command.NewCommand(cfg),
 		closed:  make(chan bool),
 	}
 
@@ -62,7 +62,7 @@ func NewServer(cfg *config.Config) *Server {
 }
 
 func (s *Server) Start(httpln, redln net.Listener) {
-	err := s.command.Start()
+	err := s.Command.Start()
 	if err != nil {
 		logrus.Fatalln("Server:", err)
 	}
@@ -89,7 +89,7 @@ func (s *Server) Shutdown(ctx context.Context) {
 	close(s.closed)
 	_ = s.red.Close(ctx)
 	_ = s.http.Shutdown(ctx)
-	s.command.Shutdown(ctx)
+	s.Command.Shutdown(ctx)
 }
 
 func (s *Server) Accept(conn *redcon.Conn) bool {

@@ -1,11 +1,23 @@
 package command
 
-import "gitlab.s.upyun.com/platform/lancelot/store"
+import (
+	"context"
+
+	"gitlab.s.upyun.com/platform/lancelot/store"
+	"gitlab.s.upyun.com/platform/lancelot/utils"
+)
 
 func (c *Command) FlushAllHandle(txn *store.Txn, args [][]byte) interface{} {
 	return OK
 }
 
 func (c *Command) FlushDBHandle(txn *store.Txn, args [][]byte) interface{} {
+	start := GetUserDBPrefix(txn.UserId, txn.DBId)
+	end := utils.PrefixNext(start)
+	ctx := context.Background()
+	err := c.client.UnsafeDeleteRange(ctx, start, end, 2)
+	if err != nil {
+		return txn.SetError(err)
+	}
 	return OK
 }

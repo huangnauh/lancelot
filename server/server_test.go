@@ -1,4 +1,4 @@
-package server
+package server_test
 
 import (
 	"context"
@@ -10,9 +10,11 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"gitlab.s.upyun.com/platform/lancelot/config"
+	"gitlab.s.upyun.com/platform/lancelot/server"
 )
 
-var server *Server
+var ser *server.Server
+var cfg *config.Config
 
 type testString struct {
 	Key     string
@@ -44,26 +46,26 @@ type testHash struct {
 
 func TestMain(m *testing.M) {
 	fmt.Println("server test begin")
-	cfg := config.GetConfig()
+	cfg = config.GetConfig()
 	logrus.SetLevel(logrus.DebugLevel)
 	logrus.SetFormatter(&logrus.TextFormatter{
 		TimestampFormat: "2006-01-02 15:04:05",
 		FullTimestamp:   true,
 	})
-	server = NewServer(cfg)
+	ser = server.NewServer(cfg)
 	redln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort))
 	if err != nil {
 		panic(err)
 	}
 
-	err = server.command.Start()
+	err = ser.Command.Start()
 	if err != nil {
 		panic(err)
 	}
-	go server.RedisServe(redln)
+	go ser.RedisServe(redln)
 
 	exitVal := m.Run()
-	server.Shutdown(context.Background())
+	ser.Shutdown(context.Background())
 	fmt.Println("server test end")
 	os.Exit(exitVal)
 }

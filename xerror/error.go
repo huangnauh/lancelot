@@ -46,6 +46,7 @@ var (
 	InvalidJsonError     = errors.New("invalid json")
 	InvalidJsonPathError = errors.New("invalid json path")
 	InvalidCursor        = errors.New("invalid cursor")
+	// KeyTimeOut           = errors.New("key time out")
 )
 
 func WrongArgsString(command string) string {

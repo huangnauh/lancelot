@@ -1,4 +1,4 @@
-package server
+package server_test
 
 import (
 	"context"
@@ -7,28 +7,28 @@ import (
 	"testing"
 	"time"
 
-	goredis "github.com/go-redis/redis/v8"
+	redis "github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGoredis(t *testing.T) {
+func TestRedis(t *testing.T) {
 	t.Parallel()
 	for i, tt := range testRedisString {
 		tt := tt
 		i := i
-		t.Run("goredis"+tt.Key, func(t *testing.T) {
+		t.Run("redis"+tt.Key, func(t *testing.T) {
 			t.Parallel()
-			c := goredis.NewClient(&goredis.Options{
-				Addr:     fmt.Sprintf("%s:%d", server.cfg.Host, server.cfg.RedisPort),
-				Password: server.cfg.Auth.Pass})
+			c := redis.NewClient(&redis.Options{
+				Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+				Password: cfg.Auth.Pass})
 			defer func() {
 				if err := c.Close(); err != nil {
-					log.Fatalf("goredis - failed to communicate to redis-server: %v", err)
+					log.Fatalf("redis - failed to communicate to redis-server: %v", err)
 				}
 			}()
 
 			ctx := context.Background()
-			key := "goredis" + tt.Key
+			key := "redis" + tt.Key
 
 			ok, err := c.SetXX(ctx, key, tt.Value+"xx", tt.Expire).Result()
 			assert.NoError(t, err)
@@ -79,7 +79,7 @@ func TestGoredis(t *testing.T) {
 			}
 
 			_, err = c.Get(ctx, key).Result()
-			assert.Equal(t, goredis.Nil, err)
+			assert.Equal(t, redis.Nil, err)
 
 			del, err := c.Del(ctx, key).Result()
 			assert.NoError(t, err)
