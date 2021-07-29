@@ -25,6 +25,7 @@ const (
 	UserType    ObjectType = 'u'
 	CountType   ObjectType = 'c'
 	UnknownType ObjectType = '?'
+	GeneralType ObjectType = '*'
 
 	KeyTTL   TTL = 'k'
 	ValueTTL TTL = 'v'

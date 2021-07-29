@@ -482,14 +482,14 @@ func (c *Command) aclSetRule(txn *store.Txn, u *User, rule string) error {
 			cmd := rule[1:]
 			handle, ok := c.TxnHandle[cmd]
 			if !ok {
-				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND), rule, xerror.UnknownCommand)
+				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND), rule, xerror.UnknownCommandInACL)
 			}
 			u.Commands.Add(handle.ID)
 		} else if rule[0] == '-' {
 			cmd := rule[1:]
 			handle, ok := c.TxnHandle[cmd]
 			if !ok {
-				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND), rule, xerror.UnknownCommand)
+				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND), rule, xerror.UnknownCommandInACL)
 			}
 			u.Commands.Remove(handle.ID)
 		} else {

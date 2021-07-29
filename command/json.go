@@ -86,7 +86,7 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if !json.Valid(jsonValue) {
 		return txn.SetError(xerror.InvalidJsonError)
 	}
-	oldObject, setOption, err := checkSetOption(txn, JSONSET_COMMAND, args[0], args[3:])
+	oldObject, setOption, err := c.checkSetOption(txn, JSONSET_COMMAND, args[0], args[3:])
 	if err == xerror.ErrCheckFailed {
 		return nil
 	} else if err != nil {
@@ -95,7 +95,7 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	object := NewObject(txn.UserId, txn.DBId, JsonType, args[0])
 	object.TTL = setOption.Expire
-	object.Timestamp = setOption.StartTs
+	object.Timestamp = txn.StartTS()
 
 	var oldValue []byte
 	if oldObject == nil || oldObject.Value == nil {

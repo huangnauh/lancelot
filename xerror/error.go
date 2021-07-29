@@ -41,7 +41,7 @@ var (
 	InvalidPassword      = errors.New("The password hash must be exactly 64 characters and contain only lowercase hexadecimal characters")
 	ErrNotExistPassword  = errors.New("The password you are trying to remove from the user does not exist")
 	ErrTooManyPasswords  = errors.New("Too many passwords")
-	UnknownCommand       = errors.New("Unknown command or category name in ACL")
+	UnknownCommandInACL  = errors.New("Unknown command or category name in ACL")
 	ErrCheckFailed       = errors.New("check failed")
 	InvalidJsonError     = errors.New("invalid json")
 	InvalidJsonPathError = errors.New("invalid json path")
@@ -57,6 +57,10 @@ func NotExistKey(key string) string {
 	return fmt.Sprintf("key '%s' does not exist in path", key)
 }
 
+func UnknownCommand(command string) string {
+	return fmt.Sprintf("unknown command `%s`, with args beginning with:", command)
+}
+
 func WrongModifier(command, modifier string, err error) error {
 	return fmt.Errorf("Error in %s modifier '%s': %s", command, modifier, err.Error())
 }
@@ -67,6 +71,10 @@ func NotExistKeyError(key string) error {
 
 func WrongArgsError(command string) error {
 	return errors.New(WrongArgsString(command))
+}
+
+func UnknownCommandError(command string) error {
+	return errors.New(UnknownCommand(command))
 }
 
 func WrongSubArgsString(command, help string) string {

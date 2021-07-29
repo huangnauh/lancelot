@@ -37,6 +37,7 @@ const (
 	SETXX_COMMAND      = "setxx"
 	GET_COMMAND        = "get"
 	GETDEL_COMMAND     = "getdel"
+	GETEX_COMMAND      = "getex"
 	STRLEN_COMMAND     = "strlen"
 	APPEND_COMMAND     = "append"
 	INCR_COMMAND       = "incr"
@@ -94,19 +95,6 @@ const (
 	UserPrefix  = 'u'
 	CountPrefix = 'c'
 	TTLPrefix   = 't'
-)
-
-var (
-	CommandObjectTypes = map[string]ObjectType{
-		JSONSET_COMMAND: JsonType,
-		JSONGET_COMMAND: JsonType,
-		HSET_COMMAND:    HashType,
-		HGET_COMMAND:    HashType,
-		SET_COMMAND:     KeyType,
-		GET_COMMAND:     KeyType,
-		SETNX_COMMAND:   KeyType,
-		SETXX_COMMAND:   KeyType,
-	}
 )
 
 func SimpleInt(n int) redcon.SimpleInt {

@@ -25,6 +25,8 @@ const (
 	PXAT = "pxat"
 	//KEEPTTL
 	KEEPTTL = "keepttl"
+	//PERSIST
+	PERSIST = "persist"
 	//NX
 	NX = "nx"
 	//XX
@@ -132,21 +134,16 @@ func (c *Command) AppendHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 }
 
-type SetOption struct {
+type ExpireOption struct {
 	KeepTTL bool
 	Get     bool
 	Expire  int64
 	Check   CheckType
-	StartTs uint64
+	Persist bool
 }
 
-func checkSetOption(txn *store.Txn, cmd string, key []byte, args [][]byte) (*Object, *SetOption, error) {
-	startTs := txn.StartTS()
-	now := oracle.ExtractPhysical(startTs)
-	nowTime := time.Unix(now/1e3, (now%1e3)*1e6)
-	var expire int64
-	var keepTTL, getArg bool
-	var check CheckType
+func checkExpireOption(cmd string, args [][]byte, isSet bool, nowTime time.Time) (*ExpireOption, error) {
+	opt := &ExpireOption{}
 	for i := 0; i < len(args); i++ {
 		str := strings.ToLower(utils.B2S(args[i]))
 		intFlag := false
@@ -154,67 +151,92 @@ func checkSetOption(txn *store.Txn, cmd string, key []byte, args [][]byte) (*Obj
 		var unitInt64 int64
 		switch str {
 		case EX:
-			if (unitDuration != 0 && unitDuration != time.Second) || keepTTL {
-				return nil, nil, xerror.ErrSyntax
+			if (unitDuration != 0 && unitDuration != time.Second) || opt.KeepTTL || opt.Persist {
+				return nil, xerror.ErrSyntax
 			}
 			intFlag = true
 			unitDuration = time.Second
 		case PX:
-			if (unitDuration != 0 && unitDuration != time.Millisecond) || keepTTL {
-				return nil, nil, xerror.ErrSyntax
+			if (unitDuration != 0 && unitDuration != time.Millisecond) || opt.KeepTTL || opt.Persist {
+				return nil, xerror.ErrSyntax
 			}
 			intFlag = true
 			unitDuration = time.Millisecond
 		case EXAT:
-			if (unitInt64 != 0 && unitInt64 != 1000) || keepTTL {
-				return nil, nil, xerror.ErrSyntax
+			if (unitInt64 != 0 && unitInt64 != 1000) || opt.KeepTTL || opt.Persist {
+				return nil, xerror.ErrSyntax
 			}
 			intFlag = true
 			unitInt64 = 1000
 		case PXAT:
-			if (unitInt64 != 0 && unitInt64 != 1) || keepTTL {
-				return nil, nil, xerror.ErrSyntax
+			if (unitInt64 != 0 && unitInt64 != 1) || opt.KeepTTL || opt.Persist {
+				return nil, xerror.ErrSyntax
 			}
 			intFlag = true
 			unitInt64 = 1
 		case KEEPTTL:
-			if unitDuration > 0 || unitInt64 > 0 {
-				return nil, nil, xerror.ErrSyntax
+			if !isSet || unitDuration > 0 || unitInt64 > 0 {
+				return nil, xerror.ErrSyntax
 			}
-			keepTTL = true
+			opt.KeepTTL = true
+		case PERSIST:
+			if isSet || unitDuration > 0 || unitInt64 > 0 {
+				return nil, xerror.ErrSyntax
+			}
+			opt.Persist = true
 		case NX:
-			check = CheckNotExist
+			if !isSet {
+				return nil, xerror.ErrSyntax
+			}
+			opt.Check = CheckNotExist
 		case XX:
-			check = CheckExist
+			if !isSet {
+				return nil, xerror.ErrSyntax
+			}
+			opt.Check = CheckExist
 		case GET:
-			getArg = true
+			if !isSet {
+				return nil, xerror.ErrSyntax
+			}
+			opt.Get = true
 		default:
-			return nil, nil, xerror.ErrSyntax
+			return nil, xerror.ErrSyntax
 		}
 
 		if intFlag {
 			if i+1 == len(args) {
-				return nil, nil, xerror.WrongArgsError(cmd)
+				return nil, xerror.WrongArgsError(cmd)
 			}
 			intArg, err := strconv.ParseInt(string(args[i+1]), 10, 64)
 			if err != nil {
-				return nil, nil, xerror.ErrNotInteger
+				return nil, xerror.ErrNotInteger
 			}
 
 			if intArg <= 0 {
-				return nil, nil, xerror.ErrInvalidExpire
+				return nil, xerror.ErrInvalidExpire
 			}
 
 			if unitDuration > 0 {
-				expire = nowTime.Add(time.Duration(intArg)*unitDuration).UnixNano() / int64(time.Millisecond)
+				opt.Expire = nowTime.Add(time.Duration(intArg)*unitDuration).UnixNano() / int64(time.Millisecond)
 			} else if unitInt64 > 0 {
-				expire = intArg * unitInt64
+				opt.Expire = intArg * unitInt64
 			}
 			i++
 		}
 	}
+	return opt, nil
+}
 
-	oldObject, err := checkExist(txn, cmd, key, check, now)
+func (c *Command) checkSetOption(txn *store.Txn, cmd string, key []byte, args [][]byte) (*Object, *ExpireOption, error) {
+	startTs := txn.StartTS()
+	now := oracle.ExtractPhysical(startTs)
+	nowTime := time.Unix(now/1e3, (now%1e3)*1e6)
+	opt, err := checkExpireOption(cmd, args, true, nowTime)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	oldObject, err := c.checkExist(txn, cmd, key, opt.Check, now)
 	if err != store.KeyNotFound && err != nil {
 		return nil, nil, err
 	}
@@ -224,13 +246,13 @@ func checkSetOption(txn *store.Txn, cmd string, key []byte, args [][]byte) (*Obj
 		oldExpire = oldObject.TTL
 	}
 
-	if keepTTL && oldExpire > 0 {
-		expire = oldExpire
+	if opt.KeepTTL && oldExpire > 0 {
+		opt.Expire = oldExpire
 	}
-	keepTTL = expire == oldExpire
+	opt.KeepTTL = opt.Expire == oldExpire
 
 	if oldExpire > 0 {
-		if !keepTTL {
+		if !opt.KeepTTL {
 			ttlKey := oldObject.GetTTLKeyBytes()
 			err := txn.Del(ttlKey)
 			if err != nil {
@@ -239,17 +261,15 @@ func checkSetOption(txn *store.Txn, cmd string, key []byte, args [][]byte) (*Obj
 		}
 	}
 
-	return oldObject, &SetOption{
-		KeepTTL: keepTTL,
-		Get:     getArg,
-		Expire:  expire,
-		Check:   check,
-		StartTs: startTs,
-	}, nil
+	return oldObject, opt, nil
 }
 
-func checkExist(txn *store.Txn, cmd string, key []byte, check CheckType, now int64) (*Object, error) {
-	oldObject := NewObject(txn.UserId, txn.DBId, CommandObjectTypes[cmd], key)
+func (c *Command) checkExist(txn *store.Txn, cmd string, key []byte, check CheckType, now int64) (*Object, error) {
+	cmdHandler, ok := c.TxnHandle[cmd]
+	if !ok {
+		return nil, xerror.UnknownCommandError(cmd)
+	}
+	oldObject := NewObject(txn.UserId, txn.DBId, cmdHandler.Type, key)
 	objectKey := oldObject.GetKeyBytes()
 	err := getTxnObject(txn, objectKey, oldObject, now, true)
 	if err == store.KeyNotFound {
@@ -282,7 +302,7 @@ func (c *Command) checkSetHandle(txn *store.Txn, args [][]byte, check CheckType)
 	}
 	startTs := txn.StartTS()
 	now := oracle.ExtractPhysical(startTs)
-	_, err := checkExist(txn, SETNX_COMMAND, args[0], CheckNotExist, now)
+	_, err := c.checkExist(txn, SETNX_COMMAND, args[0], CheckNotExist, now)
 	if err == xerror.ErrCheckFailed {
 		return SimpleInt(0)
 	} else if err != nil && err != store.KeyNotFound {
@@ -314,7 +334,7 @@ func (c *Command) DecrByHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 // (string) DECR key
-func (c *Command) DecrHandle(txn *store.Txn, args [][]byte, delta int64) interface{} {
+func (c *Command) DecrHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(DECR_COMMAND)
 	}
@@ -322,7 +342,7 @@ func (c *Command) DecrHandle(txn *store.Txn, args [][]byte, delta int64) interfa
 }
 
 // (string) INCR key
-func (c *Command) IncrHandle(txn *store.Txn, args [][]byte, delta int64) interface{} {
+func (c *Command) IncrHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(INCR_COMMAND)
 	}
@@ -375,7 +395,7 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(SET_COMMAND)
 	}
 
-	oldObject, setOption, err := checkSetOption(txn, SET_COMMAND, args[0], args[2:])
+	oldObject, setOption, err := c.checkSetOption(txn, SET_COMMAND, args[0], args[2:])
 	if err == xerror.ErrCheckFailed {
 		return nil
 	} else if err != nil {
@@ -385,7 +405,7 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
 	object.Value = args[1]
 	object.TTL = setOption.Expire
-	object.Timestamp = setOption.StartTs
+	object.Timestamp = txn.StartTS()
 
 	if !setOption.KeepTTL && setOption.Expire > 0 {
 		ttlKey := object.GetTTLKeyBytes()
@@ -412,5 +432,43 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 
 // (string) GETEX key [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp|PERSIST]
 func (c *Command) GetExHandle(txn *store.Txn, args [][]byte) interface{} {
-	return nil
+	if len(args) < 1 {
+		return txn.SetWrongArgs(GETEX_COMMAND)
+	}
+	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	key := object.GetKeyBytes()
+	startTs := txn.StartTS()
+	now := oracle.ExtractPhysical(startTs)
+	err := getTxnObject(txn, key, object, now, true)
+	if err == store.KeyNotFound {
+		return nil
+	} else if err != nil {
+		return txn.SetError(err)
+	} else if len(args) == 0 {
+		return object.Value
+	}
+	nowTime := time.Unix(now/1e3, (now%1e3)*1e6)
+	opt, err := checkExpireOption(GETEX_COMMAND, args, false, nowTime)
+	if err != nil {
+		return txn.SetError(err)
+	}
+
+	if opt.Persist {
+		if object.TTL == 0 {
+			return object.Value
+		}
+		object.TTL = 0
+	} else if opt.Expire > 0 {
+		if opt.Expire == object.TTL {
+			return object.Value
+		}
+		object.TTL = opt.Expire
+	}
+
+	object.Timestamp = txn.StartTS()
+	err = txn.Put(key, ObjectEncode(object))
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return object.Value
 }

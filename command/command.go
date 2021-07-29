@@ -22,6 +22,7 @@ type TxnHandler struct {
 	ReadOnly        bool
 	NoSupportScript bool
 	ID              int
+	Type            ObjectType
 }
 
 type ConnHandler struct {
@@ -85,76 +86,128 @@ func NewCommand(cfg *config.Config) *Command {
 			Func:     c.GetHandle,
 			ReadOnly: true,
 			ID:       0,
+			Type:     KeyType,
 		},
 		SET_COMMAND: {
 			Func: c.SetHandle,
 			ID:   1,
+			Type: KeyType,
 		},
 		SETXX_COMMAND: {
 			Func: c.SetXXHandle,
 			ID:   2,
+			Type: KeyType,
 		},
 		SETNX_COMMAND: {
 			Func: c.SetNXHandle,
 			ID:   3,
+			Type: KeyType,
 		},
 		STRLEN_COMMAND: {
 			Func:     c.StrLenHandle,
 			ID:       4,
 			ReadOnly: true,
+			Type:     KeyType,
+		},
+		APPEND_COMMAND: {
+			Func: c.AppendHandle,
+			ID:   5,
+			Type: KeyType,
+		},
+		DECR_COMMAND: {
+			Func: c.DecrHandle,
+			ID:   6,
+			Type: KeyType,
+		},
+		DECRBY_COMMAND: {
+			Func: c.DecrByHandle,
+			ID:   7,
+			Type: KeyType,
+		},
+		INCR_COMMAND: {
+			Func: c.IncrHandle,
+			ID:   8,
+			Type: KeyType,
+		},
+		INCRBY_COMMAND: {
+			Func: c.IncrByHandle,
+			ID:   9,
+			Type: KeyType,
+		},
+		GETDEL_COMMAND: {
+			Func: c.GetDelHandle,
+			ID:   10,
+			Type: KeyType,
+		},
+		GETEX_COMMAND: {
+			Func: c.GetExHandle,
+			ID:   11,
+			Type: KeyType,
 		},
 		DEL_COMMAND: {
 			Func: c.DELHandle,
-			ID:   16,
+			ID:   31,
+			Type: GeneralType,
 		},
 		TTL_COMMAND: {
 			Func:     c.TTLHandle,
 			ReadOnly: true,
-			ID:       17,
+			ID:       32,
+			Type:     GeneralType,
 		},
 		EXPIRE_COMMAND: {
 			Func: c.ExpireHandle,
-			ID:   18,
+			ID:   33,
+			Type: GeneralType,
 		},
 		HGET_COMMAND: {
 			Func:     c.HGetHandle,
 			ReadOnly: true,
-			ID:       32,
+			ID:       48,
+			Type:     HashType,
 		},
 		HSET_COMMAND: {
 			Func: c.HSetHandle,
-			ID:   33,
+			ID:   49,
+			Type: HashType,
 		},
 		HDEL_COMMAND: {
 			Func: c.HDelHandle,
-			ID:   34,
+			ID:   50,
+			Type: HashType,
 		},
 		HEXISTS_COMMAND: {
 			Func:     c.HExistsHandle,
-			ID:       35,
+			ID:       51,
 			ReadOnly: true,
-		},
-		SCAN_COMMAND: {
-			Func:     c.ScanHandle,
-			ReadOnly: true,
-			ID:       62,
-		},
-		ACL_COMMAND: {
-			Func: c.AclHandle,
-			ID:   63,
+			Type:     HashType,
 		},
 		FLUSHALL_COMMAND: {
 			Func: c.FlushAllHandle,
 			ID:   64,
+			Type: UnknownType,
 		},
 		FLUSHDB_COMMAND: {
 			Func: c.FlushDBHandle,
 			ID:   65,
+			Type: UnknownType,
+		},
+		SCAN_COMMAND: {
+			Func:     c.ScanHandle,
+			ReadOnly: true,
+			ID:       66,
+			Type:     GeneralType,
+		},
+		ACL_COMMAND: {
+			Func: c.AclHandle,
+			ID:   67,
+			Type: UserType,
 		},
 		AUTH_COMMAND: {
 			Func:            c.AuthHandle,
 			ID:              127,
 			NoSupportScript: true,
+			Type:            UserType,
 		},
 		EVAL_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
@@ -162,6 +215,7 @@ func NewCommand(cfg *config.Config) *Command {
 			},
 			NoSupportScript: true,
 			ID:              254,
+			Type:            UnknownType,
 		},
 		EVALSHA_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
@@ -169,6 +223,7 @@ func NewCommand(cfg *config.Config) *Command {
 			},
 			NoSupportScript: true,
 			ID:              255,
+			Type:            UnknownType,
 		},
 		EVAL_RO_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
@@ -177,6 +232,7 @@ func NewCommand(cfg *config.Config) *Command {
 			ReadOnly:        true,
 			NoSupportScript: true,
 			ID:              509,
+			Type:            UnknownType,
 		},
 		EVALSHA_RO_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
@@ -185,23 +241,28 @@ func NewCommand(cfg *config.Config) *Command {
 			ReadOnly:        true,
 			NoSupportScript: true,
 			ID:              510,
+			Type:            UnknownType,
 		},
 		SCRIPT_COMMAND: {
 			Func:            c.ScriptHandle,
 			NoSupportScript: true,
 			ID:              511,
+			Type:            UnknownType,
 		},
 		JSONSET_COMMAND: {
 			Func: c.JsonSetHandle,
 			ID:   1023,
+			Type: UnknownType,
 		},
 		JSONGET_COMMAND: {
 			Func: c.JsonGetHandle,
 			ID:   1022,
+			Type: UnknownType,
 		},
 		JSONDEL_COMMAND: {
 			Func: c.JsonDelHandle,
 			ID:   1021,
+			Type: UnknownType,
 		},
 	}
 	return c
