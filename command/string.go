@@ -490,7 +490,13 @@ func (c *Command) MSetNXHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 || len(args)%2 != 0 {
 		return txn.SetWrongArgs(MSETNX_COMMAND)
 	}
-	for i := 0; i < len(args); i += 2 {
+	exists := make(map[string]bool, len(args)/2)
+	for i := len(args) - 2; i >= 0; i -= 2 {
+		str := utils.B2S(args[i])
+		if ok := exists[str]; ok {
+			continue
+		}
+		exists[str] = true
 		err := setString(txn, args[i], args[i+1], 0, CheckNotExist)
 		if err == xerror.ErrCheckFailed {
 			txn.Err = err
@@ -499,7 +505,7 @@ func (c *Command) MSetNXHandle(txn *store.Txn, args [][]byte) interface{} {
 			return txn.SetError(err)
 		}
 	}
-	return nil
+	return SimpleInt(1)
 }
 
 // (string) MSET key value [key value ...]
@@ -516,12 +522,24 @@ func (c *Command) MSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	return SimpleInt(1)
 }
 
+// (string) PSETEX key seconds value
+func (c *Command) PSetExHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 3 {
+		return txn.SetWrongArgs(PSETEX_COMMAND)
+	}
+	return c.setExpireHandle(txn, args, 1)
+}
+
 // (string) SETEX key seconds value
 func (c *Command) SetExHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 3 {
 		return txn.SetWrongArgs(SETEX_COMMAND)
 	}
-	intArg, err := strconv.ParseInt(string(args[1]), 10, 64)
+	return c.setExpireHandle(txn, args, 1000)
+}
+
+func (c *Command) setExpireHandle(txn *store.Txn, args [][]byte, unit int64) interface{} {
+	intArg, err := strconv.ParseInt(utils.B2S(args[1]), 10, 64)
 	if err != nil {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
@@ -529,7 +547,7 @@ func (c *Command) SetExHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.InvalidExpireError(SETEX_COMMAND))
 	}
 
-	expire := txn.Now + intArg*1000
+	expire := txn.Now + intArg*unit
 	err = setString(txn, args[0], args[2], expire, NoCheck)
 	if err != nil {
 		return txn.SetError(err)

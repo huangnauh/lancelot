@@ -100,6 +100,7 @@ func TestRedisgoString(t *testing.T) {
 			} else {
 				time.Sleep(tt.Expire)
 			}
+			time.Sleep(time.Millisecond)
 
 			if tt.Expire == 0 {
 				count, err := redisgo.Int(c.Do("del", key))

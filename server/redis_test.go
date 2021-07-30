@@ -22,6 +22,19 @@ func TestGinkgoSuite(t *testing.T) {
 	RunSpecs(t, "go-redis")
 }
 
+func formatMs(dur time.Duration) int64 {
+	if dur > 0 && dur < time.Millisecond {
+		return 1
+	}
+	return int64(dur / time.Millisecond)
+}
+
+func PSetNX(ctx context.Context, client *redis.Client, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+	cmd := redis.NewStatusCmd(ctx, "psetex", key, formatMs(expiration), value)
+	_ = client.Process(ctx, cmd)
+	return cmd
+}
+
 var _ = Describe("Commands", func() {
 	ctx := context.TODO()
 	var client *redis.Client
@@ -1079,7 +1092,7 @@ var _ = Describe("Commands", func() {
 			Expect(getRange.Val()).To(Equal("string"))
 		})
 
-		It("should GetSet", func() {
+		FIt("should GetSet", func() {
 			incr := client.Incr(ctx, "key")
 			Expect(incr.Err()).NotTo(HaveOccurred())
 			Expect(incr.Val()).To(Equal(int64(1)))
@@ -1182,7 +1195,7 @@ var _ = Describe("Commands", func() {
 			Expect(mGet.Val()).To(Equal([]interface{}{"hello1", "hello2", nil}))
 		})
 
-		It("should scan Mget", func() {
+		FIt("should scan Mget", func() {
 			err := client.MSet(ctx, "key1", "hello1", "key2", 123).Err()
 			Expect(err).NotTo(HaveOccurred())
 
@@ -1198,7 +1211,7 @@ var _ = Describe("Commands", func() {
 			Expect(d).To(Equal(data{Key1: "hello1", Key2: 123}))
 		})
 
-		It("should MSetNX", func() {
+		FIt("should MSetNX", func() {
 			mSetNX := client.MSetNX(ctx, "key1", "hello1", "key2", "hello2")
 			Expect(mSetNX.Err()).NotTo(HaveOccurred())
 			Expect(mSetNX.Val()).To(Equal(true))
@@ -1301,7 +1314,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal("OK"))
 		})
 
-		It("should SetWithArgs with NX mode and GET option", func() {
+		FIt("should SetWithArgs with NX mode and GET option", func() {
 			args := redis.SetArgs{
 				Mode: "nx",
 				Get:  true,
@@ -1518,6 +1531,19 @@ var _ = Describe("Commands", func() {
 			Eventually(func() error {
 				return client.Get(ctx, "foo").Err()
 			}, "2s", "100ms").Should(Equal(redis.Nil))
+		})
+
+		FIt("should PSetEX", func() {
+			err := PSetNX(ctx, client, "key", "hello", 100*time.Millisecond).Err()
+			Expect(err).NotTo(HaveOccurred())
+
+			val, err := client.Get(ctx, "key").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(val).To(Equal("hello"))
+
+			Eventually(func() error {
+				return client.Get(ctx, "foo").Err()
+			}, "200ms", "10ms").Should(Equal(redis.Nil))
 		})
 
 		FIt("should SetNX", func() {

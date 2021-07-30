@@ -171,6 +171,16 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:   16,
 			Type: KeyType,
 		},
+		MSETNX_COMMAND: {
+			Func: c.MSetNXHandle,
+			ID:   17,
+			Type: KeyType,
+		},
+		PSETEX_COMMAND: {
+			Func: c.PSetExHandle,
+			ID:   18,
+			Type: KeyType,
+		},
 		DEL_COMMAND: {
 			Func: c.DELHandle,
 			ID:   31,
