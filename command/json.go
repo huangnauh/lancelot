@@ -3,7 +3,6 @@ package command
 import (
 	"encoding/json"
 
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 	"gitlab.s.upyun.com/platform/lancelot/store"
@@ -29,12 +28,9 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(JSONDEL_COMMAND)
 	}
-
-	startTs := txn.StartTS()
-	now := oracle.ExtractPhysical(startTs)
 	object := NewObject(txn.UserId, txn.DBId, JsonType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, now, true)
+	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		return 0
 	} else if err != nil {
@@ -42,7 +38,7 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	if object.Value == nil {
-		return c.DeleteKeyReturn(txn, key, object, now)
+		return DeleteKeyReturn(txn, key, object, txn.Now)
 	}
 
 	value := object.Value
@@ -50,7 +46,7 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	for i := 1; i < len(args); i++ {
 		path := trimPath(utils.B2S(args[i]))
 		if path == "" {
-			return c.DeleteKeyReturn(txn, key, object, 0)
+			return DeleteKeyReturn(txn, key, object, 0)
 		}
 		origin := len(value)
 		value, err = sjson.DeleteBytes(value, path)
@@ -65,7 +61,7 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 		return 0
 	}
 
-	object.Timestamp = startTs
+	object.Timestamp = txn.Timestamp
 	object.Value = value
 	err = txn.Put(key, ObjectEncode(object))
 	if err != nil {
@@ -95,7 +91,7 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	object := NewObject(txn.UserId, txn.DBId, JsonType, args[0])
 	object.TTL = setOption.Expire
-	object.Timestamp = txn.StartTS()
+	object.Timestamp = txn.Timestamp
 
 	var oldValue []byte
 	if oldObject == nil || oldObject.Value == nil {
@@ -151,11 +147,9 @@ func (c *Command) JsonGetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(JSONGET_COMMAND)
 	}
 
-	startTs := txn.StartTS()
-	now := oracle.ExtractPhysical(startTs)
 	object := NewObject(txn.UserId, txn.DBId, JsonType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, now, false)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {

@@ -93,8 +93,8 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:   1,
 			Type: KeyType,
 		},
-		SETXX_COMMAND: {
-			Func: c.SetXXHandle,
+		GETSET_COMMAND: {
+			Func: c.GetSetHandle,
 			ID:   2,
 			Type: KeyType,
 		},
@@ -145,8 +145,30 @@ func NewCommand(cfg *config.Config) *Command {
 			Type: KeyType,
 		},
 		GETRANGE_COMMAND: {
-			Func: c.GetRangeHandle,
-			ID:   12,
+			Func:     c.GetRangeHandle,
+			ID:       12,
+			ReadOnly: true,
+			Type:     KeyType,
+		},
+		INCRBYFLOAT_COMMAND: {
+			Func: c.IncrByFloatHandle,
+			ID:   13,
+			Type: KeyType,
+		},
+		SETEX_COMMAND: {
+			Func: c.SetExHandle,
+			ID:   14,
+			Type: KeyType,
+		},
+		MGET_COMMAND: {
+			Func:     c.MGetHandle,
+			ID:       15,
+			Type:     KeyType,
+			ReadOnly: true,
+		},
+		MSET_COMMAND: {
+			Func: c.MSetHandle,
+			ID:   16,
 			Type: KeyType,
 		},
 		DEL_COMMAND: {

@@ -2,7 +2,6 @@ package command
 
 import (
 	"github.com/google/uuid"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
@@ -15,9 +14,7 @@ func (c *Command) HExistsHandle(txn *store.Txn, args [][]byte) interface{} {
 	field := args[1]
 	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
 	key := object.GetKeyBytes()
-	startTs := txn.StartTS()
-	now := oracle.ExtractPhysical(startTs)
-	err := getTxnObject(txn, key, object, now, false)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return 0
 	} else if err != nil {
@@ -41,9 +38,7 @@ func (c *Command) HGetHandle(txn *store.Txn, args [][]byte) interface{} {
 	field := args[1]
 	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
 	key := object.GetKeyBytes()
-	startTs := txn.StartTS()
-	now := oracle.ExtractPhysical(startTs)
-	err := getTxnObject(txn, key, object, now, false)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {
@@ -66,9 +61,7 @@ func (c *Command) HDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
 	key := object.GetKeyBytes()
-	startTs := txn.StartTS()
-	now := oracle.ExtractPhysical(startTs)
-	err := getTxnObject(txn, key, object, now, true)
+	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		return SimpleInt(0)
 	} else if err != nil {
@@ -101,12 +94,10 @@ func (c *Command) HSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 3 || len(args)%2 != 1 {
 		return txn.SetWrongArgs(HSET_COMMAND)
 	}
-	startTs := txn.StartTS()
-	now := oracle.ExtractPhysical(startTs)
 	ret := 0
 	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, now, true)
+	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		id, err := uuid.NewUUID()
 		if err != nil {
@@ -120,7 +111,7 @@ func (c *Command) HSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	object.Count++
-	object.Timestamp = startTs
+	object.Timestamp = txn.Timestamp
 
 	err = txn.Put(key, ObjectEncode(object))
 	if err != nil {

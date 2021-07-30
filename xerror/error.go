@@ -15,9 +15,9 @@ var (
 	ErrTransactionErr   = "Transaction discarded because of previous errors."
 
 	ErrNotInteger          = errors.New("value is not an integer or out of range")
+	ErrNotFloat            = errors.New("value is not a valid float")
 	ErrNumberGreater       = errors.New("Number of keys can't be greater than number of args")
 	ErrNumberNegative      = errors.New("Number of keys can't be negative")
-	ErrInvalidExpire       = errors.New("invalid expire time in set")
 	ErrLuaInvalidType      = errors.New("lua invalid type")
 	ErrSyntax              = errors.New("syntax error")
 	WrongTypeError         = errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
@@ -59,6 +59,11 @@ func NotExistKey(key string) string {
 
 func UnknownCommand(command string) string {
 	return fmt.Sprintf("unknown command `%s`, with args beginning with:", command)
+
+}
+
+func InvalidExpire(command string) string {
+	return fmt.Sprintf("invalid expire time in %s", command)
 }
 
 func WrongModifier(command, modifier string, err error) error {
@@ -75,6 +80,10 @@ func WrongArgsError(command string) error {
 
 func UnknownCommandError(command string) error {
 	return errors.New(UnknownCommand(command))
+}
+
+func InvalidExpireError(command string) error {
+	return errors.New(InvalidExpire(command))
 }
 
 func WrongSubArgsString(command, help string) string {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/execdetails"
 	"github.com/sirupsen/logrus"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
@@ -21,6 +22,8 @@ type Txn struct {
 	Multi      bool
 	Exec       bool
 	Err        error
+	Timestamp  uint64
+	Now        int64
 	PendingReq []redcon.Command
 }
 
@@ -37,6 +40,10 @@ func (t *Txn) HasTransaction() bool {
 	return t.txn != nil
 }
 
+func (t *Txn) NowTime() time.Time {
+	return time.Unix(t.Now/1e3, (t.Now%1e3)*1e6)
+}
+
 func (t *Txn) Begin() error {
 	logrus.Debugf("%p begin", t)
 	tx, err := t.client.store.Begin()
@@ -44,12 +51,11 @@ func (t *Txn) Begin() error {
 		logrus.Errorf("client begin failed %s", err)
 		return err
 	}
+	startTs := tx.StartTS()
+	t.Timestamp = startTs
+	t.Now = oracle.ExtractPhysical(startTs)
 	t.txn = tx
 	return nil
-}
-
-func (t *Txn) StartTS() uint64 {
-	return t.txn.StartTS()
 }
 
 func (t *Txn) Rollback() {

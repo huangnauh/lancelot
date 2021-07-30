@@ -306,7 +306,7 @@ func ObjectDecode(b []byte, o *Object) error {
 	return nil
 }
 
-func getTxnObject(txn *store.Txn, key []byte, object *Object, now int64, clear bool) error {
+func getTxnObject(txn *store.Txn, key []byte, object *Object, clear bool) error {
 	getType := object.Type
 	value, err := txn.Get(key)
 	if err != nil {
@@ -317,7 +317,7 @@ func getTxnObject(txn *store.Txn, key []byte, object *Object, now int64, clear b
 		return store.KeyNotFound
 	}
 
-	if object.TTL > 0 && object.TTL < now {
+	if object.TTL > 0 && object.TTL < txn.Now {
 		if clear {
 			err = DeleteKey(txn, key, object, object.TTL)
 			if err != nil {
@@ -350,23 +350,20 @@ func ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
 	key := object.GetKeyBytes()
-	startTs := txn.StartTS()
-	now := oracle.ExtractPhysical(startTs)
 	switch subcommand {
 	case ENCODING_COMMAND:
-		err := getTxnObject(txn, key, object, now, false)
+		err := getTxnObject(txn, key, object, false)
 		if err != nil {
 			return nil
 		}
 		return SimpleString(object.ObjectEncoding().String())
 	case IDLETIME_COMMAND:
-		err := getTxnObject(txn, key, object, now, false)
+		err := getTxnObject(txn, key, object, false)
 		if err != nil {
 			return nil
 		}
-		now := oracle.ExtractPhysical(txn.StartTS())
 		timepstamp := oracle.ExtractPhysical(object.Timestamp)
-		return SimpleInt(int((now - timepstamp) / 1000))
+		return SimpleInt(int((txn.Now - timepstamp) / 1000))
 	case REFCOUNT_COMMAND:
 		return SimpleInt(0)
 	case FREQ_COMMAND:

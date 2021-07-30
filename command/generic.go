@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/sirupsen/logrus"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -18,10 +17,8 @@ func IsExpired(txn *store.Txn, o *Object) (int, bool) {
 	if o.TTL == 0 {
 		return 0, false
 	}
-	startTs := txn.StartTS()
-	now := oracle.ExtractPhysical(startTs)
-	if o.TTL > now {
-		return int((o.TTL - now) / 1000), false
+	if o.TTL > txn.Now {
+		return int((o.TTL - txn.Now) / 1000), false
 	}
 	return 0, true
 }
@@ -37,11 +34,9 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
 
-	startTs := txn.StartTS()
-	now := oracle.ExtractPhysical(startTs)
 	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
 	key := object.GetKeyBytes()
-	err = getTxnObject(txn, key, object, now, true)
+	err = getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		return SimpleInt(0)
 	} else if err != nil && err != xerror.WrongTypeError {
@@ -49,13 +44,13 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	if expire <= 0 {
-		err = DeleteKey(txn, key, object, now)
+		err = DeleteKey(txn, key, object, txn.Now)
 		if err != nil {
 			return txn.SetError(err)
 		}
 		return SimpleInt(1)
 	}
-	newTTL := now + expire*1000
+	newTTL := txn.Now + expire*1000
 	if object.TTL == newTTL {
 		return SimpleInt(1)
 	}
@@ -69,7 +64,7 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	object.TTL = newTTL
-	object.Timestamp = startTs
+	object.Timestamp = txn.Timestamp
 	ttlKey := object.GetTTLKeyBytes()
 	err = txn.Put(ttlKey, []byte{1})
 	if err != nil {
@@ -87,11 +82,9 @@ func (c *Command) ExistsHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(EXISTS_COMMAND)
 	}
-	startTs := txn.StartTS()
-	now := oracle.ExtractPhysical(startTs)
 	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, now, true)
+	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		return SimpleInt(0)
 	} else if err != nil && err != xerror.WrongTypeError {
@@ -107,9 +100,7 @@ func (c *Command) TTLHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
 	key := object.GetKeyBytes()
-	startTs := txn.StartTS()
-	now := oracle.ExtractPhysical(startTs)
-	err := getTxnObject(txn, key, object, now, false)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return SimpleInt(-2)
 	} else if err != nil && err != xerror.WrongTypeError {
@@ -126,7 +117,7 @@ func (c *Command) TTLHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 }
 
-func (c *Command) DeleteKeyReturn(txn *store.Txn, key []byte, object *Object, now int64) interface{} {
+func DeleteKeyReturn(txn *store.Txn, key []byte, object *Object, now int64) interface{} {
 	err := DeleteKey(txn, key, object, now)
 	if err != nil {
 		return txn.SetError(err)
@@ -145,7 +136,7 @@ func DeleteKey(txn *store.Txn, key []byte, object *Object, now int64) error {
 	}
 
 	if !object.IsSimple() {
-		object.TTL = now
+		object.TTL = txn.Now
 		ttlValue := object.GetTTLValueBytes()
 		err = txn.Put(ttlValue, []byte{1})
 		if err != nil {
@@ -165,21 +156,19 @@ func (c *Command) DELHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) == 0 {
 		return txn.SetWrongArgs(DEL_COMMAND)
 	}
-	startTs := txn.StartTS()
-	now := oracle.ExtractPhysical(startTs)
 
 	count := 0
 	for i := range args {
 		object := NewObject(txn.UserId, txn.DBId, KeyType, args[i])
 		key := object.GetKeyBytes()
-		err := getTxnObject(txn, key, object, now, true)
+		err := getTxnObject(txn, key, object, true)
 		if err == store.KeyNotFound {
 			continue
 		} else if err != nil && err != xerror.WrongTypeError {
 			return txn.SetError(err)
 		}
 		count++
-		err = DeleteKey(txn, key, object, now)
+		err = DeleteKey(txn, key, object, txn.Now)
 		if err != nil {
 			return txn.SetError(err)
 		}
@@ -353,9 +342,8 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	cur := lastKey[prefixLen:]
 	if scanOpt.cursor == ServerCursor {
-		startTs := txn.StartTS()
-		c.SetCursor(startTs, cur)
-		return []interface{}{startTs, retKeys}
+		c.SetCursor(txn.Timestamp, cur)
+		return []interface{}{txn.Timestamp, retKeys}
 	} else {
 		cur := base64.StdEncoding.EncodeToString(cur)
 		return []interface{}{cur, retKeys}

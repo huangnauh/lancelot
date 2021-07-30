@@ -71,6 +71,7 @@ func TestRedis(t *testing.T) {
 			} else {
 				time.Sleep(tt.Expire)
 			}
+			time.Sleep(time.Millisecond)
 
 			if tt.Expire <= 0 {
 				del, err := c.Del(ctx, key).Result()
@@ -78,8 +79,12 @@ func TestRedis(t *testing.T) {
 				assert.Equal(t, int64(1), del)
 			}
 
-			_, err = c.Get(ctx, key).Result()
-			assert.Equal(t, redis.Nil, err)
+			expire, err := c.TTL(ctx, key).Result()
+			assert.NoError(t, err)
+			assert.Equal(t, time.Duration(-2), expire)
+
+			value, err := c.Get(ctx, key).Result()
+			assert.Equal(t, redis.Nil, err, "value %s", value)
 
 			del, err := c.Del(ctx, key).Result()
 			assert.NoError(t, err)

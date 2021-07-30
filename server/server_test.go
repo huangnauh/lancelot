@@ -47,7 +47,7 @@ type testHash struct {
 func TestMain(m *testing.M) {
 	fmt.Println("server test begin")
 	cfg = config.GetConfig()
-	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetLevel(logrus.InfoLevel)
 	logrus.SetFormatter(&logrus.TextFormatter{
 		TimestampFormat: "2006-01-02 15:04:05",
 		FullTimestamp:   true,

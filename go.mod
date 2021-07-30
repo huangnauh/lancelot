@@ -8,7 +8,7 @@ require (
 	github.com/gomodule/redigo v1.8.5
 	github.com/google/uuid v1.1.1
 	github.com/nitishm/go-rejson/v4 v4.0.0
-	github.com/onsi/ginkgo v1.15.0
+	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.10.5
 	github.com/patrickmn/go-cache v2.1.1-0.20191004192108-46f407853014+incompatible
 	github.com/pingcap/kvproto v0.0.0-20201215060142-f3dafca4c7fd
@@ -26,3 +26,5 @@ require (
 	golang.org/x/sys v0.0.0-20210616094352-59db8d763f22 // indirect
 	gopkg.in/yaml.v2 v2.4.0
 )
+
+replace github.com/golang/protobuf => github.com/golang/protobuf v1.3.4
