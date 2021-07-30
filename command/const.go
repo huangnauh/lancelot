@@ -34,6 +34,7 @@ const (
 	HDEL_COMMAND        = "hdel"
 	SET_COMMAND         = "set"
 	MSET_COMMAND        = "mset"
+	SETRANGE_COMMAND    = "setrange"
 	MSETNX_COMMAND      = "msetnx"
 	SETNX_COMMAND       = "setnx"
 	SETEX_COMMAND       = "setex"

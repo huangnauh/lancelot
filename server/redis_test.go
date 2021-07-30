@@ -1185,7 +1185,7 @@ var _ = Describe("Commands", func() {
 			Expect(incrByFloat.Val()).To(Equal(float64(996945661)))
 		})
 
-		It("should MSetMGet", func() {
+		FIt("should MSetMGet", func() {
 			mSet := client.MSet(ctx, "key1", "hello1", "key2", "hello2")
 			Expect(mSet.Err()).NotTo(HaveOccurred())
 			Expect(mSet.Val()).To(Equal("OK"))
@@ -1644,7 +1644,7 @@ var _ = Describe("Commands", func() {
 			Expect(ttl).NotTo(Equal(-1))
 		})
 
-		It("should SetRange", func() {
+		FIt("should SetRange", func() {
 			set := client.Set(ctx, "key", "Hello World", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))

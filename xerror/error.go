@@ -16,6 +16,7 @@ var (
 
 	ErrNotInteger          = errors.New("value is not an integer or out of range")
 	ErrNotFloat            = errors.New("value is not a valid float")
+	ErrOffset              = errors.New("offset is out of range")
 	ErrNumberGreater       = errors.New("Number of keys can't be greater than number of args")
 	ErrNumberNegative      = errors.New("Number of keys can't be negative")
 	ErrLuaInvalidType      = errors.New("lua invalid type")

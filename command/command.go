@@ -181,6 +181,11 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:   18,
 			Type: KeyType,
 		},
+		SETRANGE_COMMAND: {
+			Func: c.SetRangeHandle,
+			ID:   19,
+			Type: KeyType,
+		},
 		DEL_COMMAND: {
 			Func: c.DELHandle,
 			ID:   31,

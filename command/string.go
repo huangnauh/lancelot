@@ -80,7 +80,11 @@ func (c *Command) MGetHandle(txn *store.Txn, args [][]byte) interface{} {
 		if err != nil {
 			return txn.SetError(err)
 		}
-		ret[i] = value
+		if value == nil {
+			ret[i] = nil
+		} else {
+			ret[i] = value
+		}
 	}
 	return ret
 }
@@ -519,7 +523,53 @@ func (c *Command) MSetHandle(txn *store.Txn, args [][]byte) interface{} {
 			return txn.SetError(err)
 		}
 	}
-	return SimpleInt(1)
+	return OK
+}
+
+// (string) SETRANGE key offset value
+func (c *Command) SetRangeHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 3 {
+		return txn.SetWrongArgs(SETRANGE_COMMAND)
+	}
+
+	offset, err := strconv.Atoi(utils.B2S(args[1]))
+	if err != nil {
+		return txn.SetError(xerror.ErrNotInteger)
+	}
+	if offset < 0 {
+		return txn.SetError(xerror.ErrOffset)
+	}
+
+	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	key := object.GetKeyBytes()
+	err = getTxnObject(txn, key, object, true)
+	var value []byte
+	if err == store.KeyNotFound {
+		value = make([]byte, offset+len(args[2]))
+		copy(value[offset:], args[2])
+	} else if err != nil {
+		return txn.SetError(err)
+	} else {
+		if offset+len(args[2]) > len(object.Value) {
+			value = make([]byte, offset+len(args[2]))
+			if offset > len(object.Value) {
+				copy(value[:len(object.Value)], object.Value)
+			} else {
+				copy(value[:offset], object.Value[:offset])
+			}
+			copy(value[offset:], args[2])
+		} else {
+			value = object.Value
+			copy(value[offset:], args[2])
+		}
+	}
+	object.Value = value
+	object.Timestamp = txn.Timestamp
+	err = txn.Put(key, ObjectEncode(object))
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return SimpleInt(len(value))
 }
 
 // (string) PSETEX key seconds value
