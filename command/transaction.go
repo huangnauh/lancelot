@@ -3,11 +3,11 @@ package command
 import (
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"go.uber.org/zap"
 )
 
 func (c *Command) checkSingle(conn *redcon.Conn) (*store.Txn, bool) {
@@ -29,7 +29,8 @@ func (c *Command) checkSingle(conn *redcon.Conn) (*store.Txn, bool) {
 func (c *Command) TxnHandler(conn *redcon.Conn, cmd redcon.Command, txnHandle TxnHandle) {
 	args := cmd.Args[1:]
 	txn, single := c.checkSingle(conn)
-	logrus.Debugf("handler: %s, single: %t", cmd.Args, single)
+	utils.ZapLog.Debug("TxnHandler", zap.String("remote", conn.RemoteAddr()),
+		zap.ByteStrings("args", cmd.Args), zap.Bool("single", single))
 	if single {
 		err := txn.Begin()
 		if err != nil {
@@ -70,7 +71,8 @@ func (c *Command) TxnHandler(conn *redcon.Conn, cmd redcon.Command, txnHandle Tx
 }
 
 func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) {
-	logrus.Debugf("exec: %v", cmd)
+	utils.ZapLog.Debug("Exec", zap.String("remote", conn.RemoteAddr()),
+		zap.ByteStrings("args", cmd.Args))
 	args := cmd.Args[1:]
 	if len(args) != 0 {
 		conn.WriteError(xerror.WrongArgsString(string(cmd.Args[0])))
@@ -140,7 +142,8 @@ func (c *Command) getTransaction(conn *redcon.Conn) (*store.Txn, bool) {
 }
 
 func (c *Command) multi(conn *redcon.Conn, cmd redcon.Command) {
-	logrus.Debugf("multi: %v", cmd)
+	utils.ZapLog.Debug("Multi", zap.String("remote", conn.RemoteAddr()),
+		zap.ByteStrings("args", cmd.Args))
 	args := cmd.Args[1:]
 	if len(args) != 0 {
 		conn.WriteError(xerror.WrongArgsString(string(cmd.Args[0])))
@@ -160,7 +163,8 @@ func (c *Command) multi(conn *redcon.Conn, cmd redcon.Command) {
 }
 
 func (c *Command) watch(conn *redcon.Conn, cmd redcon.Command) {
-	logrus.Debugf("watch: %v", cmd)
+	utils.ZapLog.Debug("Watch", zap.String("remote", conn.RemoteAddr()),
+		zap.ByteStrings("args", cmd.Args))
 	args := cmd.Args[1:]
 	if len(args) == 0 {
 		conn.WriteError(xerror.WrongArgsString(string(cmd.Args[0])))

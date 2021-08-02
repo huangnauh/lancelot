@@ -6,11 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/utils/glob"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"go.uber.org/zap"
 )
 
 func IsExpired(txn *store.Txn, o *Object) (int, bool) {
@@ -297,7 +297,8 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	if _, err := glob.Match(scanOpt.match, utils.B2S(start)); err != nil {
-		logrus.Errorf("scan invalid match: %v", scanOpt.match)
+		utils.ZapLog.Error("scan invalid match", zap.String("remote", txn.RemoteAddr()),
+			zap.Uint64("timestamp", txn.Timestamp), zap.String("match", scanOpt.match), zap.ByteString("start", start))
 		return txn.SetError(err)
 	}
 
@@ -307,13 +308,15 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 		lastKey = key
 		object, err := GetObjectFromKV(key, value)
 		if err != nil {
-			logrus.Errorf("scan invalid key: %v, value %v", key, value)
+			utils.ZapLog.Error("scan object", zap.String("remote", txn.RemoteAddr()),
+				zap.Uint64("timestamp", txn.Timestamp), zap.Binary("key", key), zap.Binary("value", value), zap.Error(err))
 			return true
 		}
-		logrus.Debugf("scan object: %#v", object)
+		utils.ZapLog.Debug("scan object", zap.Any("object", object))
 		matched, err := glob.Match(scanOpt.match, utils.B2S(object.Key))
 		if err != nil {
-			logrus.Errorf("scan invalid match: %v", scanOpt.match)
+			utils.ZapLog.Error("scan invalid match", zap.String("remote", txn.RemoteAddr()),
+				zap.Uint64("timestamp", txn.Timestamp), zap.String("match", scanOpt.match), zap.ByteString("key", object.Key))
 			return false
 		}
 		if !matched {
@@ -332,7 +335,8 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 		retKeys = append(retKeys, string(object.Key))
 		return true
 	}
-	logrus.Debugf("scan result: %v, lastkey %s", retKeys, lastKey)
+	utils.ZapLog.Debug("scan result", zap.String("remote", txn.RemoteAddr()),
+		zap.Uint64("timestamp", txn.Timestamp), zap.Strings("result", retKeys), zap.ByteString("last", lastKey))
 	err = txn.List(start, end, scanOpt.count, callback)
 	if err == nil || len(lastKey) <= prefixLen {
 		return []interface{}{0, retKeys}

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/server"
+	"gitlab.s.upyun.com/platform/lancelot/utils"
 )
 
 var ser *server.Server
@@ -47,11 +47,7 @@ type testHash struct {
 func TestMain(m *testing.M) {
 	fmt.Println("server test begin")
 	cfg = config.GetConfig()
-	logrus.SetLevel(logrus.InfoLevel)
-	logrus.SetFormatter(&logrus.TextFormatter{
-		TimestampFormat: "2006-01-02 15:04:05",
-		FullTimestamp:   true,
-	})
+	utils.SetDevelopmentLog(cfg.LogLevel)
 	ser = server.NewServer(cfg)
 	redln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort))
 	if err != nil {

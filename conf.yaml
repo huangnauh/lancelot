@@ -1,4 +1,6 @@
 host: 0.0.0.0
 log-level: debug
 redis-port: 16379
+http-port: 16380
+rpc-port: 16381
 gc-tick-interval: 10s

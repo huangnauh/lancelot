@@ -67,6 +67,12 @@ func InvalidExpire(command string) string {
 	return fmt.Sprintf("invalid expire time in %s", command)
 }
 
+func InvalidCommand(command string) string {
+	return fmt.Sprintf("ERR Can't execute '%s': "+
+		"only SUBSCRIBE / UNSUBSCRIBE / PING / QUIT are "+
+		"allowed in this context", command)
+}
+
 func WrongModifier(command, modifier string, err error) error {
 	return fmt.Errorf("Error in %s modifier '%s': %s", command, modifier, err.Error())
 }
@@ -85,6 +91,10 @@ func UnknownCommandError(command string) error {
 
 func InvalidExpireError(command string) error {
 	return errors.New(InvalidExpire(command))
+}
+
+func InvalidCommandError(command string) error {
+	return errors.New(InvalidCommand(command))
 }
 
 func WrongSubArgsString(command, help string) string {

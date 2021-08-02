@@ -106,8 +106,6 @@ func (c *Command) HSetHandle(txn *store.Txn, args [][]byte) interface{} {
 		object.Value = id[:]
 	} else if err != nil {
 		return txn.SetError(err)
-	} else if object.Type != HashType {
-		return txn.SetError(xerror.WrongTypeError)
 	}
 
 	object.Count++

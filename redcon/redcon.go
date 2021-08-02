@@ -504,6 +504,10 @@ func (c *Conn) Detach() *DetachedConn {
 	return &DetachedConn{Conn: c, cmds: cmds}
 }
 
+func (c *Conn) Detached() bool {
+	return c.detached
+}
+
 type DetachedConn struct {
 	*Conn
 	cmds []Command

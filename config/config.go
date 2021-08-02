@@ -40,26 +40,37 @@ type Key struct {
 	ScanMaxCount     int           `yaml:"scan-max-count"`
 	CursorExpiration time.Duration `yaml:"cursor-expiration"`
 }
+
+type Rpc struct {
+	Timeout    time.Duration `yaml:"timeout"`
+	MaxStream  uint32        `yaml:"max_stream"`
+	MaxMsgSize int           `yaml:"max_msg_size"`
+	Compress   bool          `yaml:"compress"`
+}
+
 type Config struct {
 	LogLevel       string        `yaml:"log-level"`
 	PIDFile        string        `yaml:"pid-file"`
 	Host           string        `yaml:"host"`
 	RedisPort      int           `yaml:"redis-port"`
 	HttpPort       int           `yaml:"http-port"`
+	RpcPort        int           `yaml:"rpc-port"`
 	Store          Store         `yaml:"store"`
 	GcTickInterval time.Duration `yaml:"gc-tick-interval"`
 	GcWorkers      int           `yaml:"gc-workers"`
 	Lua            Lua           `yaml:"lua"`
 	Auth           Auth          `yaml:"auth"`
 	Key            Key           `yaml:"key"`
+	Rpc            Rpc           `yaml:"rpc"`
 }
 
 var cfg = &Config{
 	LogLevel:  "debug",
 	PIDFile:   "redis.pid",
 	Host:      "127.0.0.1",
-	RedisPort: 16379,
+	RedisPort: 6379,
 	HttpPort:  6380,
+	RpcPort:   6381,
 	Store: Store{
 		Path:               "mocktikv://",
 		Level:              "debug",

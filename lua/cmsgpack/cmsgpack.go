@@ -3,9 +3,7 @@ package cmsgpack
 import (
 	"bytes"
 	"errors"
-	"reflect"
 
-	"github.com/sirupsen/logrus"
 	"github.com/vmihailenco/msgpack/v5"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -79,7 +77,6 @@ type msgpackValue struct {
 
 func (m msgpackValue) EncodeMsgpack(enc *msgpack.Encoder) error {
 	enc.UseCompactFloats(true)
-	logrus.Debugf("msgpack: encoding %v", m.LValue)
 	switch v := m.LValue.(type) {
 	case lua.LBool:
 		return enc.EncodeBool(bool(v))
@@ -173,10 +170,8 @@ func Decode(L *lua.LState, data []byte) (lua.LValue, error) {
 	dec.UseLooseInterfaceDecoding(true)
 	err := dec.Decode(&value)
 	if err != nil {
-		logrus.Errorf("msgpack: decoding error: %v", err)
 		return nil, err
 	}
-	logrus.Debugf("msgpack: decoding %v %s", value, reflect.TypeOf(value))
 	return DecodeValue(L, value), nil
 }
 

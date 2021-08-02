@@ -26,6 +26,8 @@ const (
 	CountType   ObjectType = 'c'
 	UnknownType ObjectType = '?'
 	GeneralType ObjectType = '*'
+	PubType     ObjectType = 'p'
+	MessageType ObjectType = 'm'
 
 	KeyTTL   TTL = 'k'
 	ValueTTL TTL = 'v'

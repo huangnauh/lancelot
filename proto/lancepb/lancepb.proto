@@ -1,0 +1,41 @@
+syntax = "proto3";
+package lancepb;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = true;
+
+
+service Lance {
+    rpc Publush(stream PubRequest) returns (stream PubResponse);
+    rpc Subscribe(SubRequest) returns (stream SubResponse);
+}
+
+message PubSubMessage {
+    string name = 1;
+    repeated string message = 2;
+}
+
+message PubRequest {
+    repeated PubSubMessage message = 1;
+}
+
+message Clients {
+    string name = 1;
+    int32 clients = 2;
+}
+
+message PubResponse {
+    repeated Clients clients = 1;
+}
+
+message SubRequest {
+    repeated string name = 1;
+}
+
+message SubResponse {
+    repeated PubSubMessage message = 1;
+}

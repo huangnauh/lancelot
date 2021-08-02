@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/sirupsen/logrus"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"go.uber.org/zap"
 )
 
 const (
@@ -34,7 +34,7 @@ func (c *Command) startGC() {
 func (c *Command) tickGC() {
 	ts, err := c.client.CurrentVersion()
 	if err != nil {
-		logrus.Errorf("get current version err: %s", err)
+		utils.ZapLog.Error("[gc] get current version", zap.Error(err))
 		return
 	}
 
@@ -42,7 +42,7 @@ func (c *Command) tickGC() {
 	now := time.Unix(ms/1e3, (ms%1e3)*1e6)
 	loadTS, err := c.client.LoadTS(GcSavedTs)
 	if err != nil {
-		logrus.Errorf("load ts err: %s", err)
+		utils.ZapLog.Error("[gc] load ts", zap.Error(err))
 		return
 	}
 
@@ -52,7 +52,7 @@ func (c *Command) tickGC() {
 	}
 	err = c.client.SaveTS(GcSavedTs, ts)
 	if err != nil {
-		logrus.Errorf("save ts err: %s", err)
+		utils.ZapLog.Error("[gc] save ts", zap.Error(err))
 		return
 	}
 
@@ -108,17 +108,17 @@ func (c *Command) DelteRange(start, end []byte, callback func(*store.Client)) {
 }
 
 func (c *Command) doGC(start, end []byte) ([]byte, int, bool, error) {
-	logrus.Infof("start gc %v %v", start, end)
+	utils.ZapLog.Info("[gc] start gc", zap.Binary("start", start), zap.Binary("end", end))
 	txn := c.client.NewTxn()
 	err := txn.Begin()
 	if err != nil {
-		logrus.Errorf("new txn err: %s", err)
+		utils.ZapLog.Error("[gc] new txn", zap.Error(err))
 		return nil, 0, false, err
 	}
 	defer txn.Rollback()
 	it, err := txn.Iter(start, end, false)
 	if err != nil {
-		logrus.Errorf("iter err: %s", err)
+		utils.ZapLog.Error("[gc] iter", zap.Error(err))
 		return nil, 0, false, err
 	}
 	defer it.Close()
@@ -130,20 +130,20 @@ LABLE:
 		k = it.Key()
 		object, err := GetObjectFromTTL(k)
 		if err != nil {
-			logrus.Errorf("get key %s from ttl err: %s", k, err)
+			utils.ZapLog.Error("[gc] get object from ttl", zap.Binary("key", k), zap.Error(err))
 			continue
 		}
 		if len(object.Key) > 0 {
 			key := object.GetKeyBytes()
-			logrus.Debugf("delete key: %s", key)
+			utils.ZapLog.Debug("[gc] delete key", zap.ByteString("key", object.Key), zap.Binary("keybytes", key))
 			err = txn.Del(key)
 			if err != nil {
-				logrus.Errorf("del key %s err: %s", key, err)
+				utils.ZapLog.Error("[gc] del key", zap.ByteString("key", object.Key), zap.Binary("keybytes", key), zap.Error(err))
 			}
 			count++
 			err = txn.Del(k)
 			if err != nil {
-				logrus.Errorf("del key %s err: %s", k, err)
+				utils.ZapLog.Error("[gc] del key", zap.ByteString("key", object.Key), zap.Binary("keybytes", key), zap.Error(err))
 			}
 			count++
 			if count >= c.cfg.Store.BatchLimit {
@@ -153,11 +153,12 @@ LABLE:
 
 		if len(object.Value) > 0 {
 			p := object.GetValueBytesPrefix()
-			logrus.Debugf("delete hash: %s", p)
+			utils.ZapLog.Debug("[gc] delete hash", zap.ByteString("value", object.Value), zap.Binary("prefix", p))
 			c.gcWait.Add(1)
 			gcWorkers := atomic.AddInt32(&c.gcWorkers, 1)
+			ttlKey := k
 			go c.DelteRange(p, utils.PrefixNext(p), func(c *store.Client) {
-				_ = c.Delete(k)
+				_ = c.Delete(ttlKey)
 			})
 			if int(gcWorkers) >= c.cfg.GcWorkers {
 				// limit the number of goroutines
@@ -169,13 +170,13 @@ LABLE:
 
 		err = it.Next()
 		if err != nil {
-			logrus.Errorf("next err: %s", err)
+			utils.ZapLog.Error("[gc] iter next", zap.Error(err))
 			return k, 0, false, err
 		}
 	}
 	err = txn.Commit()
 	if err != nil {
-		logrus.Errorf("commit err: %s", err)
+		utils.ZapLog.Error("[gc] commit", zap.Error(err))
 	}
 	return k, count, wait, err
 }

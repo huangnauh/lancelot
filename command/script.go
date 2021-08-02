@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/lua/cjson"
@@ -18,6 +17,7 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"go.uber.org/zap"
 )
 
 const (
@@ -402,7 +402,7 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 }
 
 func covertToLua(L *lua.LState, val interface{}) lua.LValue {
-	logrus.Debugf("covertToLua: %v", val)
+	utils.ZapLog.Debug("covert to lua", zap.Any("val", val))
 	switch val := val.(type) {
 	case nil:
 		return lua.LNil

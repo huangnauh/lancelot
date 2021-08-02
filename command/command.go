@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"github.com/patrickmn/go-cache"
-	"github.com/sirupsen/logrus"
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
+	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"go.uber.org/zap"
 )
 
 type TxnHandle func(txn *store.Txn, args [][]byte) interface{}
@@ -78,6 +79,14 @@ func NewCommand(cfg *config.Config) *Command {
 		EXEC_COMMAND: {
 			Func: c.exec,
 			ID:   510,
+		},
+		SUBSCRIBE_COMMAND: {
+			Func: c.subscribe,
+			ID:   509,
+		},
+		UNSUBSCRIBE_COMMAND: {
+			Func: c.unsubscribe,
+			ID:   508,
 		},
 	}
 
@@ -279,7 +288,7 @@ func NewCommand(cfg *config.Config) *Command {
 			},
 			ReadOnly:        true,
 			NoSupportScript: true,
-			ID:              509,
+			ID:              500,
 			Type:            UnknownType,
 		},
 		EVALSHA_RO_COMMAND: {
@@ -288,13 +297,13 @@ func NewCommand(cfg *config.Config) *Command {
 			},
 			ReadOnly:        true,
 			NoSupportScript: true,
-			ID:              510,
+			ID:              499,
 			Type:            UnknownType,
 		},
 		SCRIPT_COMMAND: {
 			Func:            c.ScriptHandle,
 			NoSupportScript: true,
-			ID:              511,
+			ID:              498,
 			Type:            UnknownType,
 		},
 		JSONSET_COMMAND: {
@@ -327,7 +336,7 @@ func (c *Command) Shutdown(ctx context.Context) {
 
 func (c *Command) Start() error {
 	var err error
-	c.client, err = store.Open(&c.cfg.Store)
+	c.client, err = store.Open(c.cfg)
 	if err != nil {
 		return err
 	}
@@ -379,7 +388,7 @@ func (c *Command) watchUser() {
 	for {
 		users, err := c.ListUsers()
 		if err != nil {
-			logrus.Errorf("watchUser: %s", err)
+			utils.ZapLog.Error("watchUser", zap.Error(err))
 			continue
 		}
 		c.SetLocalUsers(users)

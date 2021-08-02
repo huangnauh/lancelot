@@ -3,14 +3,16 @@ package store
 import (
 	"bytes"
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/tikv"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/util/execdetails"
-	"github.com/sirupsen/logrus"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
+	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"go.uber.org/zap"
 )
 
 // type RespFunc func(txn *Txn)
@@ -24,6 +26,7 @@ type Txn struct {
 	Err        error
 	Timestamp  uint64
 	Now        int64
+	CurrentID  uint32
 	PendingReq []redcon.Command
 }
 
@@ -36,6 +39,17 @@ type Txn struct {
 // 	HasTransaction() bool
 // }
 
+func (t *Txn) GetCurrentID() uint32 {
+	return atomic.AddUint32(&t.CurrentID, 1)
+}
+
+func (t *Txn) RemoteAddr() string {
+	if t.Conn != nil {
+		return t.Conn.RemoteAddr()
+	}
+	return "nil"
+}
+
 func (t *Txn) HasTransaction() bool {
 	return t.txn != nil
 }
@@ -45,10 +59,10 @@ func (t *Txn) NowTime() time.Time {
 }
 
 func (t *Txn) Begin() error {
-	logrus.Debugf("%p begin", t)
+	utils.ZapLog.Debug("[txn] begin", zap.String("remote", t.RemoteAddr()))
 	tx, err := t.client.store.Begin()
 	if err != nil {
-		logrus.Errorf("client begin failed %s", err)
+		utils.ZapLog.Error("[txn] client begin", zap.String("remote", t.RemoteAddr()), zap.Error(err))
 		return err
 	}
 	startTs := tx.StartTS()
@@ -59,7 +73,8 @@ func (t *Txn) Begin() error {
 }
 
 func (t *Txn) Rollback() {
-	logrus.Debugf("%p rollback", t)
+	utils.ZapLog.Debug("[txn] rollback", zap.String("remote", t.RemoteAddr()),
+		zap.Uint64("timestamp", t.Timestamp))
 	if t.txn != nil {
 		_ = t.txn.Rollback()
 		t.txn = nil
@@ -67,67 +82,76 @@ func (t *Txn) Rollback() {
 }
 
 func (t *Txn) Commit() error {
-	logrus.Debugf("%p commit", t)
-	ctx, cancel := context.WithTimeout(context.Background(), t.client.Conf.WriteTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.WriteTimeout)
 	defer cancel()
 	err := t.txn.Commit(ctx)
 	if err != nil {
-		logrus.Errorf("commit failed, err: %s", err)
+		utils.ZapLog.Error("[txn] commit", zap.String("remote", t.RemoteAddr()),
+			zap.Uint64("timestamp", t.Timestamp), zap.Error(err))
 		t.Rollback()
 		return err
 	}
+	utils.ZapLog.Debug("[txn] commit", zap.String("remote", t.RemoteAddr()),
+		zap.Uint64("timestamp", t.Timestamp))
 	t.txn = nil
 	return nil
 }
 
 func (t *Txn) Get(key []byte) ([]byte, error) {
 	start := time.Now()
-	startTs := t.txn.StartTS()
 	snapshot := t.txn.GetSnapshot()
 	snapshotStats := &tikv.SnapshotRuntimeStats{}
 	snapshot.SetOption(kv.CollectRuntimeStats, snapshotStats)
-	ctx, cancel := context.WithTimeout(context.Background(), t.client.Conf.ReadTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.ReadTimeout)
 	execDetail := &execdetails.StmtExecDetails{}
 	ctx = context.WithValue(ctx, execdetails.StmtExecDetailKey, execDetail)
 	defer cancel()
 	v, err := t.txn.Get(ctx, key)
 
 	spend := time.Since(start)
-	if spend > t.client.Conf.SlowRequest {
-		logrus.Warnf("get %v, start_ts %d, slow request %s %s, snapshot %s",
-			key, startTs, spend, execDetailsString(execDetail), snapshotStats)
+	if spend > t.client.conf.SlowRequest {
+		utils.ZapLog.Warn("[txn] get slow request", zap.String("remote", t.RemoteAddr()),
+			zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key), zap.Duration("spend", spend),
+			zap.String("detail", execDetailsString(execDetail)), zap.Any("snapshot", snapshotStats))
 	}
 
 	if kv.IsErrNotFound(err) {
-		logrus.Debugf("%p get %v not found", t, key)
+		utils.ZapLog.Debug("[txn] get not found", zap.String("remote", t.RemoteAddr()),
+			zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key))
 		return nil, KeyNotFound
 	}
 	if err != nil {
-		logrus.Errorf("get %v failed %s", key, err)
+		utils.ZapLog.Error("[txn] get", zap.String("remote", t.RemoteAddr()),
+			zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key), zap.Error(err))
 		return nil, err
 	}
 
-	logrus.Debugf("%p get %v %s", t, key, v)
+	utils.ZapLog.Debug("[txn] get", zap.String("remote", t.RemoteAddr()),
+		zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key), zap.Binary("value", v))
 	return v, nil
 }
 
 func (t *Txn) Put(key, val []byte) error {
-	logrus.Debugf("%p set %v %s", t, key, val)
 	err := t.txn.Set(key, val)
 	if err != nil {
-		logrus.Errorf("set %s failed %s", key, err)
+		utils.ZapLog.Error("[txn] set", zap.String("remote", t.RemoteAddr()),
+			zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key), zap.Error(err))
 		return err
 	}
+	utils.ZapLog.Debug("[txn] set", zap.String("remote", t.RemoteAddr()),
+		zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key), zap.Binary("value", val))
 	return nil
 }
 
 func (t *Txn) Del(key []byte) error {
-	logrus.Debugf("%p del %v", t, key)
 	err := t.txn.Delete(key)
 	if err != nil {
-		logrus.Errorf("del %s failed %s", key, err)
+		utils.ZapLog.Error("[txn] del", zap.String("remote", t.RemoteAddr()),
+			zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key), zap.Error(err))
 		return err
 	}
+	utils.ZapLog.Debug("[txn] del", zap.String("remote", t.RemoteAddr()),
+		zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key))
 	return nil
 }
 
@@ -136,7 +160,12 @@ func (t *Txn) LockKeys(keys [][]byte) error {
 	for i := range keys {
 		kvKeys[i] = kv.Key(keys[i])
 	}
-	return t.txn.LockKeys(context.Background(), new(kv.LockCtx), kvKeys...)
+	err := t.txn.LockKeys(context.Background(), new(kv.LockCtx), kvKeys...)
+	if err != nil {
+		utils.ZapLog.Error("[txn] lock", zap.String("remote", t.RemoteAddr()),
+			zap.Uint64("timestamp", t.Timestamp), zap.Error(err))
+	}
+	return err
 }
 
 type Iterator struct {
@@ -163,7 +192,9 @@ func (t *Txn) Iter(start, end []byte, reversed bool) (*Iterator, error) {
 func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
 	it, err := t.Iter(start, end, false)
 	if err != nil {
-		logrus.Errorf("iter err: %s", err)
+		utils.ZapLog.Error("[txn] iter", zap.String("remote", t.RemoteAddr()),
+			zap.Uint64("timestamp", t.Timestamp), zap.Binary("start", start), zap.Binary("end", end),
+			zap.Error(err))
 		return err
 	}
 	defer it.Close()
@@ -175,7 +206,8 @@ func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
 			return nil
 		}
 		val := it.Value()
-		logrus.Debugf("%p list %s %s", t, []byte(key), val)
+		utils.ZapLog.Debug("[txn] list ", zap.String("remote", t.RemoteAddr()),
+			zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key), zap.Binary("value", val))
 		ok := callback(key, val)
 		if !ok {
 			return nil
@@ -187,6 +219,9 @@ func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
 		}
 		err = it.Next()
 		if err != nil {
+			utils.ZapLog.Error("[txn] iter next", zap.String("remote", t.RemoteAddr()),
+				zap.Uint64("timestamp", t.Timestamp), zap.Binary("start", start), zap.Binary("end", end),
+				zap.Error(err))
 			return err
 		}
 	}
@@ -201,6 +236,9 @@ func (t *Iterator) DeleteUntil(limit int) (key []byte, count int, err error) {
 		}
 		err = t.txn.Del(key)
 		if err != nil {
+			utils.ZapLog.Error("[txn] del", zap.String("remote", t.txn.RemoteAddr()),
+				zap.Uint64("timestamp", t.txn.Timestamp), zap.Binary("start", t.start), zap.Binary("end", t.end),
+				zap.Error(err))
 			return
 		}
 		count++
@@ -209,6 +247,9 @@ func (t *Iterator) DeleteUntil(limit int) (key []byte, count int, err error) {
 		}
 		err = t.Next()
 		if err != nil {
+			utils.ZapLog.Error("[txn] iter next", zap.String("remote", t.txn.RemoteAddr()),
+				zap.Uint64("timestamp", t.txn.Timestamp), zap.Binary("start", t.start), zap.Binary("end", t.end),
+				zap.Error(err))
 			return
 		}
 	}
