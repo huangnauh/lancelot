@@ -453,6 +453,9 @@ func (c *Conn) setState(state ConnState) {
 }
 
 func (c *Conn) Close() error {
+	if c.closed {
+		return nil
+	}
 	c.wr.Flush()
 	c.closed = true
 	return c.conn.Close()

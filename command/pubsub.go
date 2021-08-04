@@ -2,6 +2,7 @@ package command
 
 import (
 	"encoding/binary"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -14,20 +15,36 @@ import (
 	"go.uber.org/zap"
 )
 
-func getMessageKey(value []byte, txn *store.Txn) []byte {
-	id := txn.GetCurrentID()
-	k := make([]byte, len(value)+8+4)
-	copy(k[:len(value)], value)
-	binary.BigEndian.PutUint64(k[len(value):], uint64(txn.Timestamp))
-	binary.BigEndian.PutUint32(k[len(value)+8:], id)
+const (
+	DefaultTTL = 30 * 60 * 1000 // 30 minutes
+)
+
+func getMessageKey(count int64) []byte {
+	k := make([]byte, 9)
+	if count < 0 {
+		k[0] = 0x00
+		count = -count
+	} else {
+		k[0] = 0x01
+	}
+	binary.BigEndian.PutUint64(k, uint64(count))
 	return k
 }
 
-func getMessagePrefix(value []byte, timestamp uint64) []byte {
-	k := make([]byte, len(value)+8)
-	copy(k[:len(value)], value)
-	binary.BigEndian.PutUint64(k[len(value):], uint64(timestamp))
+func encodeMessageValue(timestamp int64, value []byte) []byte {
+	k := make([]byte, 8+len(value))
+	binary.BigEndian.PutUint64(k, uint64(timestamp))
+	copy(k[8:], value)
 	return k
+}
+
+func decodeMessageValue(v []byte) (int64, []byte, error) {
+	if len(v) <= 8 {
+		return 0, nil, xerror.ErrValueTooShort
+	}
+	timestamp := int64(binary.BigEndian.Uint64(v[:8]))
+	value := v[8:]
+	return timestamp, value, nil
 }
 
 // (pubsub) PUBLISH channel message [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp]
@@ -57,14 +74,14 @@ func (c *Command) PublishHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 
-	oldTTL := object.TTL
+	oldTTL := object.ValueTTL
 	if opt.Expire > 0 {
-		object.TTL = opt.Expire
-	} else if object.TTL == 0 {
-		object.TTL = 60 * 30 * 1000 // 30 minutes
+		object.ValueTTL = opt.Expire
+	} else if object.ValueTTL == 0 {
+		object.ValueTTL = DefaultTTL
 	}
 
-	if object.TTL != oldTTL {
+	if object.ValueTTL != oldTTL {
 		object.Timestamp = txn.Timestamp
 		err = txn.Put(key, ObjectEncode(object))
 		if err != nil {
@@ -72,14 +89,21 @@ func (c *Command) PublishHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 	}
 
-	message := NewObject(txn.UserId, txn.DBId, MessageType, getMessageKey(object.Value, txn))
-	message.Value = args[1]
-	message.Timestamp = txn.Timestamp
-	err = txn.Put(message.GetKeyBytes(), ObjectEncode(message))
+	count, err := c.AddCount(txn, MessageType, uint64(object.Hash), channel, 1)
 	if err != nil {
 		return txn.SetError(err)
 	}
-	return SimpleInt(object.Count)
+	utils.ZapLog.Debug("PUBLISH", zap.ByteString("channel", channel), zap.ByteString("message", args[1]), zap.Int64("count", count))
+	err = txn.Put(object.GetKeyFieldBytes(getMessageKey(count)), encodeMessageValue(txn.Now, args[1]))
+	if err != nil {
+		return txn.SetError(err)
+	}
+
+	count, err = c.GetCount(txn, PubType, 0, channel)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return SimpleInt(int(count))
 }
 
 type pubSubConn struct {
@@ -87,6 +111,7 @@ type pubSubConn struct {
 	dconn    *redcon.DetachedConn
 	channels map[string][]byte
 	messages chan interface{}
+	closed   chan struct{}
 }
 
 // SUBSCRIBE channel [channel ...]
@@ -96,9 +121,16 @@ func (c *Command) subscribe(conn *redcon.Conn, cmd redcon.Command) {
 		return
 	}
 	dconn := conn.Detach()
-	ps := &pubSubConn{dconn: dconn, channels: make(map[string][]byte), messages: make(chan interface{}, 1000)}
+	ps := &pubSubConn{
+		dconn:    dconn,
+		channels: make(map[string][]byte),
+		messages: make(chan interface{}, 1000),
+		closed:   make(chan struct{}),
+	}
 	c.subDetached(ps, cmd.Args[1:])
+	go ps.sendMessage()
 	go c.runDetached(ps)
+	go c.Pull(ps)
 }
 
 // UNSUBSCRIBE channel [channel ...]
@@ -118,13 +150,44 @@ func (c *Command) unsubscribe(conn *redcon.Conn, cmd redcon.Command) {
 	}
 }
 
-type subCount struct {
-	channel string
-	start   []byte
+func (c *Command) tryDeleteConnCount(channels []string) {
+	for i := 0; i < 3; i++ {
+		err := c.deleteConnCount(channels)
+		if err != nil {
+			time.Sleep(time.Millisecond * 100)
+			continue
+		}
+		return
+	}
 }
 
-func (conn *pubSubConn) Close() {
+func (c *Command) deleteConnCount(channels []string) error {
+	txn := c.client.NewTxn()
+	defer txn.Rollback()
+	err := txn.Begin()
+	if err != nil {
+		return err
+	}
+	for _, channel := range channels {
+		_, err = c.AddCount(txn, PubType, 0, utils.S2B(channel), -1)
+		if err != nil {
+			return err
+		}
+	}
+	return txn.Commit()
+}
+
+func (conn *pubSubConn) Close(c *Command) error {
+	close(conn.closed)
 	conn.dconn.Close()
+	conn.Lock()
+	var channels []string
+	for k := range conn.channels {
+		channels = append(channels, k)
+	}
+	conn.Unlock()
+	c.tryDeleteConnCount(channels)
+	return nil
 }
 
 func (conn *pubSubConn) sendMessage() {
@@ -134,9 +197,10 @@ func (conn *pubSubConn) sendMessage() {
 			conn.dconn.WriteAny(msg)
 			conn.dconn.Flush()
 			if msg == OK {
-				conn.Close()
 				return
 			}
+		case <-conn.closed:
+			return
 		}
 	}
 }
@@ -180,10 +244,10 @@ func (c *Command) unsubDetached(conn *pubSubConn, args [][]byte) {
 	}
 	resps := make([]string, len(args))
 	argsCh := make(map[string]bool)
-	for i, c := range channels {
-		if conn.isChannelExist(c) && !argsCh[c] {
-			argsCh[c] = true
-			object := NewObject(txn.UserId, txn.DBId, PubType, utils.S2B(c))
+	for i, ch := range channels {
+		if conn.isChannelExist(ch) && !argsCh[ch] {
+			argsCh[ch] = true
+			object := NewObject(txn.UserId, txn.DBId, PubType, utils.S2B(ch))
 			key := object.GetKeyBytes()
 			err := getTxnObject(txn, key, object, true)
 			if err == store.KeyNotFound {
@@ -191,11 +255,7 @@ func (c *Command) unsubDetached(conn *pubSubConn, args [][]byte) {
 				conn.messages <- err
 				return
 			} else {
-				if object.Count > 0 {
-					object.Count--
-				}
-				object.Timestamp = txn.Timestamp
-				err = txn.Put(key, ObjectEncode(object))
+				_, err = c.AddCount(txn, PubType, 0, utils.S2B(ch), -1)
 				if err != nil {
 					conn.messages <- err
 					return
@@ -203,7 +263,7 @@ func (c *Command) unsubDetached(conn *pubSubConn, args [][]byte) {
 			}
 		}
 		if !all {
-			resps[i] = c
+			resps[i] = ch
 		}
 	}
 	err = txn.Commit()
@@ -242,45 +302,51 @@ func (c *Command) subDetached(conn *pubSubConn, args [][]byte) {
 
 	resps := make([]func(), len(args))
 	argsCh := make(map[string]bool)
-	for _, ch := range args {
-		c := string(ch)
-		if !conn.isChannelExist(c) && !argsCh[c] {
-			argsCh[c] = true
+	for i, ch := range args {
+		cha := string(ch)
+		if !conn.isChannelExist(cha) && !argsCh[cha] {
+			argsCh[cha] = true
 			object := NewObject(txn.UserId, txn.DBId, PubType, ch)
 			key := object.GetKeyBytes()
 			err := getTxnObject(txn, key, object, true)
 			if err == store.KeyNotFound {
-				id, err := uuid.NewUUID()
+				var id uuid.UUID
+				id, err = uuid.NewUUID()
 				if err != nil {
 					conn.messages <- err
 					return
 				}
 				object.Value = id[:]
-			} else if err != nil {
-				conn.messages <- err
-				return
+				object.ValueTTL = DefaultTTL
+				object.Timestamp = txn.Timestamp
+				err = txn.Put(key, ObjectEncode(object))
 			}
-			object.Count++
-			object.Timestamp = txn.Timestamp
-			err = txn.Put(key, ObjectEncode(object))
+
 			if err != nil {
 				conn.messages <- err
 				return
 			}
-			resps = append(resps, func() {
+			_, err = c.AddCount(txn, PubType, 0, ch, 1)
+			if err != nil {
+				conn.messages <- err
+				return
+			}
+			start := object.GetValueBytesPrefix()
+			resps[i] = func() {
 				conn.Lock()
-				conn.channels[c] = getMessageKeyPrefix(txn, object.Value, txn.Timestamp)
+				conn.channels[cha] = start
 				count := len(conn.channels)
 				conn.Unlock()
-				conn.messages <- []interface{}{"subscribe", c, count}
-			})
+				utils.ZapLog.Debug("subscribe", zap.String("channel", cha), zap.ByteString("next", start))
+				conn.messages <- []interface{}{"subscribe", cha, count}
+			}
 		} else {
-			resps = append(resps, func() {
+			resps[i] = func() {
 				conn.RLock()
 				count := len(conn.channels)
 				conn.RUnlock()
-				conn.messages <- []interface{}{"subscribe", c, count}
-			})
+				conn.messages <- []interface{}{"subscribe", cha, count}
+			}
 		}
 	}
 	err = txn.Commit()
@@ -294,27 +360,62 @@ func (c *Command) subDetached(conn *pubSubConn, args [][]byte) {
 	}
 }
 
-func (c *Command) pullMessage(sconn *pubSubConn) {
-	chans := make(map[string][]byte, 0)
+func (c *Command) Pull(conn *pubSubConn) {
+	c.pullMessages(conn)
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			c.pullMessages(conn)
+		case <-conn.closed:
+			return
+		}
+	}
+}
+
+func (c *Command) pullMessages(sconn *pubSubConn) {
+	chans := make(map[string][]byte)
 	sconn.RLock()
 	for c, start := range sconn.channels {
 		chans[c] = start
 	}
 	sconn.RUnlock()
-	for ch, start := range chans {
-		c.pullMessgeFromChannel(sconn, ch, start, 100)
+	for len(chans) > 0 {
+		select {
+		case <-sconn.closed:
+			return
+		default:
+		}
+		for ch, start := range chans {
+			lastKey, next, err := c.pullMessgeFromChannel(sconn, ch, start, 100)
+			if next {
+				utils.ZapLog.Debug("pull message next", zap.String("channel", ch), zap.ByteString("lastKey", lastKey))
+				chans[ch] = lastKey
+				continue
+			}
+
+			delete(chans, ch)
+			if err == nil {
+				continue
+			}
+
+			tick := time.NewTicker(time.Millisecond * 100)
+			select {
+			case <-sconn.closed:
+				return
+			case <-tick.C:
+			}
+		}
 	}
 }
 
-func getMessageKeyPrefix(txn *store.Txn, value []byte, timestamp uint64) []byte {
-	return GetDataPrefix(txn.UserId, txn.DBId, MessageType, getMessagePrefix(value, timestamp))
-}
-
-func (c *Command) pullMessgeFromChannel(conn *pubSubConn, channel string, start []byte, limit int) error {
+func (c *Command) pullMessgeFromChannel(conn *pubSubConn, channel string, start []byte, limit int) ([]byte, bool, error) {
+	utils.ZapLog.Debug("pullMessgeFromChannel", zap.String("channel", channel), zap.ByteString("start", start))
 	txn := c.client.NewTxn()
 	err := txn.Begin()
 	if err != nil {
-		return err
+		return nil, false, err
 	}
 	txn.Conn = conn.dconn.Conn
 
@@ -322,40 +423,46 @@ func (c *Command) pullMessgeFromChannel(conn *pubSubConn, channel string, start 
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
-		return nil
+		return nil, false, nil
 	} else if err != nil {
-		return err
+		return nil, false, err
 	}
-	// start := getMessageKeyPrefix(txn, object.Value, timestamp)
-	end := getMessageKeyPrefix(txn, object.Value, txn.Timestamp)
+	end := utils.PrefixNext(object.GetValueBytesPrefix())
 	var lastKey []byte
+	next := false
 	callback := func(key, value []byte) bool {
 		lastKey = key
-		object, err := GetObjectFromKV(key, value)
+		timestamp, message, err := decodeMessageValue(value)
 		if err != nil {
-			utils.ZapLog.Error("scan object", zap.String("remote", txn.RemoteAddr()),
-				zap.Uint64("timestamp", txn.Timestamp), zap.Binary("key", key), zap.Binary("value", value), zap.Error(err))
 			return true
 		}
-		conn.messages <- []interface{}{"message", channel, object.Value}
+		if math.Abs(float64(timestamp-txn.Now)) < 1000 {
+			next = true
+		}
+		conn.messages <- []interface{}{"message", channel, message}
 		return true
 	}
 	err = txn.List(start, end, limit, callback)
-	if err != nil {
-		return err
-	}
 	if lastKey != nil {
+		lastKey = utils.NextKey(lastKey)
 		conn.Lock()
+		utils.ZapLog.Debug("pullMessgeFromChannel", zap.String("channel", channel), zap.ByteString("next", lastKey))
 		conn.channels[channel] = lastKey
 		conn.Unlock()
 	}
-	return nil
+
+	if err == store.ReachLimit {
+		return lastKey, true, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return lastKey, next, err
 }
 
 func (c *Command) runDetached(sconn *pubSubConn) {
-	ticker := time.NewTicker(c.cfg.GcTickInterval)
 	defer func() {
-		ticker.Stop()
+		sconn.Close(c)
 	}()
 	for {
 		cmd, err := sconn.dconn.ReadCommand()

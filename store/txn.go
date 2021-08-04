@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"sync/atomic"
 	"time"
 
@@ -43,6 +44,14 @@ func (t *Txn) GetCurrentID() uint32 {
 	return atomic.AddUint32(&t.CurrentID, 1)
 }
 
+func (t *Txn) GetCurrentUID() []byte {
+	id := t.GetCurrentID()
+	k := make([]byte, 8+4)
+	binary.BigEndian.PutUint64(k[0:], uint64(t.Timestamp))
+	binary.BigEndian.PutUint32(k[8:], id)
+	return k
+}
+
 func (t *Txn) RemoteAddr() string {
 	if t.Conn != nil {
 		return t.Conn.RemoteAddr()
@@ -59,7 +68,6 @@ func (t *Txn) NowTime() time.Time {
 }
 
 func (t *Txn) Begin() error {
-	utils.ZapLog.Debug("[txn] begin", zap.String("remote", t.RemoteAddr()))
 	tx, err := t.client.store.Begin()
 	if err != nil {
 		utils.ZapLog.Error("[txn] client begin", zap.String("remote", t.RemoteAddr()), zap.Error(err))
@@ -73,8 +81,6 @@ func (t *Txn) Begin() error {
 }
 
 func (t *Txn) Rollback() {
-	utils.ZapLog.Debug("[txn] rollback", zap.String("remote", t.RemoteAddr()),
-		zap.Uint64("timestamp", t.Timestamp))
 	if t.txn != nil {
 		_ = t.txn.Rollback()
 		t.txn = nil
@@ -111,23 +117,23 @@ func (t *Txn) Get(key []byte) ([]byte, error) {
 	spend := time.Since(start)
 	if spend > t.client.conf.SlowRequest {
 		utils.ZapLog.Warn("[txn] get slow request", zap.String("remote", t.RemoteAddr()),
-			zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key), zap.Duration("spend", spend),
+			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.Duration("spend", spend),
 			zap.String("detail", execDetailsString(execDetail)), zap.Any("snapshot", snapshotStats))
 	}
 
 	if kv.IsErrNotFound(err) {
 		utils.ZapLog.Debug("[txn] get not found", zap.String("remote", t.RemoteAddr()),
-			zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key))
+			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key))
 		return nil, KeyNotFound
 	}
 	if err != nil {
 		utils.ZapLog.Error("[txn] get", zap.String("remote", t.RemoteAddr()),
-			zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key), zap.Error(err))
+			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.Error(err))
 		return nil, err
 	}
 
 	utils.ZapLog.Debug("[txn] get", zap.String("remote", t.RemoteAddr()),
-		zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key), zap.Binary("value", v))
+		zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.ByteString("value", v))
 	return v, nil
 }
 
@@ -135,11 +141,11 @@ func (t *Txn) Put(key, val []byte) error {
 	err := t.txn.Set(key, val)
 	if err != nil {
 		utils.ZapLog.Error("[txn] set", zap.String("remote", t.RemoteAddr()),
-			zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key), zap.Error(err))
+			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.Error(err))
 		return err
 	}
 	utils.ZapLog.Debug("[txn] set", zap.String("remote", t.RemoteAddr()),
-		zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key), zap.Binary("value", val))
+		zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.ByteString("value", val))
 	return nil
 }
 
@@ -147,11 +153,11 @@ func (t *Txn) Del(key []byte) error {
 	err := t.txn.Delete(key)
 	if err != nil {
 		utils.ZapLog.Error("[txn] del", zap.String("remote", t.RemoteAddr()),
-			zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key), zap.Error(err))
+			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.Error(err))
 		return err
 	}
 	utils.ZapLog.Debug("[txn] del", zap.String("remote", t.RemoteAddr()),
-		zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key))
+		zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key))
 	return nil
 }
 
@@ -193,7 +199,7 @@ func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
 	it, err := t.Iter(start, end, false)
 	if err != nil {
 		utils.ZapLog.Error("[txn] iter", zap.String("remote", t.RemoteAddr()),
-			zap.Uint64("timestamp", t.Timestamp), zap.Binary("start", start), zap.Binary("end", end),
+			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("start", start), zap.ByteString("end", end),
 			zap.Error(err))
 		return err
 	}
@@ -207,7 +213,7 @@ func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
 		}
 		val := it.Value()
 		utils.ZapLog.Debug("[txn] list ", zap.String("remote", t.RemoteAddr()),
-			zap.Uint64("timestamp", t.Timestamp), zap.Binary("key", key), zap.Binary("value", val))
+			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.ByteString("value", val))
 		ok := callback(key, val)
 		if !ok {
 			return nil
@@ -220,7 +226,7 @@ func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
 		err = it.Next()
 		if err != nil {
 			utils.ZapLog.Error("[txn] iter next", zap.String("remote", t.RemoteAddr()),
-				zap.Uint64("timestamp", t.Timestamp), zap.Binary("start", start), zap.Binary("end", end),
+				zap.Uint64("timestamp", t.Timestamp), zap.ByteString("start", start), zap.ByteString("end", end),
 				zap.Error(err))
 			return err
 		}
@@ -237,7 +243,7 @@ func (t *Iterator) DeleteUntil(limit int) (key []byte, count int, err error) {
 		err = t.txn.Del(key)
 		if err != nil {
 			utils.ZapLog.Error("[txn] del", zap.String("remote", t.txn.RemoteAddr()),
-				zap.Uint64("timestamp", t.txn.Timestamp), zap.Binary("start", t.start), zap.Binary("end", t.end),
+				zap.Uint64("timestamp", t.txn.Timestamp), zap.ByteString("start", t.start), zap.ByteString("end", t.end),
 				zap.Error(err))
 			return
 		}
@@ -248,7 +254,7 @@ func (t *Iterator) DeleteUntil(limit int) (key []byte, count int, err error) {
 		err = t.Next()
 		if err != nil {
 			utils.ZapLog.Error("[txn] iter next", zap.String("remote", t.txn.RemoteAddr()),
-				zap.Uint64("timestamp", t.txn.Timestamp), zap.Binary("start", t.start), zap.Binary("end", t.end),
+				zap.Uint64("timestamp", t.txn.Timestamp), zap.ByteString("start", t.start), zap.ByteString("end", t.end),
 				zap.Error(err))
 			return
 		}

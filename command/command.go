@@ -282,6 +282,11 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:              255,
 			Type:            UnknownType,
 		},
+		PUBLISH_COMMAND: {
+			Func: c.PublishHandle,
+			ID:   501,
+			Type: UnknownType,
+		},
 		EVAL_RO_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
 				return c.evalHandle(txn, args, EVAL_RO_COMMAND)

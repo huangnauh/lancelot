@@ -151,7 +151,7 @@ LABLE:
 			}
 		}
 
-		if len(object.Value) > 0 {
+		if len(object.Value) > 0 && object.Type == HashType {
 			p := object.GetValueBytesPrefix()
 			utils.ZapLog.Debug("[gc] delete hash", zap.ByteString("value", object.Value), zap.Binary("prefix", p))
 			c.gcWait.Add(1)

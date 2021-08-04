@@ -107,8 +107,6 @@ func (c *Command) HSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	} else if err != nil {
 		return txn.SetError(err)
 	}
-
-	object.Count++
 	object.Timestamp = txn.Timestamp
 
 	err = txn.Put(key, ObjectEncode(object))

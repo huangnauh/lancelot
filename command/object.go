@@ -45,6 +45,7 @@ const (
 	EncodingStream
 
 	ObjectHelpCommand = "OBJECT HELP"
+	DefaultHashMark   = 1<<4 - 1
 )
 
 var ObjectNameMap = map[string]ObjectType{
@@ -130,9 +131,10 @@ type Object struct {
 	Key       []byte
 	Type      ObjectType
 	TTL       int64
+	ValueTTL  int64
 	Timestamp uint64
 	Value     []byte
-	Count     int
+	Hash      uint16
 }
 
 func NewObject(user uint16, db uint8, typo ObjectType, key []byte) *Object {
@@ -141,6 +143,7 @@ func NewObject(user uint16, db uint8, typo ObjectType, key []byte) *Object {
 		Db:     db,
 		Key:    key,
 		Type:   typo,
+		Hash:   DefaultHashMark,
 	}
 }
 
@@ -171,6 +174,13 @@ func GetDataPrefix(user uint16, db uint8, typo ObjectType, data []byte) []byte {
 
 func (o *Object) IsSimple() bool {
 	return o.Type == KeyType || o.Type == JsonType
+}
+
+func (o *Object) TTLType() TTL {
+	if o.Type == PubType {
+		return KeyTTL
+	}
+	return ValueTTL
 }
 
 func (o *Object) getKeyBytes(typo ObjectType, data ...[]byte) []byte {
@@ -279,12 +289,17 @@ func (o *Object) ObjectEncoding() ObjectEncoding {
 }
 
 func ObjectEncode(o *Object) []byte {
-	b := make([]byte, len(o.Value)+1+8+8+8)
+	b := make([]byte, len(o.Value)+1+8+8+2)
 	b[0] = byte(o.Type)
-	binary.BigEndian.PutUint64(b[1:], uint64(o.TTL))
+	ttlType := o.TTLType()
+	if ttlType == KeyTTL {
+		binary.BigEndian.PutUint64(b[1:], uint64(o.TTL))
+	} else {
+		binary.BigEndian.PutUint64(b[1:], uint64(o.ValueTTL))
+	}
 	binary.BigEndian.PutUint64(b[9:], o.Timestamp)
-	binary.BigEndian.PutUint64(b[17:], uint64(o.Count))
-	copy(b[1+8+8+8:], o.Value)
+	binary.BigEndian.PutUint16(b[17:], o.Hash)
+	copy(b[1+8+8+2:], o.Value)
 	return b
 }
 
@@ -292,19 +307,25 @@ func (o *Object) CleanValue(typo ObjectType) {
 	o.Type = typo
 	o.TTL = 0
 	o.Timestamp = 0
-	o.Count = 0
+	o.Hash = DefaultHashMark
+	o.ValueTTL = 0
 	o.Value = nil
 }
 
 func ObjectDecode(b []byte, o *Object) error {
-	if len(b) < 1+8+8+8 {
+	if len(b) < 1+8+8+2 {
 		return xerror.ErrValueTooShort
 	}
 	o.Type = ObjectType(b[0])
-	o.TTL = int64(binary.BigEndian.Uint64(b[1:9]))
+	ttlType := o.TTLType()
+	if ttlType == KeyTTL {
+		o.TTL = int64(binary.BigEndian.Uint64(b[1:9]))
+	} else {
+		o.ValueTTL = int64(binary.BigEndian.Uint64(b[1:9]))
+	}
 	o.Timestamp = binary.BigEndian.Uint64(b[9:17])
-	o.Count = int(binary.BigEndian.Uint64(b[17:25]))
-	o.Value = b[25:]
+	o.Hash = binary.BigEndian.Uint16(b[17:19])
+	o.Value = b[19:]
 	return nil
 }
 

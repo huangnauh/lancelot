@@ -269,6 +269,9 @@ func (c *Command) ListUsers() (map[string]*User, error) {
 		return true
 	}
 	err := c.client.List(prefix, utils.PrefixNext(prefix), c.cfg.Auth.MaxUsers, callback)
+	if err == store.ReachLimit {
+		return users, nil
+	}
 	return users, err
 }
 
@@ -280,13 +283,6 @@ func (c *Command) GetUserBytes(username []byte) []byte {
 	k := make([]byte, 1+len(username))
 	k[0] = byte(UserPrefix)
 	copy(k[1:], username)
-	return k
-}
-
-func (c *Command) GetCountBytes(typo ObjectType) []byte {
-	k := make([]byte, 1+1)
-	k[0] = byte(CountPrefix)
-	k[1] = byte(typo)
 	return k
 }
 
