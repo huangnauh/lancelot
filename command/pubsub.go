@@ -16,7 +16,8 @@ import (
 )
 
 const (
-	DefaultTTL = 30 * 60 * 1000 // 30 minutes
+	DefaultTTL       = 30 * 60 * 1000 // 30 minutes
+	PubSubDB   uint8 = 200
 )
 
 func getMessageKey(count int64) []byte {
@@ -55,7 +56,7 @@ func (c *Command) PublishHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	channel := args[0]
 
-	object := NewObject(txn.UserId, txn.DBId, PubType, channel)
+	object := NewObject(txn.UserId, PubSubDB, PubType, channel)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
@@ -89,21 +90,21 @@ func (c *Command) PublishHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 	}
 
-	count, err := c.AddCount(txn, MessageType, uint64(object.Hash), channel, 1)
+	count, err := c.AddCount(txn, MessageType, uint64(object.Hash), object.Value, args[1], 1)
 	if err != nil {
 		return txn.SetError(err)
 	}
-	utils.ZapLog.Debug("PUBLISH", zap.ByteString("channel", channel), zap.ByteString("message", args[1]), zap.Int64("count", count))
-	err = txn.Put(object.GetKeyFieldBytes(getMessageKey(count)), encodeMessageValue(txn.Now, args[1]))
+	utils.ZapLog.Debug("PUBLISH", zap.ByteString("channel", channel), zap.ByteString("message", args[1]), zap.Int64("count", count.Value))
+	err = txn.Put(object.GetKeyFieldBytes(getMessageKey(count.Value)), encodeMessageValue(txn.Now, args[1]))
 	if err != nil {
 		return txn.SetError(err)
 	}
 
-	count, err = c.GetCount(txn, PubType, 0, channel)
+	count, err = c.GetCount(txn, PubType, 0, channel, nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
-	return SimpleInt(int(count))
+	return SimpleInt(int(count.Value))
 }
 
 type pubSubConn struct {
@@ -169,7 +170,7 @@ func (c *Command) deleteConnCount(channels []string) error {
 		return err
 	}
 	for _, channel := range channels {
-		_, err = c.AddCount(txn, PubType, 0, utils.S2B(channel), -1)
+		_, err = c.AddCount(txn, PubType, 0, utils.S2B(channel), nil, -1)
 		if err != nil {
 			return err
 		}
@@ -247,7 +248,7 @@ func (c *Command) unsubDetached(conn *pubSubConn, args [][]byte) {
 	for i, ch := range channels {
 		if conn.isChannelExist(ch) && !argsCh[ch] {
 			argsCh[ch] = true
-			object := NewObject(txn.UserId, txn.DBId, PubType, utils.S2B(ch))
+			object := NewObject(txn.UserId, PubSubDB, PubType, utils.S2B(ch))
 			key := object.GetKeyBytes()
 			err := getTxnObject(txn, key, object, true)
 			if err == store.KeyNotFound {
@@ -255,7 +256,7 @@ func (c *Command) unsubDetached(conn *pubSubConn, args [][]byte) {
 				conn.messages <- err
 				return
 			} else {
-				_, err = c.AddCount(txn, PubType, 0, utils.S2B(ch), -1)
+				_, err = c.AddCount(txn, PubType, 0, utils.S2B(ch), nil, -1)
 				if err != nil {
 					conn.messages <- err
 					return
@@ -306,7 +307,7 @@ func (c *Command) subDetached(conn *pubSubConn, args [][]byte) {
 		cha := string(ch)
 		if !conn.isChannelExist(cha) && !argsCh[cha] {
 			argsCh[cha] = true
-			object := NewObject(txn.UserId, txn.DBId, PubType, ch)
+			object := NewObject(txn.UserId, PubSubDB, PubType, ch)
 			key := object.GetKeyBytes()
 			err := getTxnObject(txn, key, object, true)
 			if err == store.KeyNotFound {
@@ -326,7 +327,7 @@ func (c *Command) subDetached(conn *pubSubConn, args [][]byte) {
 				conn.messages <- err
 				return
 			}
-			_, err = c.AddCount(txn, PubType, 0, ch, 1)
+			_, err = c.AddCount(txn, PubType, 0, ch, nil, 1)
 			if err != nil {
 				conn.messages <- err
 				return
@@ -419,7 +420,7 @@ func (c *Command) pullMessgeFromChannel(conn *pubSubConn, channel string, start 
 	}
 	txn.Conn = conn.dconn.Conn
 
-	object := NewObject(txn.UserId, txn.DBId, PubType, utils.S2B(channel))
+	object := NewObject(txn.UserId, PubSubDB, PubType, utils.S2B(channel))
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
@@ -472,6 +473,8 @@ func (c *Command) runDetached(sconn *pubSubConn) {
 		if len(cmd.Args) == 0 {
 			continue
 		}
+		utils.ZapLog.Debug("detached", zap.String("remote", sconn.dconn.RemoteAddr()),
+			zap.ByteStrings("args", cmd.Args))
 		comma := string(cmd.Args[0])
 		switch strings.ToLower(comma) {
 		case "subscribe":

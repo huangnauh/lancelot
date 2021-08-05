@@ -214,9 +214,12 @@ func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
 		val := it.Value()
 		utils.ZapLog.Debug("[txn] list ", zap.String("remote", t.RemoteAddr()),
 			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.ByteString("value", val))
-		ok := callback(key, val)
-		if !ok {
-			return nil
+
+		if callback != nil {
+			ok := callback(key, val)
+			if !ok {
+				return nil
+			}
 		}
 
 		count++
@@ -234,12 +237,23 @@ func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
 	return nil
 }
 
-func (t *Iterator) DeleteUntil(limit int) (key []byte, count int, err error) {
+func (t *Iterator) DeleteUntil(limit int, callback KVCallback) (key []byte, count int, err error) {
 	for t.Valid() {
 		key = t.Key()
 		if bytes.Compare(key, t.start) < 0 || bytes.Compare(key, t.end) >= 0 {
 			return
 		}
+		val := t.Value()
+		utils.ZapLog.Debug("[txn] list ", zap.String("remote", t.txn.RemoteAddr()),
+			zap.Uint64("timestamp", t.txn.Timestamp), zap.ByteString("key", key), zap.ByteString("value", val))
+
+		if callback != nil {
+			ok := callback(key, val)
+			if !ok {
+				return
+			}
+		}
+
 		err = t.txn.Del(key)
 		if err != nil {
 			utils.ZapLog.Error("[txn] del", zap.String("remote", t.txn.RemoteAddr()),

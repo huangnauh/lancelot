@@ -34,6 +34,7 @@ type Auth struct {
 	Pass                string `yaml:"pass"`
 	MaxUsers            int    `yaml:"max-users"`
 	MaxPasswordsPerUser int    `yaml:"max-passwords-per-user"`
+	MaxDBPerUser        uint8  `yaml:"max-db-per-user"`
 }
 
 type Key struct {
@@ -48,20 +49,26 @@ type Rpc struct {
 	Compress   bool          `yaml:"compress"`
 }
 
+type GC struct {
+	TickInterval     time.Duration `yaml:"tick-interval"`
+	TTLWorkers       int           `yaml:"ttl-workers"`
+	PubSubWorkers    int           `yaml:"pub-sub-workers"`
+	PubChannelExpire time.Duration `yaml:"pub-channel-expire"`
+}
+
 type Config struct {
-	LogLevel       string        `yaml:"log-level"`
-	PIDFile        string        `yaml:"pid-file"`
-	Host           string        `yaml:"host"`
-	RedisPort      int           `yaml:"redis-port"`
-	HttpPort       int           `yaml:"http-port"`
-	RpcPort        int           `yaml:"rpc-port"`
-	Store          Store         `yaml:"store"`
-	GcTickInterval time.Duration `yaml:"gc-tick-interval"`
-	GcWorkers      int           `yaml:"gc-workers"`
-	Lua            Lua           `yaml:"lua"`
-	Auth           Auth          `yaml:"auth"`
-	Key            Key           `yaml:"key"`
-	Rpc            Rpc           `yaml:"rpc"`
+	LogLevel  string `yaml:"log-level"`
+	PIDFile   string `yaml:"pid-file"`
+	Host      string `yaml:"host"`
+	RedisPort int    `yaml:"redis-port"`
+	HttpPort  int    `yaml:"http-port"`
+	RpcPort   int    `yaml:"rpc-port"`
+	Store     Store  `yaml:"store"`
+	GC        GC     `yaml:"gc"`
+	Lua       Lua    `yaml:"lua"`
+	Auth      Auth   `yaml:"auth"`
+	Key       Key    `yaml:"key"`
+	Rpc       Rpc    `yaml:"rpc"`
 }
 
 var cfg = &Config{
@@ -83,8 +90,12 @@ var cfg = &Config{
 		TsoSlowThreshold:   100 * time.Millisecond,
 		BatchLimit:         200,
 	},
-	GcTickInterval: time.Minute,
-	GcWorkers:      2,
+	GC: GC{
+		TickInterval:     time.Minute,
+		PubChannelExpire: time.Hour * 24 * 7,
+		TTLWorkers:       5,
+		PubSubWorkers:    5,
+	},
 	Lua: Lua{
 		InitPoolSize: 10,
 		MaxPoolSize:  100,
@@ -94,6 +105,7 @@ var cfg = &Config{
 		Pass:                "root",
 		MaxUsers:            1000,
 		MaxPasswordsPerUser: 10,
+		MaxDBPerUser:        64,
 	},
 	Key: Key{
 		ScanMaxCount:     10000,

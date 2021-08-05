@@ -21,6 +21,7 @@ var (
 	ErrNumberNegative      = errors.New("Number of keys can't be negative")
 	ErrLuaInvalidType      = errors.New("lua invalid type")
 	ErrSyntax              = errors.New("syntax error")
+	ErrNotExpire           = errors.New("not expire")
 	WrongTypeError         = errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 	ErrNoMatchScript       = errors.New("No matching script. Please use EVAL.")
 	ErrReadOnlyScript      = errors.New("Write commands are not allowed from read-only scripts.")

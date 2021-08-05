@@ -206,6 +206,8 @@ func GetObjectFromKV(key, value []byte) (*Object, error) {
 		return nil, xerror.ErrValueTooShort
 	}
 	o := &Object{}
+	o.UserId = binary.BigEndian.Uint16(key[1:3])
+	o.Db = key[3]
 	o.Key = key[5:]
 	err := ObjectDecode(value, o)
 	if err != nil {

@@ -2,6 +2,7 @@ package command
 
 import (
 	"bytes"
+	"encoding/binary"
 	"sync/atomic"
 	"time"
 
@@ -16,7 +17,7 @@ const (
 )
 
 func (c *Command) startGC() {
-	ticker := time.NewTicker(c.cfg.GcTickInterval)
+	ticker := time.NewTicker(c.cfg.GC.TickInterval)
 	defer func() {
 		ticker.Stop()
 		close(c.gcClosed)
@@ -47,7 +48,7 @@ func (c *Command) tickGC() {
 	}
 
 	saved := oracle.GetTimeFromTS(loadTS)
-	if saved.Add(c.cfg.GcTickInterval).After(now) {
+	if saved.Add(c.cfg.GC.TickInterval).After(now) {
 		return
 	}
 	err = c.client.SaveTS(GcSavedTs, ts)
@@ -56,16 +57,18 @@ func (c *Command) tickGC() {
 		return
 	}
 
+	go c.gcPubSub(ms)
+
 	cur := GetTTLPrefix(0)
 	endGC := GetTTLPrefix(ms)
-	touchTicker := time.NewTicker(c.cfg.GcTickInterval / 10)
+	touchTicker := time.NewTicker(c.cfg.GC.TickInterval / 10)
 	defer touchTicker.Stop()
 
 LABLE:
 	for bytes.Compare(cur, endGC) < 0 {
 		var limit int
 		var wait bool
-		if atomic.LoadInt32(&c.gcWorkers) < int32(c.cfg.GcWorkers) {
+		if atomic.LoadInt32(&c.gcWorkers) < int32(c.cfg.GC.TTLWorkers) {
 			cur, limit, wait, err = c.doGC(cur, endGC)
 			if err != nil {
 				break LABLE
@@ -160,7 +163,7 @@ LABLE:
 			go c.DelteRange(p, utils.PrefixNext(p), func(c *store.Client) {
 				_ = c.Delete(ttlKey)
 			})
-			if int(gcWorkers) >= c.cfg.GcWorkers {
+			if int(gcWorkers) >= c.cfg.GC.TTLWorkers {
 				// limit the number of goroutines
 				wait = true
 				count = c.cfg.Store.BatchLimit
@@ -179,4 +182,115 @@ LABLE:
 		utils.ZapLog.Error("[gc] commit", zap.Error(err))
 	}
 	return k, count, wait, err
+}
+
+type messgeGC struct {
+	start  []byte
+	end    []byte
+	expire int64
+	hash   uint16
+	key    []byte
+}
+
+func (c *Command) TryDeleteChannelCount(channel string, hash uint16, key []byte) {
+	txn := c.client.NewTxn()
+	err := txn.Begin()
+	if err != nil {
+		return
+	}
+	defer txn.Rollback()
+	count, err := c.GetCount(txn, PubType, 0, utils.S2B(channel), nil)
+	if err != nil {
+		return
+	}
+	if count.Value > 0 {
+		return
+	}
+
+	now := txn.NowTime()
+	timestamp := int64(count.Timestamp)
+	exist := time.Unix(timestamp/1e3, (timestamp%1e3)*1e6)
+	if now.Sub(exist) < c.cfg.GC.PubChannelExpire {
+		return
+	}
+
+	expire := now.Add(-c.cfg.GC.PubChannelExpire)
+	err = c.DeleteCount(txn, PubType, hash, key, expire)
+	if err != nil {
+		return
+	}
+
+	utils.ZapLog.Info("[gc] delete channel count", zap.String("channel", channel), zap.Uint16("hash", hash), zap.Binary("key", key))
+	_ = txn.Commit()
+}
+
+func (c *Command) DeleteChannel(name string, channel messgeGC) {
+	count := 0
+	_ = c.client.DeleteRangeUntil(channel.start, channel.end, func(k, v []byte) bool {
+		count++
+		if len(v) < 8 {
+			return true
+		}
+		t := binary.BigEndian.Uint64(v[:8])
+		return t < uint64(channel.expire)
+	})
+	if count == 0 {
+		c.TryDeleteChannelCount(name, channel.hash, channel.key)
+	}
+	utils.ZapLog.Info("[gc] delete channel", zap.String("channel", name), zap.Int("count", count), zap.Int64("expire", channel.expire))
+}
+
+func (c *Command) DeleteUserPubSub(userID uint16, now int64, limit chan struct{}) {
+	utils.ZapLog.Debug("[gc] delete user pubsub", zap.Uint16("user", userID), zap.Int64("now", now))
+	userStart := GetDataPrefix(userID, PubSubDB, PubType, nil)
+	userEnd := GetDataPrefix(userID, PubSubDB, PubType, []byte{0xff})
+	for {
+		channels := make(map[string]messgeGC)
+		var lastKey []byte
+		err := c.client.List(userStart, userEnd, 100, func(k, v []byte) bool {
+			lastKey = k
+			object, err := GetObjectFromKV(k, v)
+			if err != nil {
+				return true
+			}
+			if object.Type != PubType {
+				return true
+			}
+			channel := string(object.Key)
+			expire := now - object.ValueTTL
+			start := object.GetValueBytesPrefix()
+			end := utils.PrefixNext(object.GetValueBytesPrefix())
+			channels[channel] = messgeGC{start, end, expire, object.Hash, object.Value}
+			return true
+		})
+
+		for name, channel := range channels {
+			limit <- struct{}{}
+			c.gcWait.Add(1)
+			utils.ZapLog.Debug("[gc] delete user pubsub", zap.Uint16("user", userID), zap.Int64("now", now),
+				zap.String("channel", name), zap.Int64("expire", channel.expire))
+			go func(name string, messge messgeGC) {
+				c.DeleteChannel(name, messge)
+				<-limit
+				c.gcWait.Done()
+			}(name, channel)
+		}
+
+		if err == store.ReachLimit {
+			userStart = utils.NextKey(lastKey)
+			continue
+		}
+		break
+	}
+}
+
+func (c *Command) gcPubSub(now int64) {
+	c.gcWait.Add(1)
+	defer c.gcWait.Done()
+
+	limit := make(chan struct{}, c.cfg.GC.PubSubWorkers)
+	for _, user := range c.users {
+		userID := user.ID
+		c.DeleteUserPubSub(userID, now, limit)
+	}
 }

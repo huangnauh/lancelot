@@ -180,7 +180,7 @@ func (c *Client) DelteRange(start, end []byte, callback ClientCallback) error {
 	var count int
 	var err error
 	for bytes.Compare(cur, start) >= 0 && bytes.Compare(cur, end) < 0 {
-		cur, count, err = c.DeleteUntil(cur, end, c.conf.BatchLimit)
+		cur, count, err = c.DeleteUntil(cur, end, c.conf.BatchLimit, nil)
 		if err != nil {
 			return err
 		}
@@ -194,7 +194,23 @@ func (c *Client) DelteRange(start, end []byte, callback ClientCallback) error {
 	return nil
 }
 
-func (c *Client) DeleteUntil(start, end []byte, limit int) ([]byte, int, error) {
+func (c *Client) DeleteRangeUntil(start, end []byte, callback KVCallback) error {
+	cur := start
+	var count int
+	var err error
+	for bytes.Compare(cur, start) >= 0 && bytes.Compare(cur, end) < 0 {
+		cur, count, err = c.DeleteUntil(cur, end, c.conf.BatchLimit, callback)
+		if err != nil {
+			return err
+		}
+		if count < c.conf.BatchLimit {
+			break
+		}
+	}
+	return nil
+}
+
+func (c *Client) DeleteUntil(start, end []byte, limit int, callback KVCallback) ([]byte, int, error) {
 	txn := c.NewTxn()
 	err := txn.Begin()
 	if err != nil {
@@ -206,7 +222,7 @@ func (c *Client) DeleteUntil(start, end []byte, limit int) ([]byte, int, error) 
 		return start, 0, err
 	}
 	defer it.Close()
-	cur, count, err := it.DeleteUntil(limit)
+	cur, count, err := it.DeleteUntil(limit, callback)
 	if err != nil {
 		return cur, count, err
 	}
