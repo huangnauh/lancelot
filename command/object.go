@@ -168,7 +168,9 @@ func GetDataPrefix(user uint16, db uint8, typo ObjectType, data []byte) []byte {
 	binary.BigEndian.PutUint16(k[1:], user)
 	k[3] = byte(db)
 	k[4] = byte(typo)
-	copy(k[5:], data)
+	if data != nil {
+		copy(k[5:], data)
+	}
 	return k
 }
 
@@ -195,6 +197,9 @@ func (o *Object) getKeyBytes(typo ObjectType, data ...[]byte) []byte {
 	k[4] = byte(typo)
 	start := 5
 	for _, v := range data {
+		if v == nil {
+			continue
+		}
 		copy(k[start:], v)
 		start += len(v)
 	}
@@ -228,8 +233,8 @@ func (o *Object) GetKeyFieldBytes(field []byte) []byte {
 	return o.getKeyBytes(o.Type, o.Value, field)
 }
 
-func (o *Object) GetValueBytesPrefix() []byte {
-	return o.getKeyBytes(o.Type, o.Value)
+func (o *Object) GetValueBytesPrefix(data []byte) []byte {
+	return o.getKeyBytes(o.Type, o.Value, data)
 }
 
 func GetTTLPrefix(expire int64) []byte {

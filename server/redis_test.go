@@ -2,6 +2,7 @@
 package server_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -29,6 +30,16 @@ func formatMs(dur time.Duration) int64 {
 	return int64(dur / time.Millisecond)
 }
 
+func redisOptions() *redis.Options {
+	return &redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass}
+}
+
+func bigVal() []byte {
+	return bytes.Repeat([]byte{'*'}, 1<<17) // 128kb
+}
+
 func PSetNX(ctx context.Context, client *redis.Client, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
 	cmd := redis.NewStatusCmd(ctx, "psetex", key, formatMs(expiration), value)
 	_ = client.Process(ctx, cmd)
@@ -40,9 +51,7 @@ var _ = Describe("Commands", func() {
 	var client *redis.Client
 
 	BeforeEach(func() {
-		client = redis.NewClient(&redis.Options{
-			Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
-			Password: cfg.Auth.Pass})
+		client = redis.NewClient(redisOptions())
 		Expect(client.FlushDB(ctx).Err()).NotTo(HaveOccurred())
 	})
 

@@ -11,6 +11,7 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"gitlab.s.upyun.com/platform/lancelot/utils/glob"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
 	"go.uber.org/zap"
 )
@@ -18,18 +19,22 @@ import (
 const (
 	DefaultTTL       = 30 * 60 * 1000 // 30 minutes
 	PubSubDB   uint8 = 200
+
+	NoOffset    int64 = -1
+	PUBSUB_HELP       = "PUBSUB HELP"
 )
 
-func getMessageKey(count int64) []byte {
-	k := make([]byte, 9)
-	if count < 0 {
-		k[0] = 0x00
-		count = -count
-	} else {
-		k[0] = 0x01
-	}
+func encodeMessageKey(count int64) []byte {
+	k := make([]byte, 8)
 	binary.BigEndian.PutUint64(k, uint64(count))
 	return k
+}
+
+func decodeMessageKey(v []byte) (int64, error) {
+	if len(v) != 8 {
+		return 0, xerror.ErrValueTooShort
+	}
+	return int64(binary.BigEndian.Uint64(v)), nil
 }
 
 func encodeMessageValue(timestamp int64, value []byte) []byte {
@@ -46,6 +51,120 @@ func decodeMessageValue(v []byte) (int64, []byte, error) {
 	timestamp := int64(binary.BigEndian.Uint64(v[:8]))
 	value := v[8:]
 	return timestamp, value, nil
+}
+
+func (c *Command) PubSubHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 1 {
+		return txn.SetError(xerror.WrongArgsError(PUBSUB_COMMAND))
+	}
+	subcommand := strings.ToLower(utils.B2S(args[0]))
+	switch subcommand {
+	case "channels":
+		return c.pubSubChannels(txn, args[1:])
+	case "numsub":
+		return c.pubSubNumsub(txn, args[1:])
+	default:
+		return txn.SetWrongSubArgs(PUBSUB_COMMAND, PUBSUB_HELP)
+	}
+}
+
+// PUBSUB CHANNELS [pattern] [COUNT count] [CURSOR cursor]
+func (c *Command) pubSubChannels(txn *store.Txn, args [][]byte) interface{} {
+	pattern := ""
+	if len(args)%2 != 0 {
+		pattern = utils.B2S(args[0])
+		args = args[1:]
+	}
+
+	count := c.cfg.Key.ScanMaxCount
+	var cursor []byte
+	var err error
+	for i := 0; i < len(args); i += 2 {
+		switch strings.ToLower(utils.B2S(args[i])) {
+		case "count":
+			count, err = utils.GetPositiveInt(args[i+1])
+			if err != nil {
+				return txn.SetError(xerror.ErrSyntax)
+			}
+			if count > c.cfg.Key.ScanMaxCount {
+				count = c.cfg.Key.ScanMaxCount
+			}
+		case "cursor":
+			cursor = args[i+1]
+		default:
+			return txn.SetError(xerror.ErrSyntax)
+		}
+	}
+	prefix := GetDataPrefix(txn.UserId, PubSubDB, KeyType, nil)
+	var start []byte
+	if cursor != nil {
+		start = GetDataPrefix(txn.UserId, PubSubDB, KeyType, cursor)
+	} else if pattern != "" {
+		cur := glob.Prefix(pattern)
+		start = GetDataPrefix(txn.UserId, PubSubDB, KeyType, utils.S2B(cur))
+	} else {
+		start = prefix
+	}
+	end := utils.PrefixNext(prefix)
+	channels := make([]string, 0)
+	var matchError error
+	utils.ZapLog.Debug("[txn] list", zap.String("remote", txn.RemoteAddr()),
+		zap.Uint64("timestamp", txn.Timestamp), zap.ByteString("start", start), zap.ByteString("end", end))
+	err = txn.List(start, end, count, func(k []byte, v []byte) bool {
+		utils.ZapLog.Debug("[txn] list", zap.ByteString("key", k), zap.ByteString("value", v))
+		object, err := GetObjectFromKV(k, v)
+		if err != nil {
+			return true
+		}
+		utils.ZapLog.Debug("[txn] list", zap.ByteString("object", object.Key))
+
+		if object.Type != PubType {
+			return true
+		}
+
+		if pattern != "" {
+			var ok bool
+			ok, matchError = glob.Match(pattern, utils.B2S(object.Key))
+			if err != nil {
+				// break
+				return false
+			}
+			if !ok {
+				// continue
+				return true
+			}
+		}
+		// count, err := c.GetCount(txn, PubType, 0, object.Key, nil)
+		// if err != nil {
+		// 	return false
+		// }
+		channels = append(channels, utils.B2S(object.Key))
+		return true
+	})
+	if err != nil {
+		return txn.SetError(err)
+	}
+
+	if matchError != nil {
+		return txn.SetError(matchError)
+	}
+	return channels
+}
+
+// PUBSUB NUMSUB [channel-1 ... channel-N]
+func (c *Command) pubSubNumsub(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) == 0 {
+		return nil
+	}
+	rets := make([]interface{}, 0)
+	for i := 0; i < len(args); i++ {
+		count, err := c.GetCount(txn, PubType, 0, args[i], nil)
+		if err != nil && err != store.KeyNotFound {
+			return txn.SetError(err)
+		}
+		rets = append(rets, args[i], count.Value)
+	}
+	return rets
 }
 
 // (pubsub) PUBLISH channel message [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp]
@@ -95,13 +214,13 @@ func (c *Command) PublishHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 	utils.ZapLog.Debug("PUBLISH", zap.ByteString("channel", channel), zap.ByteString("message", args[1]), zap.Int64("count", count.Value))
-	err = txn.Put(object.GetKeyFieldBytes(getMessageKey(count.Value)), encodeMessageValue(txn.Now, args[1]))
+	err = txn.Put(object.GetKeyFieldBytes(encodeMessageKey(count.Value)), encodeMessageValue(txn.Now, args[1]))
 	if err != nil {
 		return txn.SetError(err)
 	}
 
 	count, err = c.GetCount(txn, PubType, 0, channel, nil)
-	if err != nil {
+	if err != nil && err != store.KeyNotFound {
 		return txn.SetError(err)
 	}
 	return SimpleInt(int(count.Value))
@@ -115,12 +234,30 @@ type pubSubConn struct {
 	closed   chan struct{}
 }
 
+// FSUBSCRIBE offset channel [channel ...]
+func (c *Command) fsubscribe(conn *redcon.Conn, cmd redcon.Command) {
+	if len(cmd.Args) < 3 {
+		conn.WriteError(xerror.WrongArgsString(FSUBSCRIBE_COMMAND))
+		return
+	}
+	offset, err := utils.GetNonnegativeInt64(cmd.Args[1])
+	if err != nil {
+		conn.WriteError(err.Error())
+		return
+	}
+	c._subscribe(conn, cmd.Args[2:], offset)
+}
+
 // SUBSCRIBE channel [channel ...]
 func (c *Command) subscribe(conn *redcon.Conn, cmd redcon.Command) {
 	if len(cmd.Args) < 2 {
 		conn.WriteError(xerror.WrongArgsString(SUBSCRIBE_COMMAND))
 		return
 	}
+	c._subscribe(conn, cmd.Args[1:], NoOffset)
+}
+
+func (c *Command) _subscribe(conn *redcon.Conn, args [][]byte, offset int64) {
 	dconn := conn.Detach()
 	ps := &pubSubConn{
 		dconn:    dconn,
@@ -128,10 +265,10 @@ func (c *Command) subscribe(conn *redcon.Conn, cmd redcon.Command) {
 		messages: make(chan interface{}, 1000),
 		closed:   make(chan struct{}),
 	}
-	c.subDetached(ps, cmd.Args[1:])
+	c.subDetached(ps, args, offset)
 	go ps.sendMessage()
 	go c.runDetached(ps)
-	go c.Pull(ps)
+	go c.Pull(ps, offset)
 }
 
 // UNSUBSCRIBE channel [channel ...]
@@ -291,7 +428,7 @@ func (c *Command) unsubDetached(conn *pubSubConn, args [][]byte) {
 	}
 }
 
-func (c *Command) subDetached(conn *pubSubConn, args [][]byte) {
+func (c *Command) subDetached(conn *pubSubConn, args [][]byte, offset int64) {
 	txn := c.client.NewTxn()
 	err := txn.Begin()
 	if err != nil {
@@ -332,7 +469,13 @@ func (c *Command) subDetached(conn *pubSubConn, args [][]byte) {
 				conn.messages <- err
 				return
 			}
-			start := object.GetValueBytesPrefix()
+			var start []byte
+			if offset == NoOffset {
+				start = object.GetValueBytesPrefix(nil)
+			} else {
+				start = object.GetValueBytesPrefix(encodeMessageKey(offset))
+			}
+
 			resps[i] = func() {
 				conn.Lock()
 				conn.channels[cha] = start
@@ -361,21 +504,21 @@ func (c *Command) subDetached(conn *pubSubConn, args [][]byte) {
 	}
 }
 
-func (c *Command) Pull(conn *pubSubConn) {
-	c.pullMessages(conn)
+func (c *Command) Pull(conn *pubSubConn, offset int64) {
+	c.pullMessages(conn, offset)
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			c.pullMessages(conn)
+			c.pullMessages(conn, offset)
 		case <-conn.closed:
 			return
 		}
 	}
 }
 
-func (c *Command) pullMessages(sconn *pubSubConn) {
+func (c *Command) pullMessages(sconn *pubSubConn, offset int64) {
 	chans := make(map[string][]byte)
 	sconn.RLock()
 	for c, start := range sconn.channels {
@@ -389,9 +532,10 @@ func (c *Command) pullMessages(sconn *pubSubConn) {
 		default:
 		}
 		for ch, start := range chans {
-			lastKey, next, err := c.pullMessgeFromChannel(sconn, ch, start, 100)
+			lastKey, next, err := c.pullMessgeFromChannel(sconn, ch, start, offset, 100)
 			if next {
-				utils.ZapLog.Debug("pull message next", zap.String("channel", ch), zap.ByteString("lastKey", lastKey))
+				utils.ZapLog.Debug("pull message next", zap.String("channel", ch),
+					zap.ByteString("lastKey", lastKey))
 				chans[ch] = lastKey
 				continue
 			}
@@ -411,7 +555,8 @@ func (c *Command) pullMessages(sconn *pubSubConn) {
 	}
 }
 
-func (c *Command) pullMessgeFromChannel(conn *pubSubConn, channel string, start []byte, limit int) ([]byte, bool, error) {
+func (c *Command) pullMessgeFromChannel(conn *pubSubConn, channel string, start []byte,
+	offset int64, limit int) ([]byte, bool, error) {
 	txn := c.client.NewTxn()
 	err := txn.Begin()
 	if err != nil {
@@ -427,7 +572,8 @@ func (c *Command) pullMessgeFromChannel(conn *pubSubConn, channel string, start 
 	} else if err != nil {
 		return nil, false, err
 	}
-	end := utils.PrefixNext(object.GetValueBytesPrefix())
+	prefix := object.GetValueBytesPrefix(nil)
+	end := utils.PrefixNext(prefix)
 	var lastKey []byte
 	next := false
 	count := 0
@@ -438,10 +584,22 @@ func (c *Command) pullMessgeFromChannel(conn *pubSubConn, channel string, start 
 		if err != nil {
 			return true
 		}
+		if len(key) <= len(prefix) {
+			return true
+		}
+		newOffset, err := decodeMessageKey(key[len(prefix):])
+		if err != nil {
+			return true
+		}
+
 		if math.Abs(float64(timestamp-txn.Now)) < 1000 {
 			next = true
 		}
-		conn.messages <- []interface{}{"message", channel, message}
+		if offset == NoOffset {
+			conn.messages <- []interface{}{"message", channel, message}
+		} else {
+			conn.messages <- []interface{}{"message", channel, message, newOffset}
+		}
 		return true
 	}
 	err = txn.List(start, end, limit, callback)
@@ -484,7 +642,18 @@ func (c *Command) runDetached(sconn *pubSubConn) {
 				sconn.messages <- xerror.WrongArgsError(SUBSCRIBE_COMMAND)
 				continue
 			}
-			c.subDetached(sconn, cmd.Args[1:])
+			c.subDetached(sconn, cmd.Args[1:], NoOffset)
+		case "fsubscribe":
+			if len(cmd.Args) < 3 {
+				sconn.messages <- xerror.WrongArgsError(FSUBSCRIBE_COMMAND)
+				continue
+			}
+			offset, err := utils.GetNonnegativeInt64(cmd.Args[1])
+			if err != nil {
+				sconn.messages <- err
+				return
+			}
+			c.subDetached(sconn, cmd.Args[2:], offset)
 		case "unsubscribe":
 			c.unsubDetached(sconn, cmd.Args[1:])
 		case "quit":

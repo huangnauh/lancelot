@@ -7,13 +7,12 @@ import (
 )
 
 var (
-	ErrWatchInsideMulti = "WATCH inside MULTI is not allowed"
-	ErrMultiNested      = "MULTI calls can not be nested"
-	ErrEXECErr          = "EXEC without MULTI"
-	ErrDISCARDErr       = "DISCARD without MULTI"
-	ErrMultiErr         = "without MULTI"
-	ErrTransactionErr   = "Transaction discarded because of previous errors."
-
+	ErrWatchInsideMulti    = "WATCH inside MULTI is not allowed"
+	ErrMultiNested         = "MULTI calls can not be nested"
+	ErrEXECErr             = "EXEC without MULTI"
+	ErrDISCARDErr          = "DISCARD without MULTI"
+	ErrMultiErr            = "without MULTI"
+	ErrTransactionErr      = "Transaction discarded because of previous errors."
 	ErrNotInteger          = errors.New("value is not an integer or out of range")
 	ErrNotFloat            = errors.New("value is not a valid float")
 	ErrOffset              = errors.New("offset is out of range")
@@ -49,6 +48,8 @@ var (
 	InvalidJsonPathError = errors.New("invalid json path")
 	InvalidCursor        = errors.New("invalid cursor")
 	// KeyTimeOut           = errors.New("key time out")
+
+	InvalidOffset = errors.New("invalid offset")
 )
 
 func WrongArgsString(command string) string {

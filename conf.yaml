@@ -18,10 +18,10 @@ store:
   disable-lock-back-off: false
   batch-limit: 200
 gc:
-  tick-interval: 10s
+  tick-interval: 10m
   ttl-workers: 5
   pub-sub-workers: 5
-  pub-channel-expire: 10s
+  pub-channel-expire: 10m
 lua:
   init-pool-size: 10
   max-pool-size: 100

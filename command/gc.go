@@ -155,7 +155,7 @@ LABLE:
 		}
 
 		if len(object.Value) > 0 && object.Type == HashType {
-			p := object.GetValueBytesPrefix()
+			p := object.GetValueBytesPrefix(nil)
 			utils.ZapLog.Debug("[gc] delete hash", zap.ByteString("value", object.Value), zap.Binary("prefix", p))
 			c.gcWait.Add(1)
 			gcWorkers := atomic.AddInt32(&c.gcWorkers, 1)
@@ -276,8 +276,8 @@ func (c *Command) DeleteUserPubSub(userID uint16, now int64, limit chan struct{}
 			}
 			channel := string(object.Key)
 			expire := now - object.ValueTTL
-			start := object.GetValueBytesPrefix()
-			end := utils.PrefixNext(object.GetValueBytesPrefix())
+			start := object.GetValueBytesPrefix(nil)
+			end := utils.PrefixNext(start)
 			channels[channel] = messgeGC{start, end, expire, object.Hash, object.Value}
 			return true
 		})

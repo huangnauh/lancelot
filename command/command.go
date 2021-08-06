@@ -88,6 +88,10 @@ func NewCommand(cfg *config.Config) *Command {
 			Func: c.unsubscribe,
 			ID:   508,
 		},
+		FSUBSCRIBE_COMMAND: {
+			Func: c.fsubscribe,
+			ID:   507,
+		},
 	}
 
 	c.TxnHandle = map[string]TxnHandler{
@@ -287,10 +291,15 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:              255,
 			Type:            UnknownType,
 		},
+		PUBSUB_COMMAND: {
+			Func: c.PubSubHandle,
+			ID:   502,
+			Type: PubType,
+		},
 		PUBLISH_COMMAND: {
 			Func: c.PublishHandle,
 			ID:   501,
-			Type: UnknownType,
+			Type: PubType,
 		},
 		EVAL_RO_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
