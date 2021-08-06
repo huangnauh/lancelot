@@ -412,7 +412,6 @@ func (c *Command) pullMessages(sconn *pubSubConn) {
 }
 
 func (c *Command) pullMessgeFromChannel(conn *pubSubConn, channel string, start []byte, limit int) ([]byte, bool, error) {
-	utils.ZapLog.Debug("pullMessgeFromChannel", zap.String("channel", channel), zap.ByteString("start", start))
 	txn := c.client.NewTxn()
 	err := txn.Begin()
 	if err != nil {
@@ -431,8 +430,10 @@ func (c *Command) pullMessgeFromChannel(conn *pubSubConn, channel string, start 
 	end := utils.PrefixNext(object.GetValueBytesPrefix())
 	var lastKey []byte
 	next := false
+	count := 0
 	callback := func(key, value []byte) bool {
 		lastKey = key
+		count++
 		timestamp, message, err := decodeMessageValue(value)
 		if err != nil {
 			return true
@@ -446,8 +447,9 @@ func (c *Command) pullMessgeFromChannel(conn *pubSubConn, channel string, start 
 	err = txn.List(start, end, limit, callback)
 	if lastKey != nil {
 		lastKey = utils.NextKey(lastKey)
+		utils.ZapLog.Debug("pullMessgeFromChannel", zap.String("channel", channel),
+			zap.Int("count", count), zap.ByteString("next", lastKey))
 		conn.Lock()
-		utils.ZapLog.Debug("pullMessgeFromChannel", zap.String("channel", channel), zap.ByteString("next", lastKey))
 		conn.channels[channel] = lastKey
 		conn.Unlock()
 	}

@@ -19,18 +19,24 @@ import (
 var (
 	showVersion bool
 	configFile  string
-	dev         bool
+	dev, save   bool
 )
 
 func main() {
 	flag.BoolVar(&showVersion, "version", false, "print version string and quit")
 	flag.StringVar(&configFile, "config", "./conf.yaml", "configuration filename")
 	flag.BoolVar(&dev, "dev", false, "development")
+	flag.BoolVar(&save, "save", false, "save config")
 	flag.Parse()
 
 	err := config.LoadYAMLConfig(configFile)
 	if err != nil {
 		panic(err)
+	}
+
+	if save {
+		config.SaveYAMLConfig(configFile)
+		return
 	}
 
 	cfg := config.GetConfig()

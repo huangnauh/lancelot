@@ -122,8 +122,6 @@ func (t *Txn) Get(key []byte) ([]byte, error) {
 	}
 
 	if kv.IsErrNotFound(err) {
-		utils.ZapLog.Debug("[txn] get not found", zap.String("remote", t.RemoteAddr()),
-			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key))
 		return nil, KeyNotFound
 	}
 	if err != nil {
@@ -131,9 +129,6 @@ func (t *Txn) Get(key []byte) ([]byte, error) {
 			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.Error(err))
 		return nil, err
 	}
-
-	utils.ZapLog.Debug("[txn] get", zap.String("remote", t.RemoteAddr()),
-		zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.ByteString("value", v))
 	return v, nil
 }
 

@@ -192,13 +192,15 @@ type messgeGC struct {
 	key    []byte
 }
 
-func (c *Command) TryDeleteChannelCount(channel string, hash uint16, key []byte) {
+func (c *Command) TryDeleteChannel(userID uint16, channel string, hash uint16, key []byte) {
 	txn := c.client.NewTxn()
 	err := txn.Begin()
 	if err != nil {
 		return
 	}
 	defer txn.Rollback()
+
+	var expire time.Time
 	count, err := c.GetCount(txn, PubType, 0, utils.S2B(channel), nil)
 	if err != nil {
 		return
@@ -208,14 +210,30 @@ func (c *Command) TryDeleteChannelCount(channel string, hash uint16, key []byte)
 	}
 
 	now := txn.NowTime()
-	timestamp := int64(count.Timestamp)
+	timestamp := oracle.ExtractPhysical(count.Timestamp)
 	exist := time.Unix(timestamp/1e3, (timestamp%1e3)*1e6)
 	if now.Sub(exist) < c.cfg.GC.PubChannelExpire {
+		utils.ZapLog.Debug("[gc] not expire", zap.String("channel", channel),
+			zap.Time("exist", exist), zap.Time("now", now), zap.Int64("count", count.Value))
+		return
+	}
+	utils.ZapLog.Debug("[gc] channel expired", zap.String("channel", channel),
+		zap.Time("exist", exist), zap.Time("now", now), zap.Int64("count", count.Value))
+
+	err = c.DeleteCount(txn, PubType, 0, utils.S2B(channel), time.Time{})
+	if err != nil {
 		return
 	}
 
-	expire := now.Add(-c.cfg.GC.PubChannelExpire)
-	err = c.DeleteCount(txn, PubType, hash, key, expire)
+	object := NewObject(userID, PubSubDB, PubType, utils.S2B(channel))
+	k := object.GetKeyBytes()
+	err = txn.Del(k)
+	if err != nil {
+		return
+	}
+
+	expire = now.Add(-c.cfg.GC.PubChannelExpire)
+	err = c.DeleteCount(txn, MessageType, hash, key, expire)
 	if err != nil {
 		return
 	}
@@ -224,7 +242,7 @@ func (c *Command) TryDeleteChannelCount(channel string, hash uint16, key []byte)
 	_ = txn.Commit()
 }
 
-func (c *Command) DeleteChannel(name string, channel messgeGC) {
+func (c *Command) DeleteChannelMessage(userID uint16, name string, channel messgeGC) {
 	count := 0
 	_ = c.client.DeleteRangeUntil(channel.start, channel.end, func(k, v []byte) bool {
 		count++
@@ -235,15 +253,15 @@ func (c *Command) DeleteChannel(name string, channel messgeGC) {
 		return t < uint64(channel.expire)
 	})
 	if count == 0 {
-		c.TryDeleteChannelCount(name, channel.hash, channel.key)
+		c.TryDeleteChannel(userID, name, channel.hash, channel.key)
 	}
 	utils.ZapLog.Info("[gc] delete channel", zap.String("channel", name), zap.Int("count", count), zap.Int64("expire", channel.expire))
 }
 
 func (c *Command) DeleteUserPubSub(userID uint16, now int64, limit chan struct{}) {
 	utils.ZapLog.Debug("[gc] delete user pubsub", zap.Uint16("user", userID), zap.Int64("now", now))
-	userStart := GetDataPrefix(userID, PubSubDB, PubType, nil)
-	userEnd := GetDataPrefix(userID, PubSubDB, PubType, []byte{0xff})
+	userStart := GetDataPrefix(userID, PubSubDB, KeyType, nil)
+	userEnd := GetDataPrefix(userID, PubSubDB, KeyType, []byte{0xff})
 	for {
 		channels := make(map[string]messgeGC)
 		var lastKey []byte
@@ -270,7 +288,7 @@ func (c *Command) DeleteUserPubSub(userID uint16, now int64, limit chan struct{}
 			utils.ZapLog.Debug("[gc] delete user pubsub", zap.Uint16("user", userID), zap.Int64("now", now),
 				zap.String("channel", name), zap.Int64("expire", channel.expire))
 			go func(name string, messge messgeGC) {
-				c.DeleteChannel(name, messge)
+				c.DeleteChannelMessage(userID, name, messge)
 				<-limit
 				c.gcWait.Done()
 			}(name, channel)

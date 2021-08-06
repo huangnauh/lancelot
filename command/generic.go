@@ -238,6 +238,8 @@ func (c *Command) getScanOptions(opts [][]byte) (*scanOptions, error) {
 				return nil, xerror.ErrSyntax
 			}
 			scanOptions.cursor = cursor
+		default:
+			return nil, xerror.ErrSyntax
 		}
 	}
 	return scanOptions, nil
@@ -352,4 +354,18 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 		cur := base64.StdEncoding.EncodeToString(cur)
 		return []interface{}{cur, retKeys}
 	}
+}
+
+// all
+func (c *Command) AllHandle(txn *store.Txn, args [][]byte) interface{} {
+	retKeys := make([][][]byte, 0)
+	callback := func(key, value []byte) bool {
+		retKeys = append(retKeys, [][]byte{key, value})
+		return true
+	}
+	err := txn.List([]byte{0x00}, []byte{0xff}, 10000, callback)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return retKeys
 }

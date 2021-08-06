@@ -260,6 +260,11 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:   67,
 			Type: UserType,
 		},
+		ALL_COMMAND: {
+			Func: c.AllHandle,
+			ID:   126,
+			Type: UnknownType,
+		},
 		AUTH_COMMAND: {
 			Func:            c.AuthHandle,
 			ID:              127,

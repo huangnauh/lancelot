@@ -1,6 +1,41 @@
-host: 0.0.0.0
 log-level: debug
+pid-file: redis.pid
+host: 0.0.0.0
 redis-port: 16379
 http-port: 16380
 rpc-port: 16381
-gc-tick-interval: 10s
+store:
+  path: mocktikv://
+  level: debug
+  gc-enable: false
+  slow-request: 100ms
+  read-timeout: 1s
+  list-timeout: 1m0s
+  write-timeout: 1s
+  batch-put-timeout: 1m0s
+  batch-delete-timeout: 1m0s
+  tso-slow-threshold: 100ms
+  disable-lock-back-off: false
+  batch-limit: 200
+gc:
+  tick-interval: 10s
+  ttl-workers: 5
+  pub-sub-workers: 5
+  pub-channel-expire: 10s
+lua:
+  init-pool-size: 10
+  max-pool-size: 100
+auth:
+  root: root
+  pass: root
+  max-users: 1000
+  max-passwords-per-user: 10
+  max-db-per-user: 64
+key:
+  scan-max-count: 10000
+  cursor-expiration: 1h0m0s
+rpc:
+  timeout: 0s
+  max_stream: 0
+  max_msg_size: 0
+  compress: false

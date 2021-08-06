@@ -55,6 +55,7 @@ const (
 	DECRBY_COMMAND      = "decrby"
 	DEL_COMMAND         = "del"
 	SCAN_COMMAND        = "scan"
+	ALL_COMMAND         = "all"
 	TTL_COMMAND         = "ttl"
 	EXPIRE_COMMAND      = "expire"
 	OBJECT_COMMAND      = "object"

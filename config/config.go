@@ -126,7 +126,7 @@ func GetConfig() *Config {
 	return cfg
 }
 
-func SaveConfig(savePath string) {
+func SaveYAMLConfig(savePath string) {
 	f, err := os.OpenFile(savePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0664)
 	if err != nil {
 		panic(err)
