@@ -162,7 +162,7 @@ func (c *Command) pubSubNumsub(txn *store.Txn, args [][]byte) interface{} {
 		if err != nil && err != store.KeyNotFound {
 			return txn.SetError(err)
 		}
-		rets = append(rets, args[i], count.Value)
+		rets = append(rets, args[i], SimpleInt(count.Value))
 	}
 	return rets
 }
@@ -223,7 +223,7 @@ func (c *Command) PublishHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil && err != store.KeyNotFound {
 		return txn.SetError(err)
 	}
-	return SimpleInt(int(count.Value))
+	return SimpleInt(count.Value)
 }
 
 type pubSubConn struct {
@@ -245,6 +245,8 @@ func (c *Command) fsubscribe(conn *redcon.Conn, cmd redcon.Command) {
 		conn.WriteError(err.Error())
 		return
 	}
+	utils.ZapLog.Debug("fsubscribe", zap.String("remote", conn.RemoteAddr()),
+		zap.ByteStrings("args", cmd.Args))
 	c._subscribe(conn, cmd.Args[2:], offset)
 }
 
@@ -254,6 +256,8 @@ func (c *Command) subscribe(conn *redcon.Conn, cmd redcon.Command) {
 		conn.WriteError(xerror.WrongArgsString(SUBSCRIBE_COMMAND))
 		return
 	}
+	utils.ZapLog.Debug("subscribe", zap.String("remote", conn.RemoteAddr()),
+		zap.ByteStrings("args", cmd.Args))
 	c._subscribe(conn, cmd.Args[1:], NoOffset)
 }
 
@@ -416,14 +420,14 @@ func (c *Command) unsubDetached(conn *pubSubConn, args [][]byte) {
 			delete(conn.channels, c)
 		}
 		conn.Unlock()
-		conn.messages <- []interface{}{"unsubscribe", "all", 0}
+		conn.messages <- []interface{}{"unsubscribe", "all", SimpleInt(0)}
 	} else {
 		for _, channel := range resps {
 			conn.Lock()
 			delete(conn.channels, channel)
 			count := len(conn.channels)
 			conn.Unlock()
-			conn.messages <- []interface{}{"unsubscribe", channel, count}
+			conn.messages <- []interface{}{"unsubscribe", channel, SimpleInt(int64(count))}
 		}
 	}
 }
@@ -482,14 +486,14 @@ func (c *Command) subDetached(conn *pubSubConn, args [][]byte, offset int64) {
 				count := len(conn.channels)
 				conn.Unlock()
 				utils.ZapLog.Debug("subscribe", zap.String("channel", cha), zap.ByteString("next", start))
-				conn.messages <- []interface{}{"subscribe", cha, count}
+				conn.messages <- []interface{}{"subscribe", cha, SimpleInt(int64(count))}
 			}
 		} else {
 			resps[i] = func() {
 				conn.RLock()
 				count := len(conn.channels)
 				conn.RUnlock()
-				conn.messages <- []interface{}{"subscribe", cha, count}
+				conn.messages <- []interface{}{"subscribe", cha, SimpleInt(int64(count))}
 			}
 		}
 	}
@@ -598,7 +602,7 @@ func (c *Command) pullMessgeFromChannel(conn *pubSubConn, channel string, start 
 		if offset == NoOffset {
 			conn.messages <- []interface{}{"message", channel, message}
 		} else {
-			conn.messages <- []interface{}{"message", channel, message, newOffset}
+			conn.messages <- []interface{}{"message", channel, message, SimpleInt(int64(newOffset))}
 		}
 		return true
 	}

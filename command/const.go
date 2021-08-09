@@ -113,7 +113,7 @@ const (
 	TTLPrefix   = 't'
 )
 
-func SimpleInt(n int) redcon.SimpleInt {
+func SimpleInt(n int64) redcon.SimpleInt {
 	return redcon.SimpleInt(n)
 }
 

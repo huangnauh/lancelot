@@ -70,7 +70,7 @@ func (c *Command) HDelHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.WrongTypeError)
 	}
 
-	ret := 0
+	var ret int64
 	for start := 1; start < len(args); start++ {
 		hkey := object.GetKeyFieldBytes(args[start])
 		_, err = txn.Get(hkey)
@@ -94,7 +94,7 @@ func (c *Command) HSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 3 || len(args)%2 != 1 {
 		return txn.SetWrongArgs(HSET_COMMAND)
 	}
-	ret := 0
+	var ret int64
 	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)

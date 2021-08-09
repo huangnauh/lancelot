@@ -12,7 +12,7 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-var _ = Describe("Commands", func() {
+var _ = FDescribe("Commands", func() {
 	ctx := context.TODO()
 	var client *redis.Client
 
@@ -96,6 +96,7 @@ var _ = Describe("Commands", func() {
 	It("should return the numbers of subscribers", func() {
 		pubsub := client.Subscribe(ctx, "mychannel", "mychannel2")
 		defer pubsub.Close()
+		time.Sleep(100 * time.Millisecond)
 
 		channels, err := client.PubSubNumSub(ctx, "mychannel", "mychannel2", "mychannel3").Result()
 		Expect(err).NotTo(HaveOccurred())

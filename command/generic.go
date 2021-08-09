@@ -13,12 +13,12 @@ import (
 	"go.uber.org/zap"
 )
 
-func IsExpired(txn *store.Txn, o *Object) (int, bool) {
+func IsExpired(txn *store.Txn, o *Object) (int64, bool) {
 	if o.TTL == 0 {
 		return 0, false
 	}
 	if o.TTL > txn.Now {
-		return int((o.TTL - txn.Now) / 1000), false
+		return (o.TTL - txn.Now) / 1000, false
 	}
 	return 0, true
 }
@@ -157,7 +157,7 @@ func (c *Command) DELHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(DEL_COMMAND)
 	}
 
-	count := 0
+	var count int64
 	for i := range args {
 		object := NewObject(txn.UserId, txn.DBId, KeyType, args[i])
 		key := object.GetKeyBytes()

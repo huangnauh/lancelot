@@ -179,7 +179,7 @@ func (o *Object) IsSimple() bool {
 }
 
 func (o *Object) TTLType() TTL {
-	if o.Type == PubType {
+	if o.Type != PubType {
 		return KeyTTL
 	}
 	return ValueTTL
@@ -393,7 +393,7 @@ func ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 			return nil
 		}
 		timepstamp := oracle.ExtractPhysical(object.Timestamp)
-		return SimpleInt(int((txn.Now - timepstamp) / 1000))
+		return SimpleInt((txn.Now - timepstamp) / 1000)
 	case REFCOUNT_COMMAND:
 		return SimpleInt(0)
 	case FREQ_COMMAND:

@@ -479,7 +479,7 @@ type SimpleString string
 
 // SimpleInt is for representing a non-bulk representation of a int
 // from an *Any call.
-type SimpleInt int
+type SimpleInt int64
 
 // Marshaler is the interface implemented by types that
 // can marshal themselves into a Redis response type from an *Any call.

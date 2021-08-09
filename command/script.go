@@ -444,7 +444,7 @@ func covertLuaValue(val lua.LValue) interface{} {
 			return nil
 		}
 	case lua.LTNumber:
-		num := int(val.(lua.LNumber))
+		num := int64(val.(lua.LNumber))
 		return SimpleInt(num)
 	case lua.LTString:
 		return val.String()

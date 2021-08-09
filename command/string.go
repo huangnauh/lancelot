@@ -120,7 +120,7 @@ func (c *Command) StrLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	return SimpleInt(len(value))
+	return SimpleInt(int64(len(value)))
 }
 
 // (string) APPEND key value
@@ -143,7 +143,7 @@ func (c *Command) AppendHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	return SimpleInt(len(object.Value))
+	return SimpleInt(int64(len(object.Value)))
 }
 
 type ExpireOption struct {
@@ -421,7 +421,7 @@ func (c *Command) intHandle(txn *store.Txn, arg []byte, delta int64) interface{}
 	if err != nil {
 		return txn.SetError(err)
 	} else {
-		return SimpleInt(int(value))
+		return SimpleInt(value)
 	}
 }
 
@@ -569,7 +569,7 @@ func (c *Command) SetRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	return SimpleInt(len(value))
+	return SimpleInt(int64(len(value)))
 }
 
 // (string) PSETEX key seconds value
