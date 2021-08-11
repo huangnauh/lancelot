@@ -2,6 +2,7 @@ package command
 
 import (
 	"strings"
+	"time"
 
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
@@ -26,29 +27,40 @@ func (c *Command) checkSingle(conn *redcon.Conn) (*store.Txn, bool) {
 	return newTxn, true
 }
 
+func (c *Command) SingleHandler(conn *redcon.Conn, txn *store.Txn, txnHandle TxnHandle, args [][]byte) error {
+	err := txn.Begin()
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+	resp := txnHandle(txn, args)
+	if txn.Err != nil {
+		txn.WriteAny(resp)
+		return nil
+	}
+	err = txn.Commit()
+	if err != nil {
+		return err
+	}
+	txn.WriteAny(resp)
+	return nil
+}
+
 func (c *Command) TxnHandler(conn *redcon.Conn, cmd redcon.Command, txnHandle TxnHandle) {
 	args := cmd.Args[1:]
 	txn, single := c.checkSingle(conn)
 	utils.ZapLog.Debug("TxnHandler", zap.String("remote", conn.RemoteAddr()),
 		zap.ByteStrings("args", cmd.Args), zap.Bool("single", single))
 	if single {
-		err := txn.Begin()
-		if err != nil {
-			writerConnError(conn, err)
-			return
+		var err error
+		for i := 0; i < 3; i++ {
+			err = c.SingleHandler(conn, txn, txnHandle, args)
+			if err == nil {
+				return
+			}
+			time.Sleep(time.Millisecond * time.Duration(i+1))
 		}
-		resp := txnHandle(txn, args)
-		if txn.Err != nil {
-			txn.Rollback()
-			txn.WriteAny(resp)
-			return
-		}
-		err = txn.Commit()
-		if err != nil {
-			writerConnError(conn, err)
-			return
-		}
-		txn.WriteAny(resp)
+		writerConnError(conn, err)
 		return
 	}
 

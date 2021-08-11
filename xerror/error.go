@@ -50,6 +50,7 @@ var (
 	// KeyTimeOut           = errors.New("key time out")
 
 	InvalidOffset = errors.New("invalid offset")
+	ErrClosed     = errors.New("closed")
 )
 
 func WrongArgsString(command string) string {

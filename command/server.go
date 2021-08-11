@@ -8,6 +8,13 @@ import (
 )
 
 func (c *Command) FlushAllHandle(txn *store.Txn, args [][]byte) interface{} {
+	start := GetUserPrefix(txn.UserId)
+	end := utils.PrefixNext(start)
+	ctx := context.Background()
+	err := c.client.UnsafeDeleteRange(ctx, start, end, 2)
+	if err != nil {
+		return txn.SetError(err)
+	}
 	return OK
 }
 

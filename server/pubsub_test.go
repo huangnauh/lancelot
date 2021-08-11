@@ -18,7 +18,7 @@ var _ = FDescribe("Commands", func() {
 
 	BeforeEach(func() {
 		client = redis.NewClient(redisOptions())
-		Expect(client.FlushDB(ctx).Err()).NotTo(HaveOccurred())
+		Expect(client.FlushAll(ctx).Err()).NotTo(HaveOccurred())
 	})
 
 	AfterEach(func() {
@@ -156,23 +156,28 @@ var _ = FDescribe("Commands", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(n).To(Equal(int64(1)))
 
+		var res map[string]string = map[string]string{
+			"mychannel":  "hello",
+			"mychannel2": "hello2",
+		}
+
+		{
+			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
+			Expect(err).NotTo(HaveOccurred())
+			msg := msgi.(*redis.Message)
+			Expect(res).Should(HaveKeyWithValue(msg.Channel, msg.Payload))
+			delete(res, msg.Channel)
+		}
+
+		{
+			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
+			Expect(err).NotTo(HaveOccurred())
+			msg := msgi.(*redis.Message)
+			Expect(res).Should(HaveKeyWithValue(msg.Channel, msg.Payload))
+			delete(res, msg.Channel)
+		}
+
 		Expect(pubsub.Unsubscribe(ctx, "mychannel", "mychannel2")).NotTo(HaveOccurred())
-
-		{
-			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
-			Expect(err).NotTo(HaveOccurred())
-			msg := msgi.(*redis.Message)
-			Expect(msg.Channel).To(Equal("mychannel"))
-			Expect(msg.Payload).To(Equal("hello"))
-		}
-
-		{
-			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
-			Expect(err).NotTo(HaveOccurred())
-			msg := msgi.(*redis.Message)
-			Expect(msg.Channel).To(Equal("mychannel2"))
-			Expect(msg.Payload).To(Equal("hello2"))
-		}
 
 		{
 			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
@@ -246,15 +251,21 @@ var _ = FDescribe("Commands", func() {
 		err = client.Publish(ctx, "mychannel", "world").Err()
 		Expect(err).NotTo(HaveOccurred())
 
+		var res map[string]bool = map[string]bool{
+			"hello": true,
+			"world": true,
+		}
 		msg, err := pubsub.ReceiveMessage(ctx)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(msg.Channel).To(Equal("mychannel"))
-		Expect(msg.Payload).To(Equal("hello"))
+		Expect(res).Should(HaveKey(msg.Payload))
+		delete(res, msg.Payload)
 
 		msg, err = pubsub.ReceiveMessage(ctx)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(msg.Channel).To(Equal("mychannel"))
-		Expect(msg.Payload).To(Equal("world"))
+		Expect(res).Should(HaveKey(msg.Payload))
+		delete(res, msg.Payload)
 	})
 
 	// It("returns an error when subscribe fails", func() {
@@ -392,18 +403,26 @@ var _ = FDescribe("Commands", func() {
 	})
 
 	It("handles big message payload", func() {
-		pubsub := client.Subscribe(ctx, "mychannel")
+		pubsub := client.Subscribe(ctx, "mybig")
 		defer pubsub.Close()
 
-		ch := pubsub.Channel()
+		{
+			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
+			Expect(err).NotTo(HaveOccurred())
+			subscr := msgi.(*redis.Subscription)
+			Expect(subscr.Kind).To(Equal("subscribe"))
+			Expect(subscr.Channel).To(Equal("mybig"))
+			Expect(subscr.Count).To(Equal(1))
+		}
 
+		ch := pubsub.Channel()
 		bigVal := bigVal()
-		err := client.Publish(ctx, "mychannel", bigVal).Err()
+		err := client.Publish(ctx, "mybig", bigVal).Err()
 		Expect(err).NotTo(HaveOccurred())
 
 		var msg *redis.Message
 		Eventually(ch).Should(Receive(&msg))
-		Expect(msg.Channel).To(Equal("mychannel"))
+		Expect(msg.Channel).To(Equal("mybig"))
 		Expect(msg.Payload).To(Equal(string(bigVal)))
 	})
 
@@ -468,6 +487,15 @@ var _ = FDescribe("Commands", func() {
 			redis.WithChannelSize(10),
 			redis.WithChannelHealthCheckInterval(time.Second),
 		)
+
+		{
+			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
+			Expect(err).NotTo(HaveOccurred())
+			subscr := msgi.(*redis.Subscription)
+			Expect(subscr.Kind).To(Equal("subscribe"))
+			Expect(subscr.Channel).To(Equal("mychannel"))
+			Expect(subscr.Count).To(Equal(1))
+		}
 
 		text := "test channel message"
 		err := client.Publish(ctx, "mychannel", text).Err()

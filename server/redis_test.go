@@ -37,7 +37,7 @@ func redisOptions() *redis.Options {
 }
 
 func bigVal() []byte {
-	return bytes.Repeat([]byte{'*'}, 1<<17) // 128kb
+	return bytes.Repeat([]byte{'*'}, 128*1024)
 }
 
 func PSetNX(ctx context.Context, client *redis.Client, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
