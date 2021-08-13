@@ -195,6 +195,31 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:   19,
 			Type: KeyType,
 		},
+		BITCOUNT_COMMAND: {
+			Func: c.BitCountHandle,
+			ID:   20,
+			Type: KeyType,
+		},
+		GETBIT_COMMAND: {
+			Func: c.GetBitHandle,
+			ID:   21,
+			Type: KeyType,
+		},
+		SETBIT_COMMAND: {
+			Func: c.SetBitHandle,
+			ID:   22,
+			Type: KeyType,
+		},
+		BITPOS_COMMAND: {
+			Func: c.BitPosHandle,
+			ID:   23,
+			Type: KeyType,
+		},
+		BITOP_COMMAND: {
+			Func: c.BitOpHandle,
+			ID:   24,
+			Type: KeyType,
+		},
 		DEL_COMMAND: {
 			Func: c.DELHandle,
 			ID:   31,

@@ -1,4 +1,4 @@
-// https://github.com/layeh/gopher-json
+//Package cjson stolen from https://github.com/layeh/gopher-json
 package cjson
 
 import (

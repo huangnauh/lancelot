@@ -14,6 +14,7 @@ var (
 	ErrMultiErr            = "without MULTI"
 	ErrTransactionErr      = "Transaction discarded because of previous errors."
 	ErrNotInteger          = errors.New("value is not an integer or out of range")
+	ErrBitFieldType        = errors.New("Invalid bitfield type. Use something like i16 u8. Note that u64 is not supported but i64 is.")
 	ErrNotFloat            = errors.New("value is not a valid float")
 	ErrOffset              = errors.New("offset is out of range")
 	ErrNumberGreater       = errors.New("Number of keys can't be greater than number of args")

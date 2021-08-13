@@ -687,33 +687,16 @@ func (c *Command) GetExHandle(txn *store.Txn, args [][]byte) interface{} {
 	return object.Value
 }
 
-// (string) GETRANGE key start end
-func (c *Command) GetRangeHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 3 {
-		return txn.SetWrongArgs(GETRANGE_COMMAND)
-	}
-	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
-	key := object.GetKeyBytes()
-	start, err := strconv.Atoi(utils.B2S(args[1]))
-	if err != nil {
-		return txn.SetError(xerror.ErrNotInteger)
-	}
-	end, err := strconv.Atoi(utils.B2S(args[2]))
-	if err != nil {
-		return txn.SetError(xerror.ErrNotInteger)
-	}
-	err = getTxnObject(txn, key, object, false)
-	if err == store.KeyNotFound {
-		return EmptyString
-	} else if err != nil {
-		return txn.SetError(err)
-	}
-	value := object.Value
+func getRange(value []byte, start, end int) ([]byte, int, int) {
 	if start < 0 {
 		start = len(value) + start
 		if start < 0 {
 			start = 0
 		}
+	}
+
+	if start > len(value) {
+		return value[0:0], start, end
 	}
 
 	if end < 0 {
@@ -723,13 +706,61 @@ func (c *Command) GetRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 	}
 
-	if start > len(value) {
-		return EmptyString
-	}
-
 	if end > len(value)-1 {
 		end = len(value) - 1
 	}
 
-	return value[start : end+1]
+	if end < start {
+		return value[0:0], start, end
+	}
+
+	return value[start : end+1], start, end
+}
+
+func (c *Command) checkAndGetRange(txn *store.Txn, k []byte, args [][]byte) ([]byte, int, int, error) {
+	start, end := 0, -1
+	var err error
+	if len(args) > 0 {
+		start, err = strconv.Atoi(utils.B2S(args[0]))
+		if err != nil {
+			return nil, 0, 0, xerror.ErrNotInteger
+		}
+	}
+	if len(args) > 1 {
+		end, err = strconv.Atoi(utils.B2S(args[1]))
+		if err != nil {
+			return nil, 0, 0, xerror.ErrNotInteger
+		}
+	}
+	return c.getRange(txn, k, start, end)
+}
+
+func (c *Command) getRange(txn *store.Txn, k []byte, start, end int) ([]byte, int, int, error) {
+	object := NewObject(txn.UserId, txn.DBId, KeyType, k)
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return nil, start, end, nil
+	} else if err != nil {
+		return nil, start, end, err
+	}
+	value := object.Value
+	v, start, end := getRange(value, start, end)
+	return v, start, end, nil
+}
+
+// (string) GETRANGE key start end
+func (c *Command) GetRangeHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 3 {
+		return txn.SetWrongArgs(GETRANGE_COMMAND)
+	}
+
+	v, _, _, err := c.checkAndGetRange(txn, args[0], args[1:])
+	if err != nil {
+		return txn.SetError(err)
+	}
+	if len(v) == 0 {
+		return EmptyString
+	}
+	return v
 }
