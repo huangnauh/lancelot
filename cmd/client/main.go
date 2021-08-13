@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
+	"time"
 
 	goredis "github.com/go-redis/redis/v8"
 	"github.com/gomodule/redigo/redis"
@@ -63,6 +65,46 @@ func Example_JSONSet(rh *rejson.Handler) {
 }
 
 func main() {
+	client := goredis.NewClient(&goredis.Options{})
+	ctx := context.Background()
+	pubsub := client.Subscribe(ctx, "mychannel")
+	defer pubsub.Close()
+
+	{
+		msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
+		if err != nil {
+			log.Fatalf("Failed to Receive: %s", err)
+			return
+		}
+		subscr := msgi.(*goredis.Subscription)
+		fmt.Printf("Received: %v\n", subscr)
+	}
+
+	ch := pubsub.Channel(
+		goredis.WithChannelSize(10),
+		goredis.WithChannelHealthCheckInterval(time.Second),
+	)
+
+	text := "w"
+	err := client.Publish(ctx, "mychannel", text).Err()
+	if err != nil {
+		log.Fatalf("Failed to Publish: %s", err)
+		return
+	}
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			return
+		case msg := <-ch:
+			fmt.Printf("Message: %v\n", msg)
+		}
+	}
+}
+
+func main1() {
 	var addr = flag.String("Server", "10.0.5.137:16379", "Redis server address")
 
 	rh := rejson.NewReJSONHandler()

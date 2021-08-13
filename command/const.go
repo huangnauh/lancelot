@@ -60,6 +60,7 @@ const (
 	EXPIRE_COMMAND      = "expire"
 	OBJECT_COMMAND      = "object"
 	PUBLISH_COMMAND     = "publish"
+	FPUBLISH_COMMAND    = "fpublish"
 	PUBSUB_COMMAND      = "pubsub"
 	SUBSCRIBE_COMMAND   = "subscribe"
 	UNSUBSCRIBE_COMMAND = "unsubscribe"

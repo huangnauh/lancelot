@@ -32,8 +32,10 @@ func formatMs(dur time.Duration) int64 {
 
 func redisOptions() *redis.Options {
 	return &redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
-		Password: cfg.Auth.Pass}
+		Addr: fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		// Password:         cfg.Auth.Pass,
+		ReadTimeout: time.Minute,
+	}
 }
 
 func bigVal() []byte {
@@ -42,6 +44,17 @@ func bigVal() []byte {
 
 func PSetNX(ctx context.Context, client *redis.Client, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
 	cmd := redis.NewStatusCmd(ctx, "psetex", key, formatMs(expiration), value)
+	_ = client.Process(ctx, cmd)
+	return cmd
+}
+
+func Fpublish(ctx context.Context, client *redis.Client, channel string, message interface{}, partition int64) *redis.IntSliceCmd {
+	var cmd *redis.IntSliceCmd
+	if partition < 0 {
+		cmd = redis.NewIntSliceCmd(ctx, "fpublish", channel, message)
+	} else {
+		cmd = redis.NewIntSliceCmd(ctx, "fpublish", channel, message, "PT", partition)
+	}
 	_ = client.Process(ctx, cmd)
 	return cmd
 }
@@ -861,25 +874,7 @@ var _ = Describe("Commands", func() {
 		})
 	})
 
-	Describe("strings", func() {
-		FIt("should Append", func() {
-			n, err := client.Exists(ctx, "key").Result()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(n).To(Equal(int64(0)))
-
-			append := client.Append(ctx, "key", "Hello")
-			Expect(append.Err()).NotTo(HaveOccurred())
-			Expect(append.Val()).To(Equal(int64(5)))
-
-			append = client.Append(ctx, "key", " World")
-			Expect(append.Err()).NotTo(HaveOccurred())
-			Expect(append.Val()).To(Equal(int64(11)))
-
-			get := client.Get(ctx, "key")
-			Expect(get.Err()).NotTo(HaveOccurred())
-			Expect(get.Val()).To(Equal("Hello World"))
-		})
-
+	Describe("string bit", func() {
 		It("should BitCount", func() {
 			set := client.Set(ctx, "key", "foobar", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
@@ -1019,48 +1014,6 @@ var _ = Describe("Commands", func() {
 			Expect(nn).To(Equal([]int64{1, 0}))
 		})
 
-		FIt("should Decr", func() {
-			set := client.Set(ctx, "key", "10", 0)
-			Expect(set.Err()).NotTo(HaveOccurred())
-			Expect(set.Val()).To(Equal("OK"))
-
-			decr := client.Decr(ctx, "key")
-			Expect(decr.Err()).NotTo(HaveOccurred())
-			Expect(decr.Val()).To(Equal(int64(9)))
-
-			set = client.Set(ctx, "key", "234293482390480948029348230948", 0)
-			Expect(set.Err()).NotTo(HaveOccurred())
-			Expect(set.Val()).To(Equal("OK"))
-
-			decr = client.Decr(ctx, "key")
-			Expect(decr.Err()).To(MatchError("ERR value is not an integer or out of range"))
-			Expect(decr.Val()).To(Equal(int64(0)))
-		})
-
-		FIt("should DecrBy", func() {
-			set := client.Set(ctx, "key", "10", 0)
-			Expect(set.Err()).NotTo(HaveOccurred())
-			Expect(set.Val()).To(Equal("OK"))
-
-			decrBy := client.DecrBy(ctx, "key", 5)
-			Expect(decrBy.Err()).NotTo(HaveOccurred())
-			Expect(decrBy.Val()).To(Equal(int64(5)))
-		})
-
-		FIt("should Get", func() {
-			get := client.Get(ctx, "_")
-			Expect(get.Err()).To(Equal(redis.Nil))
-			Expect(get.Val()).To(Equal(""))
-
-			set := client.Set(ctx, "key", "hello", 0)
-			Expect(set.Err()).NotTo(HaveOccurred())
-			Expect(set.Val()).To(Equal("OK"))
-
-			get = client.Get(ctx, "key")
-			Expect(get.Err()).NotTo(HaveOccurred())
-			Expect(get.Val()).To(Equal("hello"))
-		})
-
 		It("should GetBit", func() {
 			setBit := client.SetBit(ctx, "key", 7, 1)
 			Expect(setBit.Err()).NotTo(HaveOccurred())
@@ -1078,8 +1031,70 @@ var _ = Describe("Commands", func() {
 			Expect(getBit.Err()).NotTo(HaveOccurred())
 			Expect(getBit.Val()).To(Equal(int64(0)))
 		})
+	})
 
-		FIt("should GetRange", func() {
+	FDescribe("strings", func() {
+		It("should Append", func() {
+			n, err := client.Exists(ctx, "key").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(n).To(Equal(int64(0)))
+
+			append := client.Append(ctx, "key", "Hello")
+			Expect(append.Err()).NotTo(HaveOccurred())
+			Expect(append.Val()).To(Equal(int64(5)))
+
+			append = client.Append(ctx, "key", " World")
+			Expect(append.Err()).NotTo(HaveOccurred())
+			Expect(append.Val()).To(Equal(int64(11)))
+
+			get := client.Get(ctx, "key")
+			Expect(get.Err()).NotTo(HaveOccurred())
+			Expect(get.Val()).To(Equal("Hello World"))
+		})
+
+		It("should Decr", func() {
+			set := client.Set(ctx, "key", "10", 0)
+			Expect(set.Err()).NotTo(HaveOccurred())
+			Expect(set.Val()).To(Equal("OK"))
+
+			decr := client.Decr(ctx, "key")
+			Expect(decr.Err()).NotTo(HaveOccurred())
+			Expect(decr.Val()).To(Equal(int64(9)))
+
+			set = client.Set(ctx, "key", "234293482390480948029348230948", 0)
+			Expect(set.Err()).NotTo(HaveOccurred())
+			Expect(set.Val()).To(Equal("OK"))
+
+			decr = client.Decr(ctx, "key")
+			Expect(decr.Err()).To(MatchError("ERR value is not an integer or out of range"))
+			Expect(decr.Val()).To(Equal(int64(0)))
+		})
+
+		It("should DecrBy", func() {
+			set := client.Set(ctx, "key", "10", 0)
+			Expect(set.Err()).NotTo(HaveOccurred())
+			Expect(set.Val()).To(Equal("OK"))
+
+			decrBy := client.DecrBy(ctx, "key", 5)
+			Expect(decrBy.Err()).NotTo(HaveOccurred())
+			Expect(decrBy.Val()).To(Equal(int64(5)))
+		})
+
+		It("should Get", func() {
+			get := client.Get(ctx, "_")
+			Expect(get.Err()).To(Equal(redis.Nil))
+			Expect(get.Val()).To(Equal(""))
+
+			set := client.Set(ctx, "key", "hello", 0)
+			Expect(set.Err()).NotTo(HaveOccurred())
+			Expect(set.Val()).To(Equal("OK"))
+
+			get = client.Get(ctx, "key")
+			Expect(get.Err()).NotTo(HaveOccurred())
+			Expect(get.Val()).To(Equal("hello"))
+		})
+
+		It("should GetRange", func() {
 			set := client.Set(ctx, "key", "This is a string", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -1101,7 +1116,7 @@ var _ = Describe("Commands", func() {
 			Expect(getRange.Val()).To(Equal("string"))
 		})
 
-		FIt("should GetSet", func() {
+		It("should GetSet", func() {
 			incr := client.Incr(ctx, "key")
 			Expect(incr.Err()).NotTo(HaveOccurred())
 			Expect(incr.Val()).To(Equal(int64(1)))
@@ -1115,7 +1130,7 @@ var _ = Describe("Commands", func() {
 			Expect(get.Val()).To(Equal("0"))
 		})
 
-		FIt("should GetEX", func() {
+		It("should GetEX", func() {
 			set := client.Set(ctx, "key", "value", 100*time.Second)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -1133,7 +1148,7 @@ var _ = Describe("Commands", func() {
 			Expect(ttl.Val()).To(BeNumerically("~", 200*time.Second, 3*time.Second))
 		})
 
-		FIt("should GetDel", func() {
+		It("should GetDel", func() {
 			set := client.Set(ctx, "key", "value", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -1146,7 +1161,7 @@ var _ = Describe("Commands", func() {
 			Expect(get.Err()).To(Equal(redis.Nil))
 		})
 
-		FIt("should Incr", func() {
+		It("should Incr", func() {
 			set := client.Set(ctx, "key", "10", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -1160,7 +1175,7 @@ var _ = Describe("Commands", func() {
 			Expect(get.Val()).To(Equal("11"))
 		})
 
-		FIt("should IncrBy", func() {
+		It("should IncrBy", func() {
 			set := client.Set(ctx, "key", "10", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -1170,7 +1185,7 @@ var _ = Describe("Commands", func() {
 			Expect(incrBy.Val()).To(Equal(int64(15)))
 		})
 
-		FIt("should IncrByFloat", func() {
+		It("should IncrByFloat", func() {
 			set := client.Set(ctx, "key", "10.50", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -1188,13 +1203,13 @@ var _ = Describe("Commands", func() {
 			Expect(incrByFloat.Val()).To(Equal(float64(5200)))
 		})
 
-		FIt("should IncrByFloatOverflow", func() {
+		It("should IncrByFloatOverflow", func() {
 			incrByFloat := client.IncrByFloat(ctx, "key", 996945661)
 			Expect(incrByFloat.Err()).NotTo(HaveOccurred())
 			Expect(incrByFloat.Val()).To(Equal(float64(996945661)))
 		})
 
-		FIt("should MSetMGet", func() {
+		It("should MSetMGet", func() {
 			mSet := client.MSet(ctx, "key1", "hello1", "key2", "hello2")
 			Expect(mSet.Err()).NotTo(HaveOccurred())
 			Expect(mSet.Val()).To(Equal("OK"))
@@ -1204,7 +1219,7 @@ var _ = Describe("Commands", func() {
 			Expect(mGet.Val()).To(Equal([]interface{}{"hello1", "hello2", nil}))
 		})
 
-		FIt("should scan Mget", func() {
+		It("should scan Mget", func() {
 			err := client.MSet(ctx, "key1", "hello1", "key2", 123).Err()
 			Expect(err).NotTo(HaveOccurred())
 
@@ -1220,7 +1235,7 @@ var _ = Describe("Commands", func() {
 			Expect(d).To(Equal(data{Key1: "hello1", Key2: 123}))
 		})
 
-		FIt("should MSetNX", func() {
+		It("should MSetNX", func() {
 			mSetNX := client.MSetNX(ctx, "key1", "hello1", "key2", "hello2")
 			Expect(mSetNX.Err()).NotTo(HaveOccurred())
 			Expect(mSetNX.Val()).To(Equal(true))
@@ -1230,7 +1245,7 @@ var _ = Describe("Commands", func() {
 			Expect(mSetNX.Val()).To(Equal(false))
 		})
 
-		FIt("should SetWithArgs with TTL", func() {
+		It("should SetWithArgs with TTL", func() {
 			args := redis.SetArgs{
 				TTL: 500 * time.Millisecond,
 			}
@@ -1246,7 +1261,7 @@ var _ = Describe("Commands", func() {
 			}, "2s", "100ms").Should(Equal(redis.Nil))
 		})
 
-		FIt("should SetWithArgs with expiration date", func() {
+		It("should SetWithArgs with expiration date", func() {
 			expireAt := time.Now().AddDate(1, 1, 1)
 			args := redis.SetArgs{
 				ExpireAt: expireAt,
@@ -1265,7 +1280,7 @@ var _ = Describe("Commands", func() {
 			Expect(ttl.Val()).ToNot(Equal(-1))
 		})
 
-		FIt("should SetWithArgs with negative expiration date", func() {
+		It("should SetWithArgs with negative expiration date", func() {
 			args := redis.SetArgs{
 				ExpireAt: time.Now().AddDate(-3, 1, 1),
 			}
@@ -1279,7 +1294,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal(""))
 		})
 
-		FIt("should SetWithArgs with keepttl", func() {
+		It("should SetWithArgs with keepttl", func() {
 			// Set with ttl
 			argsWithTTL := redis.SetArgs{
 				TTL: 5 * time.Second,
@@ -1302,7 +1317,7 @@ var _ = Describe("Commands", func() {
 			Expect(ttl.Val().Nanoseconds()).NotTo(Equal(-1))
 		})
 
-		FIt("should SetWithArgs with NX mode and key exists", func() {
+		It("should SetWithArgs with NX mode and key exists", func() {
 			err := client.Set(ctx, "key", "hello", 0).Err()
 			Expect(err).NotTo(HaveOccurred())
 
@@ -1314,7 +1329,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal(""))
 		})
 
-		FIt("should SetWithArgs with NX mode and key does not exist", func() {
+		It("should SetWithArgs with NX mode and key does not exist", func() {
 			args := redis.SetArgs{
 				Mode: "nx",
 			}
@@ -1323,7 +1338,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal("OK"))
 		})
 
-		FIt("should SetWithArgs with NX mode and GET option", func() {
+		It("should SetWithArgs with NX mode and GET option", func() {
 			args := redis.SetArgs{
 				Mode: "nx",
 				Get:  true,
@@ -1334,7 +1349,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal(""))
 		})
 
-		FIt("should SetWithArgs with expiration, NX mode, and key does not exist", func() {
+		It("should SetWithArgs with expiration, NX mode, and key does not exist", func() {
 			args := redis.SetArgs{
 				TTL:  500 * time.Millisecond,
 				Mode: "nx",
@@ -1348,7 +1363,7 @@ var _ = Describe("Commands", func() {
 			}, "1s", "100ms").Should(Equal(redis.Nil))
 		})
 
-		FIt("should SetWithArgs with expiration, NX mode, and key exists", func() {
+		It("should SetWithArgs with expiration, NX mode, and key exists", func() {
 			e := client.Set(ctx, "key", "hello", 0)
 			Expect(e.Err()).NotTo(HaveOccurred())
 
@@ -1361,7 +1376,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal(""))
 		})
 
-		FIt("should SetWithArgs with expiration, NX mode, and GET option", func() {
+		It("should SetWithArgs with expiration, NX mode, and GET option", func() {
 			args := redis.SetArgs{
 				TTL:  500 * time.Millisecond,
 				Mode: "nx",
@@ -1373,7 +1388,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal(""))
 		})
 
-		FIt("should SetWithArgs with XX mode and key does not exist", func() {
+		It("should SetWithArgs with XX mode and key does not exist", func() {
 			args := redis.SetArgs{
 				Mode: "xx",
 			}
@@ -1382,7 +1397,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal(""))
 		})
 
-		FIt("should SetWithArgs with XX mode and key exists", func() {
+		It("should SetWithArgs with XX mode and key exists", func() {
 			e := client.Set(ctx, "key", "hello", 0).Err()
 			Expect(e).NotTo(HaveOccurred())
 
@@ -1394,7 +1409,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal("OK"))
 		})
 
-		FIt("should SetWithArgs with XX mode and GET option, and key exists", func() {
+		It("should SetWithArgs with XX mode and GET option, and key exists", func() {
 			e := client.Set(ctx, "key", "hello", 0).Err()
 			Expect(e).NotTo(HaveOccurred())
 
@@ -1407,7 +1422,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal("hello"))
 		})
 
-		FIt("should SetWithArgs with XX mode and GET option, and key does not exist", func() {
+		It("should SetWithArgs with XX mode and GET option, and key does not exist", func() {
 			args := redis.SetArgs{
 				Mode: "xx",
 				Get:  true,
@@ -1418,7 +1433,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal(""))
 		})
 
-		FIt("should SetWithArgs with expiration, XX mode, GET option, and key does not exist", func() {
+		It("should SetWithArgs with expiration, XX mode, GET option, and key does not exist", func() {
 			args := redis.SetArgs{
 				TTL:  500 * time.Millisecond,
 				Mode: "xx",
@@ -1430,7 +1445,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal(""))
 		})
 
-		FIt("should SetWithArgs with expiration, XX mode, GET option, and key exists", func() {
+		It("should SetWithArgs with expiration, XX mode, GET option, and key exists", func() {
 			e := client.Set(ctx, "key", "hello", 0)
 			Expect(e.Err()).NotTo(HaveOccurred())
 
@@ -1449,7 +1464,7 @@ var _ = Describe("Commands", func() {
 			}, "1s", "100ms").Should(Equal(redis.Nil))
 		})
 
-		FIt("should SetWithArgs with Get and key does not exist yet", func() {
+		It("should SetWithArgs with Get and key does not exist yet", func() {
 			args := redis.SetArgs{
 				Get: true,
 			}
@@ -1459,7 +1474,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal(""))
 		})
 
-		FIt("should SetWithArgs with Get and key exists", func() {
+		It("should SetWithArgs with Get and key exists", func() {
 			e := client.Set(ctx, "key", "hello", 0)
 			Expect(e.Err()).NotTo(HaveOccurred())
 
@@ -1489,7 +1504,7 @@ var _ = Describe("Commands", func() {
 			Expect(setArgs.Val()).To(Equal("hello"))
 		})
 
-		FIt("should Set with expiration", func() {
+		It("should Set with expiration", func() {
 			err := client.Set(ctx, "key", "hello", 100*time.Millisecond).Err()
 			Expect(err).NotTo(HaveOccurred())
 
@@ -1502,7 +1517,7 @@ var _ = Describe("Commands", func() {
 			}, "1s", "100ms").Should(Equal(redis.Nil))
 		})
 
-		FIt("should Set with keepttl", func() {
+		It("should Set with keepttl", func() {
 			// set with ttl
 			set := client.Set(ctx, "key", "hello", 5*time.Second)
 			Expect(set.Err()).NotTo(HaveOccurred())
@@ -1519,7 +1534,7 @@ var _ = Describe("Commands", func() {
 			Expect(ttl.Val().Nanoseconds()).NotTo(Equal(-1))
 		})
 
-		FIt("should SetGet", func() {
+		It("should SetGet", func() {
 			set := client.Set(ctx, "key", "hello", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -1529,7 +1544,7 @@ var _ = Describe("Commands", func() {
 			Expect(get.Val()).To(Equal("hello"))
 		})
 
-		FIt("should SetEX", func() {
+		It("should SetEX", func() {
 			err := client.SetEX(ctx, "key", "hello", 1*time.Second).Err()
 			Expect(err).NotTo(HaveOccurred())
 
@@ -1542,8 +1557,8 @@ var _ = Describe("Commands", func() {
 			}, "2s", "100ms").Should(Equal(redis.Nil))
 		})
 
-		FIt("should PSetEX", func() {
-			err := PSetNX(ctx, client, "key", "hello", 100*time.Millisecond).Err()
+		It("should PSetEX", func() {
+			err := client.PSetEX(ctx, "key", "hello", 100*time.Millisecond).Err()
 			Expect(err).NotTo(HaveOccurred())
 
 			val, err := client.Get(ctx, "key").Result()
@@ -1555,7 +1570,7 @@ var _ = Describe("Commands", func() {
 			}, "200ms", "10ms").Should(Equal(redis.Nil))
 		})
 
-		FIt("should SetNX", func() {
+		It("should SetNX", func() {
 			setNX := client.SetNX(ctx, "key", "hello", 0)
 			Expect(setNX.Err()).NotTo(HaveOccurred())
 			Expect(setNX.Val()).To(Equal(true))
@@ -1569,7 +1584,7 @@ var _ = Describe("Commands", func() {
 			Expect(get.Val()).To(Equal("hello"))
 		})
 
-		FIt("should SetNX with expiration", func() {
+		It("should SetNX with expiration", func() {
 			isSet, err := client.SetNX(ctx, "key", "hello", time.Second).Result()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(isSet).To(Equal(true))
@@ -1583,7 +1598,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal("hello"))
 		})
 
-		FIt("should SetNX with keepttl", func() {
+		It("should SetNX with keepttl", func() {
 			isSet, err := client.SetNX(ctx, "key", "hello1", redis.KeepTTL).Result()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(isSet).To(Equal(true))
@@ -1593,7 +1608,7 @@ var _ = Describe("Commands", func() {
 			Expect(ttl.Val().Nanoseconds()).To(Equal(int64(-1)))
 		})
 
-		FIt("should SetXX", func() {
+		It("should SetXX", func() {
 			isSet, err := client.SetXX(ctx, "key", "hello2", 0).Result()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(isSet).To(Equal(false))
@@ -1610,7 +1625,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal("hello2"))
 		})
 
-		FIt("should SetXX with expiration", func() {
+		It("should SetXX with expiration", func() {
 			isSet, err := client.SetXX(ctx, "key", "hello2", time.Second).Result()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(isSet).To(Equal(false))
@@ -1627,7 +1642,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(Equal("hello2"))
 		})
 
-		FIt("should SetXX with keepttl", func() {
+		It("should SetXX with keepttl", func() {
 			isSet, err := client.SetXX(ctx, "key", "hello2", time.Second).Result()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(isSet).To(Equal(false))
@@ -1653,7 +1668,7 @@ var _ = Describe("Commands", func() {
 			Expect(ttl).NotTo(Equal(-1))
 		})
 
-		FIt("should SetRange", func() {
+		It("should SetRange", func() {
 			set := client.Set(ctx, "key", "Hello World", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -1667,7 +1682,7 @@ var _ = Describe("Commands", func() {
 			Expect(get.Val()).To(Equal("Hello Redis"))
 		})
 
-		FIt("should StrLen", func() {
+		It("should StrLen", func() {
 			set := client.Set(ctx, "key", "hello", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))

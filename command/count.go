@@ -12,6 +12,13 @@ import (
 	"go.uber.org/zap"
 )
 
+func GetCountUserPrefix(user uint16) []byte {
+	k := make([]byte, 1+2)
+	k[0] = CountPrefix
+	binary.BigEndian.PutUint16(k[1:], user)
+	return k
+}
+
 func (c *Command) GetCountBytes(typo ObjectType, data ...[]byte) []byte {
 	count := 0
 	for _, v := range data {
@@ -22,6 +29,29 @@ func (c *Command) GetCountBytes(typo ObjectType, data ...[]byte) []byte {
 	k[1] = byte(typo)
 	start := 2
 	for _, v := range data {
+		if data == nil {
+			continue
+		}
+		copy(k[start:], v)
+		start += len(v)
+	}
+	return k
+}
+
+func (c *Command) GetUserCountBytes(typo ObjectType, userID uint16, data ...[]byte) []byte {
+	count := 0
+	for _, v := range data {
+		count += len(v)
+	}
+	k := make([]byte, 1+2+1+count)
+	k[0] = byte(CountPrefix)
+	binary.BigEndian.PutUint16(k[1:], userID)
+	k[3] = byte(typo)
+	start := 4
+	for _, v := range data {
+		if data == nil {
+			continue
+		}
 		copy(k[start:], v)
 		start += len(v)
 	}
@@ -51,8 +81,8 @@ func DecodeCount(c *Count, k []byte) error {
 	return nil
 }
 
-func (c *Command) AddCount(txn *store.Txn, typo ObjectType, hash uint64, key []byte, hashValue []byte, delta int64) (*Count, error) {
-	count, err := c.GetCount(txn, typo, hash, key, hashValue)
+func (c *Command) AddCount(txn *store.Txn, userID uint16, typo ObjectType, hash uint64, key []byte, hashValue []byte, delta int64) (*Count, error) {
+	count, err := c.GetCount(txn, userID, typo, hash, key, hashValue)
 	if err != nil && err != store.KeyNotFound {
 		return count, err
 	}
@@ -65,8 +95,9 @@ func (c *Command) AddCount(txn *store.Txn, typo ObjectType, hash uint64, key []b
 	return count, err
 }
 
-func (c *Command) ListCount(txn *store.Txn, typo ObjectType, hash uint16, key []byte) ([]*Count, error) {
-	start := c.GetCountBytes(typo, key)
+func (c *Command) ListCount(txn *store.Txn, userID uint16, typo ObjectType, hash uint16, key []byte) ([]*Count, error) {
+	binary.BigEndian.PutUint16(key, userID)
+	start := c.GetUserCountBytes(typo, userID, key)
 	end := utils.PrefixNext(start)
 	counts := make([]*Count, 0)
 	err := txn.List(start, end, int(hash+1), func(k []byte, v []byte) bool {
@@ -84,8 +115,8 @@ func (c *Command) ListCount(txn *store.Txn, typo ObjectType, hash uint16, key []
 	return counts, err
 }
 
-func (c *Command) DeleteCount(txn *store.Txn, typo ObjectType, hash uint16, key []byte, expire time.Time) error {
-	start := c.GetCountBytes(typo, key)
+func (c *Command) DeleteCount(txn *store.Txn, userID uint16, typo ObjectType, hash uint16, key []byte, expire time.Time) error {
+	start := c.GetUserCountBytes(typo, userID, key)
 	end := utils.PrefixNext(start)
 	it, err := txn.Iter(start, end, false)
 	if err != nil {
@@ -131,15 +162,20 @@ func (c *Command) DeleteCount(txn *store.Txn, typo ObjectType, hash uint16, key 
 	return err
 }
 
-func (c *Command) GetCount(txn *store.Txn, typo ObjectType, hash uint64, key []byte, hashValue []byte) (*Count, error) {
+func (c *Command) GetCount(txn *store.Txn, userID uint16, typo ObjectType, hash uint64, key []byte, hashValue []byte) (*Count, error) {
 	var k []byte
 	if hash > 0 {
-		shard := utils.GetShard(hashValue, hash)
+		var shard uint16
+		if hashValue != nil {
+			shard = utils.GetShard(hashValue, hash)
+		} else {
+			shard = uint16(hash)
+		}
 		shardBytes := make([]byte, 2)
 		binary.BigEndian.PutUint16(shardBytes, shard)
-		k = c.GetCountBytes(typo, key, shardBytes)
+		k = c.GetUserCountBytes(typo, userID, key, shardBytes)
 	} else {
-		k = c.GetCountBytes(typo, key)
+		k = c.GetUserCountBytes(typo, userID, key)
 	}
 	count := &Count{Timestamp: txn.Timestamp, Key: k}
 	b, err := txn.Get(k)

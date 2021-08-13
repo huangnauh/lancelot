@@ -201,7 +201,7 @@ func (c *Command) TryDeleteChannel(userID uint16, channel string, hash uint16, k
 	defer txn.Rollback()
 
 	var expire time.Time
-	count, err := c.GetCount(txn, PubType, 0, utils.S2B(channel), nil)
+	count, err := c.GetCount(txn, userID, PubType, 0, utils.S2B(channel), nil)
 	if err != nil {
 		return
 	}
@@ -220,7 +220,7 @@ func (c *Command) TryDeleteChannel(userID uint16, channel string, hash uint16, k
 	utils.ZapLog.Debug("[gc] channel expired", zap.String("channel", channel),
 		zap.Time("exist", exist), zap.Time("now", now), zap.Int64("count", count.Value))
 
-	err = c.DeleteCount(txn, PubType, 0, utils.S2B(channel), time.Time{})
+	err = c.DeleteCount(txn, userID, PubType, 0, utils.S2B(channel), time.Time{})
 	if err != nil {
 		return
 	}
@@ -233,7 +233,7 @@ func (c *Command) TryDeleteChannel(userID uint16, channel string, hash uint16, k
 	}
 
 	expire = now.Add(-c.cfg.GC.PubChannelExpire)
-	err = c.DeleteCount(txn, MessageType, hash, key, expire)
+	err = c.DeleteCount(txn, userID, MessageType, hash, key, expire)
 	if err != nil {
 		return
 	}

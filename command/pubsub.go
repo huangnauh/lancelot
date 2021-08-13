@@ -39,12 +39,12 @@ func encodeMessageKeyOffset(partition uint16, offset int64) []byte {
 	return k
 }
 
-func encodeMessageKey(hash uint16, count int64, value []byte) []byte {
+func encodeMessageKey(hash uint16, count int64, value []byte) (uint16, []byte) {
 	shard := utils.GetShard(value, uint64(hash))
 	k := make([]byte, 2+8)
 	binary.BigEndian.PutUint16(k, shard)
 	binary.BigEndian.PutUint64(k[2:], uint64(count))
-	return k
+	return shard, k
 }
 
 func decodeMessageKey(v []byte) (int64, error) {
@@ -176,7 +176,7 @@ func (c *Command) pubSubNumsub(txn *store.Txn, args [][]byte) interface{} {
 	}
 	rets := make([]interface{}, 0)
 	for i := 0; i < len(args); i++ {
-		count, err := c.GetCount(txn, PubType, 0, args[i], nil)
+		count, err := c.GetCount(txn, txn.UserId, PubType, 0, args[i], nil)
 		if err != nil && err != store.KeyNotFound {
 			return txn.SetError(err)
 		}
@@ -185,17 +185,52 @@ func (c *Command) pubSubNumsub(txn *store.Txn, args [][]byte) interface{} {
 	return rets
 }
 
-// (pubsub) PUBLISH channel message [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp]
+// (pubsub) FPUBLISH channel message [PT partition] [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp]
+func (c *Command) FPublishHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 2 {
+		return txn.SetError(xerror.WrongArgsError(FPUBLISH_COMMAND))
+	}
+	return c.publish(txn, args, true)
+}
+
+// (pubsub) PUBLISH channel message [PT partition] [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp]
 func (c *Command) PublishHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetError(xerror.WrongArgsError(PUBLISH_COMMAND))
 	}
+	return c.publish(txn, args, false)
+}
+
+func (c *Command) publish(txn *store.Txn, args [][]byte, needOffset bool) interface{} {
+	partition := ALLPartition
+	expireStart := 2
+	var err error
+	if len(args) >= 4 {
+		str := strings.ToLower(utils.B2S(args[2]))
+		if str == "pt" {
+			partition, err = getPartition(args[3])
+			if err != nil {
+				return txn.SetError(xerror.ErrNotInteger)
+			}
+			expireStart = 4
+		}
+	}
+
+	nowTime := txn.NowTime()
+	opt, err := checkExpireOption(PUBLISH_COMMAND, args[expireStart:], false, nowTime)
+	if err != nil {
+		return txn.SetError(err)
+	}
 
 	channel := args[0]
+	str := strings.ToLower(utils.B2S(channel))
+	if str == "pt" || str == "offset" {
+		return txn.SetError(xerror.InvalidChannel)
+	}
 
 	object := NewObject(txn.UserId, PubSubDB, PubType, channel)
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, true)
+	err = getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		id, err := uuid.NewUUID()
 		if err != nil {
@@ -206,10 +241,8 @@ func (c *Command) PublishHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 
-	nowTime := txn.NowTime()
-	opt, err := checkExpireOption(PUBLISH_COMMAND, args[2:], false, nowTime)
-	if err != nil {
-		return txn.SetError(err)
+	if partition > int64(object.Hash) {
+		return txn.SetError(xerror.InvalidPartition)
 	}
 
 	oldTTL := object.ValueTTL
@@ -227,21 +260,39 @@ func (c *Command) PublishHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 	}
 
-	count, err := c.AddCount(txn, MessageType, uint64(object.Hash), object.Value, args[1], 1)
+	var msgCount *Count
+	if partition == ALLPartition {
+		msgCount, err = c.AddCount(txn, txn.UserId, MessageType, uint64(object.Hash), object.Value, args[1], 1)
+	} else {
+		msgCount, err = c.AddCount(txn, txn.UserId, MessageType, uint64(partition), object.Value, nil, 1)
+	}
 	if err != nil {
 		return txn.SetError(err)
 	}
-	utils.ZapLog.Debug("PUBLISH", zap.ByteString("channel", channel), zap.ByteString("message", args[1]), zap.Int64("count", count.Value))
-	err = txn.Put(object.GetKeyFieldBytes(encodeMessageKey(object.Hash, count.Value, args[1])), encodeMessageValue(txn.Now, args[1]))
+	utils.ZapLog.Debug("PUBLISH", zap.ByteString("channel", channel), zap.ByteString("message", args[1]), zap.Int64("count", msgCount.Value))
+	var mkey []byte
+	if partition == ALLPartition {
+		pt, key := encodeMessageKey(object.Hash, msgCount.Value, args[1])
+		partition = int64(pt)
+		mkey = object.GetKeyFieldBytes(key)
+	} else {
+		mkey = object.GetKeyFieldBytes(encodeMessageKeyOffset(uint16(partition), msgCount.Value))
+	}
+
+	err = txn.Put(mkey, encodeMessageValue(txn.Now, args[1]))
 	if err != nil {
 		return txn.SetError(err)
 	}
 
-	count, err = c.GetCount(txn, PubType, 0, channel, nil)
+	count, err := c.GetCount(txn, txn.UserId, PubType, 0, channel, nil)
 	if err != nil && err != store.KeyNotFound {
 		return txn.SetError(err)
 	}
-	return SimpleInt(count.Value)
+	if !needOffset {
+		return SimpleInt(count.Value)
+	} else {
+		return []interface{}{SimpleInt(partition), SimpleInt(msgCount.Value)}
+	}
 }
 
 type pubSubConn struct {
@@ -289,33 +340,72 @@ func (c *Command) fsubscribe(conn *redcon.Conn, cmd redcon.Command) {
 	}
 	utils.ZapLog.Debug("fsubscribe", zap.String("remote", conn.RemoteAddr()),
 		zap.ByteStrings("args", cmd.Args))
-	c._subscribe(conn, cmd.Args[2:], partition, offset)
+	c._subscribe(conn, cmd.Args[2:], partition, offset, true)
 }
 
-// SUBSCRIBE channel [channel ...]
+// SUBSCRIBE channel [channel ...] [PT partition] [OFFSET offset]
 func (c *Command) subscribe(conn *redcon.Conn, cmd redcon.Command) {
 	if len(cmd.Args) < 2 {
 		conn.WriteError(xerror.WrongArgsString(SUBSCRIBE_COMMAND))
 		return
 	}
+
+	channels := make([][]byte, 0)
+	partition := ALLPartition
+	offset := NoOffset
+	var err error
+	for i := 1; i < len(cmd.Args); i++ {
+		str := strings.ToLower(utils.B2S(cmd.Args[i]))
+		switch str {
+		case "pt":
+			if i+1 >= len(cmd.Args) {
+				conn.WriteError(xerror.WrongArgsString(SUBSCRIBE_COMMAND))
+				return
+			}
+			partition, err = getPartition(cmd.Args[i+1])
+			if err != nil {
+				conn.WriteError(err.Error())
+				return
+			}
+			i++
+		case "offset":
+			if i+1 >= len(cmd.Args) {
+				conn.WriteError(xerror.WrongArgsString(SUBSCRIBE_COMMAND))
+				return
+			}
+			offset, err = utils.GetNonnegativeInt64(cmd.Args[i+1])
+			if err != nil {
+				conn.WriteError(err.Error())
+				return
+			}
+			i++
+		default:
+			channels = append(channels, cmd.Args[i])
+		}
+	}
+
 	utils.ZapLog.Debug("subscribe", zap.String("remote", conn.RemoteAddr()),
 		zap.ByteStrings("args", cmd.Args))
-	c._subscribe(conn, cmd.Args[1:], ALLPartition, NoOffset)
+	c._subscribe(conn, channels, partition, offset, false)
 }
 
-func (c *Command) _subscribe(conn *redcon.Conn, args [][]byte, partition int64, offset int64) {
-	dconn := conn.Detach()
+func (c *Command) _subscribe(conn *redcon.Conn, args [][]byte, partition int64, offset int64, needOffset bool) {
 	ps := &pubSubConn{
-		dconn:    dconn,
+		dconn:    &redcon.DetachedConn{Conn: conn},
 		channels: make(map[string]map[uint16][]byte),
 		messages: make(chan []interface{}, 1000),
 		others:   make(chan interface{}, 2),
 		closed:   make(chan struct{}),
 	}
-	c.subDetached(ps, args, partition, offset)
+	err := c.subDetached(ps, args, partition, offset)
+	if err != nil {
+		conn.WriteError(err.Error())
+		return
+	}
+	ps.dconn = conn.Detach()
 	go ps.sendMessage()
 	go c.runDetached(ps)
-	go c.Pull(ps, offset != NoOffset)
+	go c.Pull(ps, needOffset)
 }
 
 // FUNSUBSCRIBE partition offset channel [channel ...]
@@ -339,9 +429,9 @@ func (c *Command) unsubscribe(conn *redcon.Conn, cmd redcon.Command) {
 	}
 }
 
-func (c *Command) tryDeleteConnCount(channels []string) {
+func (c *Command) tryDeleteConnCount(userID uint16, channels []string) {
 	for i := 0; i < 3; i++ {
-		err := c.deleteConnCount(channels)
+		err := c.deleteConnCount(userID, channels)
 		if err != nil {
 			time.Sleep(time.Millisecond * 100)
 			continue
@@ -350,7 +440,7 @@ func (c *Command) tryDeleteConnCount(channels []string) {
 	}
 }
 
-func (c *Command) deleteConnCount(channels []string) error {
+func (c *Command) deleteConnCount(userID uint16, channels []string) error {
 	txn := c.client.NewTxn()
 	defer txn.Rollback()
 	err := txn.Begin()
@@ -358,7 +448,7 @@ func (c *Command) deleteConnCount(channels []string) error {
 		return err
 	}
 	for _, channel := range channels {
-		_, err = c.AddCount(txn, PubType, 0, utils.S2B(channel), nil, -1)
+		_, err = c.AddCount(txn, userID, PubType, 0, utils.S2B(channel), nil, -1)
 		if err != nil {
 			return err
 		}
@@ -375,7 +465,7 @@ func (conn *pubSubConn) Close(c *Command) error {
 		channels = append(channels, k)
 	}
 	conn.Unlock()
-	c.tryDeleteConnCount(channels)
+	c.tryDeleteConnCount(conn.dconn.UserId, channels)
 	return nil
 }
 
@@ -474,7 +564,7 @@ func (c *Command) unsubDetached(conn *pubSubConn, args [][]byte) {
 				conn.others <- err
 				return
 			} else {
-				_, err = c.AddCount(txn, PubType, 0, utils.S2B(ch), nil, -1)
+				_, err = c.AddCount(txn, conn.dconn.UserId, PubType, 0, utils.S2B(ch), nil, -1)
 				if err != nil {
 					conn.others <- err
 					return
@@ -509,12 +599,11 @@ func (c *Command) unsubDetached(conn *pubSubConn, args [][]byte) {
 	}
 }
 
-func (c *Command) subDetached(conn *pubSubConn, args [][]byte, partition, offset int64) {
+func (c *Command) subDetached(conn *pubSubConn, args [][]byte, partition, offset int64) error {
 	txn := c.client.NewTxn()
 	err := txn.Begin()
 	if err != nil {
-		conn.others <- err
-		return
+		return err
 	}
 	defer txn.Rollback()
 	txn.Conn = conn.dconn.Conn
@@ -532,8 +621,7 @@ func (c *Command) subDetached(conn *pubSubConn, args [][]byte, partition, offset
 				var id uuid.UUID
 				id, err = uuid.NewUUID()
 				if err != nil {
-					conn.others <- err
-					return
+					return err
 				}
 				object.Value = id[:]
 				object.ValueTTL = DefaultTTL
@@ -542,13 +630,16 @@ func (c *Command) subDetached(conn *pubSubConn, args [][]byte, partition, offset
 			}
 
 			if err != nil {
-				conn.others <- err
-				return
+				return err
 			}
-			_, err = c.AddCount(txn, PubType, 0, ch, nil, 1)
+
+			if partition > int64(object.Hash) {
+				return xerror.InvalidPartition
+			}
+
+			_, err = c.AddCount(txn, txn.UserId, PubType, 0, ch, nil, 1)
 			if err != nil {
-				conn.others <- err
-				return
+				return err
 			}
 			var start []byte
 			var j uint16
@@ -595,13 +686,13 @@ func (c *Command) subDetached(conn *pubSubConn, args [][]byte, partition, offset
 	}
 	err = txn.Commit()
 	if err != nil {
-		conn.others <- err
-		return
+		return err
 	}
 
 	for _, resp := range resps {
 		resp()
 	}
+	return nil
 }
 
 func (c *Command) Pull(conn *pubSubConn, needOffset bool) {
@@ -768,7 +859,11 @@ func (c *Command) runDetached(sconn *pubSubConn) {
 				sconn.others <- xerror.WrongArgsError(SUBSCRIBE_COMMAND)
 				continue
 			}
-			c.subDetached(sconn, cmd.Args[1:], ALLPartition, NoOffset)
+			err = c.subDetached(sconn, cmd.Args[1:], ALLPartition, NoOffset)
+			if err != nil {
+				sconn.others <- err
+				continue
+			}
 		case "fsubscribe":
 			if len(cmd.Args) != 4 {
 				sconn.others <- xerror.WrongArgsError(FSUBSCRIBE_COMMAND)
@@ -784,7 +879,11 @@ func (c *Command) runDetached(sconn *pubSubConn) {
 				sconn.others <- err
 				return
 			}
-			c.subDetached(sconn, cmd.Args[2:], partition, offset)
+			err = c.subDetached(sconn, cmd.Args[2:], partition, offset)
+			if err != nil {
+				sconn.others <- err
+				continue
+			}
 		case "unsubscribe":
 			c.unsubDetached(sconn, cmd.Args[1:])
 		case "funsubscribe":

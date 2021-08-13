@@ -147,7 +147,7 @@ func NewObject(user uint16, db uint8, typo ObjectType, key []byte) *Object {
 	}
 }
 
-func GetUserPrefix(user uint16) []byte {
+func GetDataUserPrefix(user uint16) []byte {
 	k := make([]byte, 1+2)
 	k[0] = DataPrefix
 	binary.BigEndian.PutUint16(k[1:], user)

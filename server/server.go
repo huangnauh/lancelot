@@ -44,6 +44,8 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 		}
 	}
 	if handler, ok := s.Command.ConnHandle[comma]; ok {
+		utils.ZapLog.Debug("ConnHandle", zap.String("remote", conn.RemoteAddr()),
+			zap.ByteStrings("args", cmd.Args))
 		handler.Func(conn, cmd)
 	} else if handler, ok := s.Command.TxnHandle[comma]; ok {
 		s.Command.TxnHandler(conn, cmd, handler.Func)

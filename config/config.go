@@ -75,9 +75,9 @@ var cfg = &Config{
 	LogLevel:  "debug",
 	PIDFile:   "redis.pid",
 	Host:      "127.0.0.1",
-	RedisPort: 16379,
-	HttpPort:  16380,
-	RpcPort:   16381,
+	RedisPort: 6379,
+	HttpPort:  6380,
+	RpcPort:   6381,
 	Store: Store{
 		Path:               "mocktikv://",
 		Level:              "debug",

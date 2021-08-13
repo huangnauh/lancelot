@@ -293,7 +293,12 @@ func NewCommand(cfg *config.Config) *Command {
 		},
 		PUBSUB_COMMAND: {
 			Func: c.PubSubHandle,
-			ID:   502,
+			ID:   503,
+			Type: PubType,
+		},
+		FPUBLISH_COMMAND: {
+			Func: c.FPublishHandle,
+			ID:   501,
 			Type: PubType,
 		},
 		PUBLISH_COMMAND: {

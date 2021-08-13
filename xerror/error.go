@@ -47,6 +47,8 @@ var (
 	InvalidJsonError     = errors.New("invalid json")
 	InvalidJsonPathError = errors.New("invalid json path")
 	InvalidCursor        = errors.New("invalid cursor")
+	InvalidChannel       = errors.New("invalid channel name")
+	InvalidPartition     = errors.New("invalid partition")
 	// KeyTimeOut           = errors.New("key time out")
 
 	InvalidOffset = errors.New("invalid offset")

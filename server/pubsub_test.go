@@ -8,6 +8,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"gitlab.s.upyun.com/platform/lancelot/utils"
 
 	"github.com/go-redis/redis/v8"
 )
@@ -483,10 +484,33 @@ var _ = FDescribe("Commands", func() {
 		pubsub := client.Subscribe(ctx, "mychannel")
 		defer pubsub.Close()
 
+		{
+			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
+			Expect(err).NotTo(HaveOccurred())
+			subscr := msgi.(*redis.Subscription)
+			Expect(subscr.Kind).To(Equal("subscribe"))
+			Expect(subscr.Channel).To(Equal("mychannel"))
+			Expect(subscr.Count).To(Equal(1))
+		}
+
 		ch := pubsub.Channel(
 			redis.WithChannelSize(10),
-			redis.WithChannelHealthCheckInterval(time.Second),
+			redis.WithChannelHealthCheckInterval(100*time.Millisecond),
 		)
+
+		text := "should Channel Message test channel message"
+		err := client.Publish(ctx, "mychannel", text).Err()
+		Expect(err).NotTo(HaveOccurred())
+
+		var msg *redis.Message
+		Eventually(ch, 2*time.Second).Should(Receive(&msg))
+		Expect(msg.Channel).To(Equal("mychannel"))
+		Expect(msg.Payload).To(Equal(text))
+	})
+
+	It("should Fpublish", func() {
+		pubsub := client.Subscribe(ctx, "mychannel")
+		defer pubsub.Close()
 
 		{
 			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
@@ -497,13 +521,98 @@ var _ = FDescribe("Commands", func() {
 			Expect(subscr.Count).To(Equal(1))
 		}
 
-		text := "test channel message"
-		err := client.Publish(ctx, "mychannel", text).Err()
-		Expect(err).NotTo(HaveOccurred())
+		ch := pubsub.Channel(
+			redis.WithChannelSize(10),
+			redis.WithChannelHealthCheckInterval(time.Second),
+		)
 
-		var msg *redis.Message
-		Eventually(ch).Should(Receive(&msg))
-		Expect(msg.Channel).To(Equal("mychannel"))
-		Expect(msg.Payload).To(Equal(text))
+		var shard int64
+		{
+			text := "should Fpublish test channel message"
+			shard = int64(utils.GetShard([]byte(text), 15))
+			ret, err := client.FPublish(ctx, "mychannel", text, -1).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ret).To(Equal([]int64{shard, 1}))
+
+			var msg *redis.Message
+			Eventually(ch).Should(Receive(&msg))
+			Expect(msg.Channel).To(Equal("mychannel"))
+			Expect(msg.Payload).To(Equal(text))
+		}
+
+		{
+			text := "should Fpublish test channel message1"
+			ret, err := client.FPublish(ctx, "mychannel", text, int64(shard)).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ret).To(Equal([]int64{shard, 2}))
+
+			var msg *redis.Message
+			Eventually(ch).Should(Receive(&msg))
+			Expect(msg.Channel).To(Equal("mychannel"))
+			Expect(msg.Payload).To(Equal(text))
+		}
+
+		{
+			newShard := int64(shard+1) % 16
+			text := "should Fpublish test channel message2"
+			ret, err := client.FPublish(ctx, "mychannel", text, newShard).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ret).To(Equal([]int64{newShard, 1}))
+
+			var msg *redis.Message
+			Eventually(ch).Should(Receive(&msg))
+			Expect(msg.Channel).To(Equal("mychannel"))
+			Expect(msg.Payload).To(Equal(text))
+		}
+
 	})
+
+	// FIt("should SubscribeWithPartiton", func() {
+	// 	// TODO: subscribe reconnect
+	// 	pubsub := client.SubscribeWithPartition(ctx, 5, redis.NoOffset, "channelsubpt")
+	// 	defer pubsub.Close()
+
+	// 	{
+	// 		msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
+	// 		Expect(err).NotTo(HaveOccurred())
+	// 		subscr := msgi.(*redis.Subscription)
+	// 		Expect(subscr.Kind).To(Equal("subscribe"))
+	// 		Expect(subscr.Channel).To(Equal("channelsubpt"))
+	// 		Expect(subscr.Count).To(Equal(1))
+	// 	}
+
+	// 	ch := pubsub.Channel(
+	// 		redis.WithChannelSize(10),
+	// 		redis.WithChannelHealthCheckInterval(time.Second),
+	// 	)
+
+	// 	{
+	// 		text := "should SubscribeWithPartiton test channel message"
+	// 		ret, err := client.FPublish(ctx, "channelsubpt", text, 4).Result()
+	// 		Expect(err).NotTo(HaveOccurred())
+	// 		Expect(ret).To(Equal([]int64{4, 1}))
+
+	// 		text1 := "should SubscribeWithPartiton test channel message1"
+	// 		ret, err = client.FPublish(ctx, "channelsubpt", text1, 5).Result()
+	// 		Expect(err).NotTo(HaveOccurred())
+	// 		Expect(ret).To(Equal([]int64{5, 1}))
+
+	// 		var msg *redis.Message
+	// 		Eventually(ch).Should(Receive(&msg))
+	// 		Expect(msg.Channel).To(Equal("channelsubpt"))
+	// 		Expect(msg.Payload).To(Equal(text1))
+	// 	}
+
+	// 	{
+	// 		text := "should SubscribeWithPartiton test channel message2"
+	// 		ret, err := client.FPublish(ctx, "channelsubpt", text, 5).Result()
+	// 		Expect(err).NotTo(HaveOccurred())
+	// 		Expect(ret).To(Equal([]int64{5, 2}))
+
+	// 		var msg *redis.Message
+	// 		Eventually(ch).Should(Receive(&msg))
+	// 		Expect(msg.Channel).To(Equal("channelsubpt"))
+	// 		Expect(msg.Payload).To(Equal(text))
+	// 	}
+	// })
 })

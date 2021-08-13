@@ -256,7 +256,7 @@ func (c *Command) AclHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) ListUsers() (map[string]*User, error) {
-	prefix := c.GetUserPrefix()
+	prefix := c.GetDataUserPrefix()
 
 	users := make(map[string]*User)
 	callback := func(key, value []byte) bool {
@@ -275,7 +275,7 @@ func (c *Command) ListUsers() (map[string]*User, error) {
 	return users, err
 }
 
-func (c *Command) GetUserPrefix() []byte {
+func (c *Command) GetDataUserPrefix() []byte {
 	return []byte{UserPrefix}
 }
 
