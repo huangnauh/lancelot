@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/patrickmn/go-cache"
+	"github.com/coocood/freecache"
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
@@ -46,7 +46,7 @@ type Command struct {
 	gcWait     *sync.WaitGroup
 	gcWorkers  int32
 	gcClosed   chan bool
-	cache      *cache.Cache
+	cache      *freecache.Cache
 }
 
 func NewCommand(cfg *config.Config) *Command {
@@ -60,7 +60,7 @@ func NewCommand(cfg *config.Config) *Command {
 		users:    make(map[string]*User),
 		gcClosed: make(chan bool),
 		gcWait:   &sync.WaitGroup{},
-		cache:    cache.New(cfg.Key.CursorExpiration, cfg.Key.CursorExpiration/2),
+		cache:    freecache.NewCache(cfg.CacheSize),
 	}
 	c.Root = c.rootUser()
 	c.users[c.Root.Name] = c.Root
@@ -87,10 +87,6 @@ func NewCommand(cfg *config.Config) *Command {
 		UNSUBSCRIBE_COMMAND: {
 			Func: c.unsubscribe,
 			ID:   508,
-		},
-		FSUBSCRIBE_COMMAND: {
-			Func: c.fsubscribe,
-			ID:   507,
 		},
 	}
 
@@ -291,6 +287,11 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:              255,
 			Type:            UnknownType,
 		},
+		FSUBSCRIBE_COMMAND: {
+			Func: c.FSubscribeHandle,
+			ID:   504,
+			Type: PubType,
+		},
 		PUBSUB_COMMAND: {
 			Func: c.PubSubHandle,
 			ID:   503,
@@ -298,7 +299,7 @@ func NewCommand(cfg *config.Config) *Command {
 		},
 		FPUBLISH_COMMAND: {
 			Func: c.FPublishHandle,
-			ID:   501,
+			ID:   502,
 			Type: PubType,
 		},
 		PUBLISH_COMMAND: {
@@ -352,6 +353,7 @@ func NewCommand(cfg *config.Config) *Command {
 func (c *Command) Shutdown(ctx context.Context) {
 	close(c.done)
 	c.luapool.Shutdown()
+	c.client.Close()
 	select {
 	case <-c.gcClosed:
 	case <-ctx.Done():
@@ -439,14 +441,14 @@ func (c *Command) watchLuaStatePool() {
 
 func (c *Command) GetCursor(cursor uint64) ([]byte, bool) {
 	key := fmt.Sprintf("c%d", cursor)
-	v, ok := c.cache.Get(key)
-	if !ok {
+	v, err := c.cache.Get(utils.S2B(key))
+	if err != nil {
 		return nil, false
 	}
-	return v.([]byte), true
+	return v, true
 }
 
 func (c *Command) SetCursor(cursor uint64, data []byte) {
 	key := fmt.Sprintf("c%d", cursor)
-	c.cache.Set(key, data, c.cfg.Key.CursorExpiration)
+	_ = c.cache.Set(utils.S2B(key), data, c.cfg.Key.CursorExpireSecond)
 }

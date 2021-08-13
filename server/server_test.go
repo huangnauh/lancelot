@@ -11,6 +11,7 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/server"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"go.uber.org/goleak"
 )
 
 var ser *server.Server
@@ -60,8 +61,28 @@ func TestMain(m *testing.M) {
 	}
 	go ser.RedisServe(redln)
 
-	exitVal := m.Run()
+	exitCode := m.Run()
 	ser.Shutdown(context.Background())
 	fmt.Println("server test end")
-	os.Exit(exitVal)
+	if exitCode == 0 {
+		if err := goleak.Find(
+			goleak.IgnoreTopFunction("github.com/pingcap/goleveldb/leveldb.(*DB).mpoolDrain"),
+			goleak.IgnoreTopFunction("github.com/pingcap/goleveldb/leveldb.(*DB).tCompaction"),
+			goleak.IgnoreTopFunction("github.com/pingcap/goleveldb/leveldb/util.(*BufferPool).drain"),
+			goleak.IgnoreTopFunction("github.com/pingcap/goleveldb/leveldb.(*DB).mCompaction"),
+			goleak.IgnoreTopFunction("github.com/pingcap/goleveldb/leveldb.(*DB).compactionError"),
+			goleak.IgnoreTopFunction("google.golang.org/grpc.(*ccBalancerWrapper).watcher"),
+			goleak.IgnoreTopFunction("google.golang.org/grpc.(*ccResolverWrapper).watcher"),
+			goleak.IgnoreTopFunction("google.golang.org/grpc.(*addrConn).createTransport"),
+			goleak.IgnoreTopFunction("google.golang.org/grpc.(*addrConn).resetTransport"),
+			goleak.IgnoreTopFunction("google.golang.org/grpc.(*Server).handleRawConn"),
+			goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"),
+			goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
+			goleak.IgnoreTopFunction("github.com/onsi/ginkgo/internal/specrunner.(*SpecRunner).registerForInterrupts"),
+		); err != nil {
+			fmt.Fprintf(os.Stderr, "goleak: Errors on successful test run: %v\n", err)
+			exitCode = 1
+		}
+	}
+	os.Exit(exitCode)
 }

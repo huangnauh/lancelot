@@ -13,7 +13,7 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-var _ = FDescribe("Commands", func() {
+var _ = Describe("Commands", func() {
 	ctx := context.TODO()
 	var client *redis.Client
 
@@ -566,53 +566,4 @@ var _ = FDescribe("Commands", func() {
 		}
 
 	})
-
-	// FIt("should SubscribeWithPartiton", func() {
-	// 	// TODO: subscribe reconnect
-	// 	pubsub := client.SubscribeWithPartition(ctx, 5, redis.NoOffset, "channelsubpt")
-	// 	defer pubsub.Close()
-
-	// 	{
-	// 		msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
-	// 		Expect(err).NotTo(HaveOccurred())
-	// 		subscr := msgi.(*redis.Subscription)
-	// 		Expect(subscr.Kind).To(Equal("subscribe"))
-	// 		Expect(subscr.Channel).To(Equal("channelsubpt"))
-	// 		Expect(subscr.Count).To(Equal(1))
-	// 	}
-
-	// 	ch := pubsub.Channel(
-	// 		redis.WithChannelSize(10),
-	// 		redis.WithChannelHealthCheckInterval(time.Second),
-	// 	)
-
-	// 	{
-	// 		text := "should SubscribeWithPartiton test channel message"
-	// 		ret, err := client.FPublish(ctx, "channelsubpt", text, 4).Result()
-	// 		Expect(err).NotTo(HaveOccurred())
-	// 		Expect(ret).To(Equal([]int64{4, 1}))
-
-	// 		text1 := "should SubscribeWithPartiton test channel message1"
-	// 		ret, err = client.FPublish(ctx, "channelsubpt", text1, 5).Result()
-	// 		Expect(err).NotTo(HaveOccurred())
-	// 		Expect(ret).To(Equal([]int64{5, 1}))
-
-	// 		var msg *redis.Message
-	// 		Eventually(ch).Should(Receive(&msg))
-	// 		Expect(msg.Channel).To(Equal("channelsubpt"))
-	// 		Expect(msg.Payload).To(Equal(text1))
-	// 	}
-
-	// 	{
-	// 		text := "should SubscribeWithPartiton test channel message2"
-	// 		ret, err := client.FPublish(ctx, "channelsubpt", text, 5).Result()
-	// 		Expect(err).NotTo(HaveOccurred())
-	// 		Expect(ret).To(Equal([]int64{5, 2}))
-
-	// 		var msg *redis.Message
-	// 		Eventually(ch).Should(Receive(&msg))
-	// 		Expect(msg.Channel).To(Equal("channelsubpt"))
-	// 		Expect(msg.Payload).To(Equal(text))
-	// 	}
-	// })
 })

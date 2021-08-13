@@ -52,6 +52,7 @@ var (
 	// KeyTimeOut           = errors.New("key time out")
 
 	InvalidOffset = errors.New("invalid offset")
+	InvalidLimit  = errors.New("invalid limit")
 	ErrClosed     = errors.New("closed")
 )
 

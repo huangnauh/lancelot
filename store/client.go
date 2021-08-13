@@ -114,6 +114,9 @@ func (c *Client) NewTxn() *Txn {
 func (c *Client) Close() {
 	c.manager.Cancel()
 	c.store.Close()
+	if c.etcd != nil {
+		c.etcd.Close()
+	}
 }
 
 func (c *Client) CurrentVersion() (uint64, error) {

@@ -21,9 +21,11 @@ const (
 	DefaultTTL       = 30 * 60 * 1000 // 30 minutes
 	PubSubDB   uint8 = 200
 
-	NoOffset     int64 = -1
-	ALLPartition int64 = -1
-	PUBSUB_HELP        = "PUBSUB HELP"
+	NoOffset                 int64 = -1
+	ALLPartition             int64 = -1
+	DefaultLIMITPerPartition       = 100
+	MaxLimitPerPartition           = 1000
+	PUBSUB_HELP                    = "PUBSUB HELP"
 )
 
 func encodeMessageKeyPrefix(hash uint16) []byte {
@@ -316,31 +318,113 @@ func getPartition(arg []byte) (int64, error) {
 	return partition, nil
 }
 
-// FSUBSCRIBE partition offset channel [channel ...]
-func (c *Command) fsubscribe(conn *redcon.Conn, cmd redcon.Command) {
-	if len(cmd.Args) < 4 {
-		conn.WriteError(xerror.WrongArgsString(FSUBSCRIBE_COMMAND))
-		return
+type FSubOpt struct {
+	offset int64
+	limit  int
+}
+
+func checkFSub(args [][]byte) (FSubOpt, error) {
+	opt := FSubOpt{
+		offset: NoOffset,
+		limit:  100,
+	}
+	for i := 1; i < len(args); i += 2 {
+		str := strings.ToLower(utils.B2S(args[i]))
+		switch str {
+		case "offset":
+			offset, err := utils.GetNonnegativeInt64(args[i+1])
+			if err != nil {
+				return opt, xerror.InvalidOffset
+			}
+			opt.offset = offset
+		case "limit":
+			limit, err := utils.GetPositiveInt(args[i+1])
+			if err != nil {
+				return opt, xerror.InvalidLimit
+			}
+			opt.limit = limit
+		}
+	}
+	return opt, nil
+}
+
+type Message struct {
+	Millisecond int64
+	Value       []byte
+	Offset      int64
+}
+
+// FSUBSCRIBE channel partition [OFFSET offset] [LIMIT limit]
+func (c *Command) FSubscribeHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 2 || len(args)%2 != 0 {
+		return txn.SetError(xerror.WrongArgsError(FSUBSCRIBE_COMMAND))
 	}
 
-	partition, err := getPartition(cmd.Args[1])
+	pt, err := utils.GetNonnegativeInt64(args[1])
 	if err != nil {
-		conn.WriteError(err.Error())
-		return
+		return txn.SetError(xerror.InvalidPartition)
 	}
+	partition := uint16(pt)
 
-	if partition < 0 {
-		partition = ALLPartition
-	}
-
-	offset, err := utils.GetNonnegativeInt64(cmd.Args[2])
+	opt, err := checkFSub(args[1:])
 	if err != nil {
-		conn.WriteError(err.Error())
-		return
+		return txn.SetError(err)
 	}
-	utils.ZapLog.Debug("fsubscribe", zap.String("remote", conn.RemoteAddr()),
-		zap.ByteStrings("args", cmd.Args))
-	c._subscribe(conn, cmd.Args[2:], partition, offset, true)
+	channel := args[0]
+	object := NewObject(txn.UserId, PubSubDB, PubType, channel)
+	key := object.GetKeyBytes()
+	err = getTxnObject(txn, key, object, true)
+	if err == store.KeyNotFound {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if partition > object.Hash {
+		return txn.SetError(xerror.InvalidPartition)
+	}
+
+	prefix := object.GetValueBytesPrefix(encodeMessageKeyPrefix(partition))
+	var start []byte
+	if opt.offset == NoOffset {
+		start = prefix
+	} else {
+		start = object.GetValueBytesPrefix(encodeMessageKeyOffset(partition, opt.offset))
+	}
+	end := utils.PrefixNext(prefix)
+	var lastKey []byte
+	count := 0
+
+	messages := make([][]interface{}, 0)
+	callback := func(key, value []byte) bool {
+		lastKey = key
+		count++
+		timestamp, message, err := decodeMessageValue(value)
+		if err != nil {
+			return true
+		}
+		if len(key) <= len(prefix) {
+			return true
+		}
+		newOffset, err := decodeMessageKey(key[len(prefix):])
+		if err != nil {
+			return true
+		}
+		messages = append(messages, []interface{}{message, timestamp, newOffset})
+		return true
+	}
+	err = txn.List(start, end, opt.limit, callback)
+	if lastKey != nil {
+		lastKey = utils.NextKey(lastKey)
+		utils.ZapLog.Debug("FSUBSCRIBE", zap.ByteString("channel", channel),
+			zap.Uint16("partition", partition), zap.Int("count", count), zap.ByteString("next", lastKey))
+	}
+	if err != nil {
+		return txn.SetError(err)
+	}
+	if len(messages) == 0 {
+		return nil
+	}
+	return messages
 }
 
 // SUBSCRIBE channel [channel ...] [PT partition] [OFFSET offset]
@@ -406,10 +490,6 @@ func (c *Command) _subscribe(conn *redcon.Conn, args [][]byte, partition int64, 
 	go ps.sendMessage()
 	go c.runDetached(ps)
 	go c.Pull(ps, needOffset)
-}
-
-// FUNSUBSCRIBE partition offset channel [channel ...]
-func (c *Command) funsubscribe(conn *redcon.Conn, cmd redcon.Command) {
 }
 
 // UNSUBSCRIBE channel [channel ...]

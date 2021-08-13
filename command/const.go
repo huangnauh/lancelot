@@ -80,6 +80,7 @@ const (
 	EXISTS_COMMAND      = "exists"
 	KILL_COMMAND        = "kill"
 	AUTH_COMMAND        = "auth"
+	SELECT_COMMAND      = "select"
 	FLUSHALL_COMMAND    = "flushall"
 	FLUSHDB_COMMAND     = "flushdb"
 	ACL_COMMAND         = "acl"

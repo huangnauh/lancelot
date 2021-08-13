@@ -38,8 +38,8 @@ type Auth struct {
 }
 
 type Key struct {
-	ScanMaxCount     int           `yaml:"scan-max-count"`
-	CursorExpiration time.Duration `yaml:"cursor-expiration"`
+	ScanMaxCount       int `yaml:"scan-max-count"`
+	CursorExpireSecond int `yaml:"cursor-expirate-second"`
 }
 
 type Rpc struct {
@@ -63,6 +63,7 @@ type Config struct {
 	RedisPort int    `yaml:"redis-port"`
 	HttpPort  int    `yaml:"http-port"`
 	RpcPort   int    `yaml:"rpc-port"`
+	CacheSize int    `yaml:"cache-size"`
 	Store     Store  `yaml:"store"`
 	GC        GC     `yaml:"gc"`
 	Lua       Lua    `yaml:"lua"`
@@ -78,6 +79,7 @@ var cfg = &Config{
 	RedisPort: 6379,
 	HttpPort:  6380,
 	RpcPort:   6381,
+	CacheSize: 10 * 1024 * 1024,
 	Store: Store{
 		Path:               "mocktikv://",
 		Level:              "debug",
@@ -108,8 +110,8 @@ var cfg = &Config{
 		MaxDBPerUser:        64,
 	},
 	Key: Key{
-		ScanMaxCount:     10000,
-		CursorExpiration: time.Hour,
+		ScanMaxCount:       10000,
+		CursorExpireSecond: 10 * 60,
 	},
 }
 

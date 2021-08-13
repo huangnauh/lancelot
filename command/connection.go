@@ -40,3 +40,18 @@ func (c *Command) AuthHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	return txn.SetError(xerror.WRONGPASS)
 }
+
+// (connection) SELECT index
+func (c *Command) SelectHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongArgs(SELECT_COMMAND)
+	}
+
+	index, err := utils.GetNonnegativeInt64(args[0])
+	if err != nil {
+		return txn.SetError(xerror.ErrNotInteger)
+	}
+
+	txn.DBId = uint8(index)
+	return OK
+}
