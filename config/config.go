@@ -56,6 +56,10 @@ type GC struct {
 	PubChannelExpire time.Duration `yaml:"pub-channel-expire"`
 }
 
+type PubSub struct {
+	MaxSlowMessagePerSubscribe int `yaml:"max-slow-message-per-subscribe"`
+}
+
 type Config struct {
 	LogLevel  string `yaml:"log-level"`
 	PIDFile   string `yaml:"pid-file"`
@@ -70,6 +74,7 @@ type Config struct {
 	Auth      Auth   `yaml:"auth"`
 	Key       Key    `yaml:"key"`
 	Rpc       Rpc    `yaml:"rpc"`
+	PubSub    PubSub `yaml:"pubsub"`
 }
 
 var cfg = &Config{
@@ -112,6 +117,14 @@ var cfg = &Config{
 	Key: Key{
 		ScanMaxCount:       10000,
 		CursorExpireSecond: 10 * 60,
+	},
+	Rpc: Rpc{
+		Timeout:    time.Second * 10,
+		MaxStream:  1000,
+		MaxMsgSize: 1024 * 1024,
+	},
+	PubSub: PubSub{
+		MaxSlowMessagePerSubscribe: 1000,
 	},
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/coocood/freecache"
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
+	"gitlab.s.upyun.com/platform/lancelot/member"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -46,6 +47,8 @@ type Command struct {
 	gcWait     *sync.WaitGroup
 	gcWorkers  int32
 	gcClosed   chan bool
+	psManager  *PsManager
+	memberlist *member.MemberList
 	cache      *freecache.Cache
 }
 
@@ -81,12 +84,20 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:   510,
 		},
 		SUBSCRIBE_COMMAND: {
-			Func: c.subscribe,
+			Func: c.SubscribeHandle,
 			ID:   509,
 		},
-		UNSUBSCRIBE_COMMAND: {
-			Func: c.unsubscribe,
+		PSUBSCRIBE_COMMAND: {
+			Func: c.PSubscribeHandle,
 			ID:   508,
+		},
+		UNSUBSCRIBE_COMMAND: {
+			Func: c.UnsubscribeHandle,
+			ID:   507,
+		},
+		PUNSUBSCRIBE_COMMAND: {
+			Func: c.PUnsubscribeHandle,
+			ID:   506,
 		},
 	}
 
@@ -377,6 +388,9 @@ func NewCommand(cfg *config.Config) *Command {
 
 func (c *Command) Shutdown(ctx context.Context) {
 	close(c.done)
+	if c.memberlist != nil {
+		c.memberlist.Close()
+	}
 	c.luapool.Shutdown()
 	c.client.Close()
 	select {
@@ -391,6 +405,15 @@ func (c *Command) Start() error {
 	if err != nil {
 		return err
 	}
+	etcdCtl := c.client.GetEtcdCtl()
+	if etcdCtl != nil {
+		c.memberlist = member.NewMemberList(etcdCtl, fmt.Sprintf("%s:%d", c.cfg.Host, c.cfg.RpcPort))
+		err = c.memberlist.Start()
+		if err != nil {
+			return err
+		}
+	}
+	c.psManager = NewPsManager(&c.cfg.PubSub, c.memberlist)
 
 	go c.watchLuaStatePool()
 	go c.watchUser()

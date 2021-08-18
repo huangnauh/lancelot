@@ -6,14 +6,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-redis/redis/v8"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
-
-	"github.com/go-redis/redis/v8"
 )
 
-var _ = Describe("Commands", func() {
+var _ = FDescribe("PubSub", func() {
 	ctx := context.TODO()
 	var client *redis.Client
 
@@ -26,78 +25,103 @@ var _ = Describe("Commands", func() {
 		Expect(client.Close()).NotTo(HaveOccurred())
 	})
 
-	// It("should support pattern matching", func() {
-	// 	pubsub := client.PSubscribe(ctx, "mychannel*")
-	// 	defer pubsub.Close()
+	It("implements Stringer", func() {
+		pubsub := client.PSubscribe(ctx, "mychannel*")
+		defer pubsub.Close()
 
-	// 	{
-	// 		msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
-	// 		Expect(err).NotTo(HaveOccurred())
-	// 		subscr := msgi.(*redis.Subscription)
-	// 		Expect(subscr.Kind).To(Equal("psubscribe"))
-	// 		Expect(subscr.Channel).To(Equal("mychannel*"))
-	// 		Expect(subscr.Count).To(Equal(1))
-	// 	}
+		Expect(pubsub.String()).To(Equal("PubSub(mychannel*)"))
+	})
 
-	// 	{
-	// 		msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
-	// 		Expect(err.(net.Error).Timeout()).To(Equal(true))
-	// 		Expect(msgi).To(BeNil())
-	// 	}
+	It("should support pattern matching", func() {
+		pubsub := client.PSubscribe(ctx, "mychannel*")
+		defer pubsub.Close()
 
-	// 	n, err := client.Publish(ctx, "mychannel1", "hello").Result()
-	// 	Expect(err).NotTo(HaveOccurred())
-	// 	Expect(n).To(Equal(int64(1)))
+		{
+			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
+			Expect(err).NotTo(HaveOccurred())
+			subscr := msgi.(*redis.Subscription)
+			Expect(subscr.Kind).To(Equal("psubscribe"))
+			Expect(subscr.Channel).To(Equal("mychannel*"))
+			Expect(subscr.Count).To(Equal(1))
+		}
 
-	// 	Expect(pubsub.PUnsubscribe(ctx, "mychannel*")).NotTo(HaveOccurred())
+		{
+			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
+			Expect(err.(net.Error).Timeout()).To(Equal(true))
+			Expect(msgi).To(BeNil())
+		}
 
-	// 	{
-	// 		msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
-	// 		Expect(err).NotTo(HaveOccurred())
-	// 		subscr := msgi.(*redis.Message)
-	// 		Expect(subscr.Channel).To(Equal("mychannel1"))
-	// 		Expect(subscr.Pattern).To(Equal("mychannel*"))
-	// 		Expect(subscr.Payload).To(Equal("hello"))
-	// 	}
+		n, err := client.Publish(ctx, "mychannel1", "hello").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(n).To(Equal(int64(1)))
 
-	// 	{
-	// 		msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
-	// 		Expect(err).NotTo(HaveOccurred())
-	// 		subscr := msgi.(*redis.Subscription)
-	// 		Expect(subscr.Kind).To(Equal("punsubscribe"))
-	// 		Expect(subscr.Channel).To(Equal("mychannel*"))
-	// 		Expect(subscr.Count).To(Equal(0))
-	// 	}
+		Expect(pubsub.PUnsubscribe(ctx, "mychannel*")).NotTo(HaveOccurred())
 
-	// 	stats := client.PoolStats()
-	// 	Expect(stats.Misses).To(Equal(uint32(1)))
-	// })
+		{
+			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
+			Expect(err).NotTo(HaveOccurred())
+			subscr := msgi.(*redis.Message)
+			Expect(subscr.Channel).To(Equal("mychannel1"))
+			Expect(subscr.Pattern).To(Equal("mychannel*"))
+			Expect(subscr.Payload).To(Equal("hello"))
+		}
 
-	// It("should pub/sub channels", func() {
-	// 	channels, err := client.PubSubChannels(ctx, "mychannel*").Result()
-	// 	Expect(err).NotTo(HaveOccurred())
-	// 	Expect(channels).To(BeEmpty())
+		{
+			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
+			Expect(err).NotTo(HaveOccurred())
+			subscr := msgi.(*redis.Subscription)
+			Expect(subscr.Kind).To(Equal("punsubscribe"))
+			Expect(subscr.Channel).To(Equal("mychannel*"))
+			Expect(subscr.Count).To(Equal(0))
+		}
 
-	// 	pubsub := client.Subscribe(ctx, "mychannel", "mychannel2")
-	// 	defer pubsub.Close()
+		stats := client.PoolStats()
+		Expect(stats.Misses).To(Equal(uint32(1)))
+	})
 
-	// 	channels, err = client.PubSubChannels(ctx, "mychannel*").Result()
-	// 	Expect(err).NotTo(HaveOccurred())
-	// 	Expect(channels).To(ConsistOf([]string{"mychannel", "mychannel2"}))
+	It("should pub/sub channels", func() {
+		channels, err := client.PubSubChannels(ctx, "mychannel*").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(channels).To(BeEmpty())
 
-	// 	channels, err = client.PubSubChannels(ctx, "").Result()
-	// 	Expect(err).NotTo(HaveOccurred())
-	// 	Expect(channels).To(BeEmpty())
+		pubsub := client.Subscribe(ctx, "mychannel", "mychannel2")
+		defer pubsub.Close()
 
-	// 	channels, err = client.PubSubChannels(ctx, "*").Result()
-	// 	Expect(err).NotTo(HaveOccurred())
-	// 	Expect(len(channels)).To(BeNumerically(">=", 2))
-	// })
+		{
+			subscr, err := pubsub.ReceiveTimeout(ctx, time.Second)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(subscr).To(Equal(&redis.Subscription{
+				Kind:    "subscribe",
+				Channel: "mychannel",
+				Count:   1,
+			}))
+		}
+		{
+			subscr, err := pubsub.ReceiveTimeout(ctx, time.Second)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(subscr).To(Equal(&redis.Subscription{
+				Kind:    "subscribe",
+				Channel: "mychannel2",
+				Count:   2,
+			}))
+		}
+
+		channels, err = client.PubSubChannels(ctx, "mychannel*").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(channels).To(ConsistOf([]string{"mychannel", "mychannel2"}))
+
+		channels, err = client.PubSubChannels(ctx, "").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(channels).To(BeEmpty())
+
+		channels, err = client.PubSubChannels(ctx, "*").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(channels)).To(BeNumerically(">=", 2))
+	})
 
 	It("should return the numbers of subscribers", func() {
 		pubsub := client.Subscribe(ctx, "mychannel", "mychannel2")
 		defer pubsub.Close()
-		time.Sleep(100 * time.Millisecond)
 
 		channels, err := client.PubSubNumSub(ctx, "mychannel", "mychannel2", "mychannel3").Result()
 		Expect(err).NotTo(HaveOccurred())
@@ -108,18 +132,26 @@ var _ = Describe("Commands", func() {
 		}))
 	})
 
-	// It("should return the numbers of subscribers by pattern", func() {
-	// 	num, err := client.PubSubNumPat(ctx).Result()
-	// 	Expect(err).NotTo(HaveOccurred())
-	// 	Expect(num).To(Equal(int64(0)))
+	It("should return the numbers of subscribers by pattern", func() {
+		num, err := client.PubSubNumPat(ctx).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(num).To(Equal(int64(0)))
 
-	// 	pubsub := client.PSubscribe(ctx, "*")
-	// 	defer pubsub.Close()
+		pubsub := client.PSubscribe(ctx, "*")
+		defer pubsub.Close()
+		{
+			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
+			Expect(err).NotTo(HaveOccurred())
+			subscr := msgi.(*redis.Subscription)
+			Expect(subscr.Kind).To(Equal("psubscribe"))
+			Expect(subscr.Channel).To(Equal("*"))
+			Expect(subscr.Count).To(Equal(1))
+		}
 
-	// 	num, err = client.PubSubNumPat(ctx).Result()
-	// 	Expect(err).NotTo(HaveOccurred())
-	// 	Expect(num).To(Equal(int64(1)))
-	// })
+		num, err = client.PubSubNumPat(ctx).Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(num).To(Equal(int64(1)))
+	})
 
 	It("should pub/sub", func() {
 		pubsub := client.Subscribe(ctx, "mychannel", "mychannel2")
@@ -157,28 +189,23 @@ var _ = Describe("Commands", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(n).To(Equal(int64(1)))
 
-		var res map[string]string = map[string]string{
-			"mychannel":  "hello",
-			"mychannel2": "hello2",
-		}
-
-		{
-			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
-			Expect(err).NotTo(HaveOccurred())
-			msg := msgi.(*redis.Message)
-			Expect(res).Should(HaveKeyWithValue(msg.Channel, msg.Payload))
-			delete(res, msg.Channel)
-		}
-
-		{
-			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
-			Expect(err).NotTo(HaveOccurred())
-			msg := msgi.(*redis.Message)
-			Expect(res).Should(HaveKeyWithValue(msg.Channel, msg.Payload))
-			delete(res, msg.Channel)
-		}
-
 		Expect(pubsub.Unsubscribe(ctx, "mychannel", "mychannel2")).NotTo(HaveOccurred())
+
+		{
+			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
+			Expect(err).NotTo(HaveOccurred())
+			msg := msgi.(*redis.Message)
+			Expect(msg.Channel).To(Equal("mychannel"))
+			Expect(msg.Payload).To(Equal("hello"))
+		}
+
+		{
+			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
+			Expect(err).NotTo(HaveOccurred())
+			msg := msgi.(*redis.Message)
+			Expect(msg.Channel).To(Equal("mychannel2"))
+			Expect(msg.Payload).To(Equal("hello2"))
+		}
 
 		{
 			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
@@ -252,21 +279,15 @@ var _ = Describe("Commands", func() {
 		err = client.Publish(ctx, "mychannel", "world").Err()
 		Expect(err).NotTo(HaveOccurred())
 
-		var res map[string]bool = map[string]bool{
-			"hello": true,
-			"world": true,
-		}
 		msg, err := pubsub.ReceiveMessage(ctx)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(msg.Channel).To(Equal("mychannel"))
-		Expect(res).Should(HaveKey(msg.Payload))
-		delete(res, msg.Payload)
+		Expect(msg.Payload).To(Equal("hello"))
 
 		msg, err = pubsub.ReceiveMessage(ctx)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(msg.Channel).To(Equal("mychannel"))
-		Expect(res).Should(HaveKey(msg.Payload))
-		delete(res, msg.Payload)
+		Expect(msg.Payload).To(Equal("world"))
 	})
 
 	// It("returns an error when subscribe fails", func() {
@@ -314,20 +335,20 @@ var _ = Describe("Commands", func() {
 	// 	Eventually(step).Should(Receive())
 	// }
 
-	It("Subscribe should reconnect on ReceiveMessage error", func() {
-		pubsub := client.Subscribe(ctx, "mychannel")
-		defer pubsub.Close()
+	// It("Subscribe should reconnect on ReceiveMessage error", func() {
+	// 	pubsub := client.Subscribe(ctx, "mychannel")
+	// 	defer pubsub.Close()
 
-		subscr, err := pubsub.ReceiveTimeout(ctx, time.Second)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(subscr).To(Equal(&redis.Subscription{
-			Kind:    "subscribe",
-			Channel: "mychannel",
-			Count:   1,
-		}))
+	// 	subscr, err := pubsub.ReceiveTimeout(ctx, time.Second)
+	// 	Expect(err).NotTo(HaveOccurred())
+	// 	Expect(subscr).To(Equal(&redis.Subscription{
+	// 		Kind:    "subscribe",
+	// 		Channel: "mychannel",
+	// 		Count:   1,
+	// 	}))
 
-		// expectReceiveMessageOnError(pubsub)
-	})
+	// 	expectReceiveMessageOnError(pubsub)
+	// })
 
 	// It("PSubscribe should reconnect on ReceiveMessage error", func() {
 	// 	pubsub := client.PSubscribe(ctx, "mychannel")
@@ -404,26 +425,18 @@ var _ = Describe("Commands", func() {
 	})
 
 	It("handles big message payload", func() {
-		pubsub := client.Subscribe(ctx, "mybig")
+		pubsub := client.Subscribe(ctx, "mychannel")
 		defer pubsub.Close()
 
-		{
-			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
-			Expect(err).NotTo(HaveOccurred())
-			subscr := msgi.(*redis.Subscription)
-			Expect(subscr.Kind).To(Equal("subscribe"))
-			Expect(subscr.Channel).To(Equal("mybig"))
-			Expect(subscr.Count).To(Equal(1))
-		}
-
 		ch := pubsub.Channel()
+
 		bigVal := bigVal()
-		err := client.Publish(ctx, "mybig", bigVal).Err()
+		err := client.Publish(ctx, "mychannel", bigVal).Err()
 		Expect(err).NotTo(HaveOccurred())
 
 		var msg *redis.Message
 		Eventually(ch).Should(Receive(&msg))
-		Expect(msg.Channel).To(Equal("mybig"))
+		Expect(msg.Channel).To(Equal("mychannel"))
 		Expect(msg.Payload).To(Equal(string(bigVal)))
 	})
 
@@ -484,86 +497,18 @@ var _ = Describe("Commands", func() {
 		pubsub := client.Subscribe(ctx, "mychannel")
 		defer pubsub.Close()
 
-		{
-			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
-			Expect(err).NotTo(HaveOccurred())
-			subscr := msgi.(*redis.Subscription)
-			Expect(subscr.Kind).To(Equal("subscribe"))
-			Expect(subscr.Channel).To(Equal("mychannel"))
-			Expect(subscr.Count).To(Equal(1))
-		}
-
-		ch := pubsub.Channel(
-			redis.WithChannelSize(10),
-			redis.WithChannelHealthCheckInterval(100*time.Millisecond),
-		)
-
-		text := "should Channel Message test channel message"
-		err := client.Publish(ctx, "mychannel", text).Err()
-		Expect(err).NotTo(HaveOccurred())
-
-		var msg *redis.Message
-		Eventually(ch, 2*time.Second).Should(Receive(&msg))
-		Expect(msg.Channel).To(Equal("mychannel"))
-		Expect(msg.Payload).To(Equal(text))
-	})
-
-	It("should Fpublish", func() {
-		pubsub := client.Subscribe(ctx, "mychannel")
-		defer pubsub.Close()
-
-		{
-			msgi, err := pubsub.ReceiveTimeout(ctx, time.Second)
-			Expect(err).NotTo(HaveOccurred())
-			subscr := msgi.(*redis.Subscription)
-			Expect(subscr.Kind).To(Equal("subscribe"))
-			Expect(subscr.Channel).To(Equal("mychannel"))
-			Expect(subscr.Count).To(Equal(1))
-		}
-
 		ch := pubsub.Channel(
 			redis.WithChannelSize(10),
 			redis.WithChannelHealthCheckInterval(time.Second),
 		)
 
-		var shard int64
-		{
-			text := "should Fpublish test channel message"
-			shard = int64(utils.GetShard([]byte(text), 15))
-			ret, err := client.FPublish(ctx, "mychannel", text, -1).Result()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ret).To(Equal([]int64{shard, 1}))
+		text := "test channel message"
+		err := client.Publish(ctx, "mychannel", text).Err()
+		Expect(err).NotTo(HaveOccurred())
 
-			var msg *redis.Message
-			Eventually(ch).Should(Receive(&msg))
-			Expect(msg.Channel).To(Equal("mychannel"))
-			Expect(msg.Payload).To(Equal(text))
-		}
-
-		{
-			text := "should Fpublish test channel message1"
-			ret, err := client.FPublish(ctx, "mychannel", text, int64(shard)).Result()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ret).To(Equal([]int64{shard, 2}))
-
-			var msg *redis.Message
-			Eventually(ch).Should(Receive(&msg))
-			Expect(msg.Channel).To(Equal("mychannel"))
-			Expect(msg.Payload).To(Equal(text))
-		}
-
-		{
-			newShard := int64(shard+1) % 16
-			text := "should Fpublish test channel message2"
-			ret, err := client.FPublish(ctx, "mychannel", text, newShard).Result()
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ret).To(Equal([]int64{newShard, 1}))
-
-			var msg *redis.Message
-			Eventually(ch).Should(Receive(&msg))
-			Expect(msg.Channel).To(Equal("mychannel"))
-			Expect(msg.Payload).To(Equal(text))
-		}
-
+		var msg *redis.Message
+		Eventually(ch).Should(Receive(&msg))
+		Expect(msg.Channel).To(Equal("mychannel"))
+		Expect(msg.Payload).To(Equal(text))
 	})
 })

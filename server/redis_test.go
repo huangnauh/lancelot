@@ -42,23 +42,6 @@ func bigVal() []byte {
 	return bytes.Repeat([]byte{'*'}, 128*1024)
 }
 
-func PSetNX(ctx context.Context, client *redis.Client, key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
-	cmd := redis.NewStatusCmd(ctx, "psetex", key, formatMs(expiration), value)
-	_ = client.Process(ctx, cmd)
-	return cmd
-}
-
-func Fpublish(ctx context.Context, client *redis.Client, channel string, message interface{}, partition int64) *redis.IntSliceCmd {
-	var cmd *redis.IntSliceCmd
-	if partition < 0 {
-		cmd = redis.NewIntSliceCmd(ctx, "fpublish", channel, message)
-	} else {
-		cmd = redis.NewIntSliceCmd(ctx, "fpublish", channel, message, "PT", partition)
-	}
-	_ = client.Process(ctx, cmd)
-	return cmd
-}
-
 var _ = Describe("Commands", func() {
 	ctx := context.TODO()
 	var client *redis.Client
@@ -874,7 +857,7 @@ var _ = Describe("Commands", func() {
 		})
 	})
 
-	FDescribe("string bit", func() {
+	Describe("string bit", func() {
 		It("should BitCount", func() {
 			set := client.Set(ctx, "key", "foobar", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
@@ -1557,17 +1540,24 @@ var _ = Describe("Commands", func() {
 			}, "2s", "100ms").Should(Equal(redis.Nil))
 		})
 
-		It("should PSetEX", func() {
-			err := client.PSetEX(ctx, "key", "hello", 100*time.Millisecond).Err()
+		It("should PSetEx", func() {
+			err := client.PSetEx(ctx, "key", "hello", 100*time.Millisecond).Err()
 			Expect(err).NotTo(HaveOccurred())
 
 			val, err := client.Get(ctx, "key").Result()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(val).To(Equal("hello"))
 
+			Eventually(func() string {
+				val, err := client.Get(ctx, "key").Result()
+				Expect(err).NotTo(HaveOccurred())
+				return val
+			}, "10ms").Should(Equal("hello"))
+
 			Eventually(func() error {
-				return client.Get(ctx, "foo").Err()
-			}, "200ms", "10ms").Should(Equal(redis.Nil))
+				return client.Get(ctx, "key").Err()
+			}, "200ms").Should(Equal(redis.Nil))
+
 		})
 
 		It("should SetNX", func() {

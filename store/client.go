@@ -3,7 +3,6 @@ package store
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -28,11 +27,10 @@ import (
 )
 
 type Client struct {
-	store   kv.Storage
-	etcd    *clientv3.Client
-	manager *Manager
-	conf    *config.Store
-	mock    bool
+	store kv.Storage
+	etcd  *clientv3.Client
+	conf  *config.Store
+	mock  bool
 }
 
 func Open(c *config.Config) (*Client, error) {
@@ -49,8 +47,7 @@ func Open(c *config.Config) (*Client, error) {
 			utils.ZapLog.Error("mocktikv driver open", zap.Error(err))
 			return nil, err
 		}
-		manager := NewManager(nil, fmt.Sprintf("%s:%d", c.Host, c.RpcPort), "")
-		return &Client{s, nil, manager, conf, true}, nil
+		return &Client{s, nil, conf, true}, nil
 	}
 
 	driver := tikv.Driver{}
@@ -97,13 +94,6 @@ func Open(c *config.Config) (*Client, error) {
 			client.etcd = cli
 		}
 	}
-
-	client.manager = NewManager(client.etcd,
-		fmt.Sprintf("%s:%d", c.Host, c.RpcPort), ManagerKey)
-	err = client.manager.runElection()
-	if err != nil {
-		return nil, err
-	}
 	return client, nil
 }
 
@@ -111,8 +101,11 @@ func (c *Client) NewTxn() *Txn {
 	return &Txn{client: c}
 }
 
+func (c *Client) GetEtcdCtl() *clientv3.Client {
+	return c.etcd
+}
+
 func (c *Client) Close() {
-	c.manager.Cancel()
 	c.store.Close()
 	if c.etcd != nil {
 		c.etcd.Close()

@@ -201,29 +201,29 @@ func (c *Command) TryDeleteChannel(userID uint16, channel string, hash uint16, k
 	defer txn.Rollback()
 
 	var expire time.Time
-	count, err := c.GetCount(txn, userID, PubType, 0, utils.S2B(channel), nil)
-	if err != nil {
-		return
-	}
-	if count.Value > 0 {
-		return
-	}
+	// count, err := c.GetCount(txn, userID, PubType, 0, utils.S2B(channel), nil)
+	// if err != nil {
+	// 	return
+	// }
+	// if count.Value > 0 {
+	// 	return
+	// }
 
 	now := txn.NowTime()
-	timestamp := oracle.ExtractPhysical(count.Timestamp)
-	exist := time.Unix(timestamp/1e3, (timestamp%1e3)*1e6)
-	if now.Sub(exist) < c.cfg.GC.PubChannelExpire {
-		utils.ZapLog.Debug("[gc] not expire", zap.String("channel", channel),
-			zap.Time("exist", exist), zap.Time("now", now), zap.Int64("count", count.Value))
-		return
-	}
-	utils.ZapLog.Debug("[gc] channel expired", zap.String("channel", channel),
-		zap.Time("exist", exist), zap.Time("now", now), zap.Int64("count", count.Value))
+	// timestamp := oracle.ExtractPhysical(count.Timestamp)
+	// exist := time.Unix(timestamp/1e3, (timestamp%1e3)*1e6)
+	// if now.Sub(exist) < c.cfg.GC.PubChannelExpire {
+	// 	utils.ZapLog.Debug("[gc] not expire", zap.String("channel", channel),
+	// 		zap.Time("exist", exist), zap.Time("now", now), zap.Int64("count", count.Value))
+	// 	return
+	// }
+	// utils.ZapLog.Debug("[gc] channel expired", zap.String("channel", channel),
+	// 	zap.Time("exist", exist), zap.Time("now", now), zap.Int64("count", count.Value))
 
-	err = c.DeleteCount(txn, userID, PubType, 0, utils.S2B(channel), time.Time{})
-	if err != nil {
-		return
-	}
+	// err = c.DeleteCount(txn, userID, PubType, 0, utils.S2B(channel), time.Time{})
+	// if err != nil {
+	// 	return
+	// }
 
 	object := NewObject(userID, PubSubDB, PubType, utils.S2B(channel))
 	k := object.GetKeyBytes()

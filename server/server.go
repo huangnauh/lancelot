@@ -112,5 +112,5 @@ func (s *Server) Accept(conn *redcon.Conn) bool {
 }
 
 func (s *Server) Close(conn *redcon.Conn, err error) {
-	utils.ZapLog.Debug("Close", zap.String("remote", conn.RemoteAddr()))
+	utils.ZapLog.Debug("Close", zap.String("remote", conn.RemoteAddr()), zap.Error(err))
 }

@@ -107,31 +107,61 @@ func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) {
 			return
 		}
 	}
-	defer txn.Rollback()
 
 	// pennding
 	txn.Exec = true
-	ret := make([]interface{}, 0)
-	for _, cmd := range txn.PendingReq {
+	ret := make([]interface{}, len(txn.PendingReq))
+	var pubindex []int
+	var pubMessage []*PubSubMessage
+	for i, cmd := range txn.PendingReq {
 		command := strings.ToLower(utils.B2S(cmd.Args[0]))
 		txnHandler, ok := c.TxnHandle[command]
 		if !ok {
+			txn.Rollback()
 			conn.WriteError("ERR unknown command '" + command + "'")
 			return
 		}
 		resp := txnHandler.Func(txn, cmd.Args[1:])
 		if txn.Err != nil {
+			txn.Rollback()
 			writerConnError(conn, txn.Err)
 			return
 		}
-		ret = append(ret, resp)
+		if command == PUBLISH_COMMAND {
+			if pubindex == nil {
+				pubindex = []int{i}
+				pubMessage = []*PubSubMessage{resp.(*PubSubMessage)}
+			} else {
+				pubindex = append(pubindex, i)
+				pubMessage = append(pubMessage, resp.(*PubSubMessage))
+			}
+		} else {
+			ret[i] = resp
+		}
+	}
+
+	if len(pubMessage) > 0 {
+		err := c.psManager.WaitAlive()
+		if err != nil {
+			txn.Rollback()
+			writerConnError(conn, err)
+			return
+		}
 	}
 
 	// commit
 	err := txn.Commit()
 	if err != nil {
+		txn.Rollback()
 		writerConnError(conn, err)
 		return
+	}
+
+	if len(pubMessage) > 0 {
+		counts := c.psManager.PublishMessages(pubMessage)
+		for i, index := range pubindex {
+			ret[index] = counts[i]
+		}
 	}
 
 	// response

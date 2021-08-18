@@ -10,32 +10,44 @@ option (gogoproto.goproto_getters_all) = true;
 
 
 service Lance {
-    rpc Publush(stream PubRequest) returns (stream PubResponse);
-    rpc Subscribe(SubRequest) returns (stream SubResponse);
+    rpc Publish(PubRequest) returns (PubResponse);
+    rpc PSChannels(PSChannelsRequest) returns (PSChannelsResponse);
+    rpc PSNumSub(PSNumSubRequest) returns (PSNumSubResponse);
+    rpc PSNumPat(PSNumPatRequest) returns (PSNumPatResponse);
 }
 
-message PubSubMessage {
-    string name = 1;
-    repeated string message = 2;
+message PubRequestMessage {
+    string channel = 1;
+    repeated bytes messages = 2;
 }
 
-message PubRequest {
-    repeated PubSubMessage message = 1;
-}
-
-message Clients {
-    string name = 1;
-    int32 clients = 2;
+message PubRequest{
+    repeated PubRequestMessage messages = 1;
 }
 
 message PubResponse {
-    repeated Clients clients = 1;
+    repeated int64 counts = 1;
 }
 
-message SubRequest {
-    repeated string name = 1;
+message PSChannelsRequest {
+    string pattern = 1;
 }
 
-message SubResponse {
-    repeated PubSubMessage message = 1;
+message PSChannelsResponse {
+    repeated string channels = 1;
+}
+
+message PSNumSubRequest {
+    repeated string channels = 1;
+}
+
+message PSNumSubResponse {
+    repeated int64 counts = 1;
+}
+
+message PSNumPatRequest {
+}
+
+message PSNumPatResponse{
+    int64 count = 1;
 }

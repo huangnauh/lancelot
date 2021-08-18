@@ -1,9 +1,9 @@
 log-level: debug
 pid-file: redis.pid
 host: 0.0.0.0
-redis-port: 6379
-http-port: 6380
-rpc-port: 6381
+redis-port: 63791
+http-port: 63801
+rpc-port: 63811
 cache-size: 10485760
 store:
   path: tikv://10.0.5.89:2379
