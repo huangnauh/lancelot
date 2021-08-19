@@ -366,7 +366,7 @@ func (c *Command) BitFieldHandle(txn *store.Txn, args [][]byte) interface{} {
 		bfs = append(bfs, bf)
 	}
 	if len(bfs) == 0 {
-		return []interface{}{}
+		return []struct{}{}
 	}
 
 	// TODO: BITFIELD

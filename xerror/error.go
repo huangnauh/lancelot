@@ -35,6 +35,8 @@ var (
 	WrongNumberOfArgs = errors.New("wrong number of arguments")
 
 	ErrValueTooShort       = errors.New("ERR value is too short")
+	ErrKeyTooLong          = errors.New("ERR key is too long")
+	ErrValueTooLong        = errors.New("ERR value is too long")
 	ErrNotTTL              = errors.New("ERR value is not ttl")
 	ErrTTLInvalidValueType = errors.New("ERR ttl invalid value type")
 
@@ -52,6 +54,8 @@ var (
 	InvalidChannel             = errors.New("invalid channel name")
 	InvalidPartition           = errors.New("invalid partition")
 	TimeOut                    = errors.New("time out")
+	ErrXADDID                  = errors.New("The ID specified in XADD is equal or smaller than the target stream top item")
+	InvalidStreamID            = errors.New("Invalid stream ID specified as stream command argument")
 
 	InvalidOffset = errors.New("invalid offset")
 	InvalidLimit  = errors.New("invalid limit")

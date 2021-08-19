@@ -26,7 +26,7 @@ const (
 	CountType   ObjectType = 'c'
 	UnknownType ObjectType = '?'
 	GeneralType ObjectType = '*'
-	PubType     ObjectType = 'p'
+	StreamType  ObjectType = 'p'
 	MessageType ObjectType = 'm'
 
 	KeyTTL   TTL = 'k'
@@ -179,7 +179,7 @@ func (o *Object) IsSimple() bool {
 }
 
 func (o *Object) TTLType() TTL {
-	if o.Type != PubType {
+	if o.Type != StreamType {
 		return KeyTTL
 	}
 	return ValueTTL

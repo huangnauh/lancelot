@@ -1,7 +1,6 @@
 package command
 
 import (
-	"bytes"
 	"encoding/binary"
 	"time"
 
@@ -38,16 +37,17 @@ func (c *Command) GetCountBytes(typo ObjectType, data ...[]byte) []byte {
 	return k
 }
 
-func (c *Command) GetUserCountBytes(typo ObjectType, userID uint16, data ...[]byte) []byte {
+func (c *Command) GetUserDBCountBytes(typo ObjectType, userID uint16, dbID uint8, data ...[]byte) []byte {
 	count := 0
 	for _, v := range data {
 		count += len(v)
 	}
-	k := make([]byte, 1+2+1+count)
+	k := make([]byte, 1+2+1+1+count)
 	k[0] = byte(CountPrefix)
 	binary.BigEndian.PutUint16(k[1:], userID)
-	k[3] = byte(typo)
-	start := 4
+	k[3] = byte(dbID)
+	k[4] = byte(typo)
+	start := 5
 	for _, v := range data {
 		if data == nil {
 			continue
@@ -62,52 +62,52 @@ type Count struct {
 	Timestamp uint64
 	Value     int64
 	Key       []byte
+	Shard     uint16
+	UserValue []byte
 }
 
 func EncodeCount(c *Count) []byte {
-	k := make([]byte, 8+binary.MaxVarintLen64)
+	k := make([]byte, 8+1+8+len(c.UserValue))
 	binary.BigEndian.PutUint64(k, c.Timestamp)
-	n := binary.PutVarint(k[8:], c.Value)
-	return k[:8+n]
+	var value uint64
+	if c.Value >= 0 {
+		k[8] = 0x01
+		value = uint64(c.Value)
+	} else {
+		k[8] = 0x00
+		value = uint64(-c.Value)
+	}
+	binary.BigEndian.PutUint64(k[9:], value)
+	copy(k[17:], c.UserValue)
+	return k
 }
 
-func DecodeCount(c *Count, k []byte) error {
-	c.Timestamp = binary.BigEndian.Uint64(k)
-	count, err := binary.ReadVarint(bytes.NewReader(k[8:]))
-	if err != nil {
-		return err
+func DecodeCount(c *Count, v []byte) {
+	c.Timestamp = binary.BigEndian.Uint64(v)
+	if v[8] == 0x01 {
+		c.Value = int64(binary.BigEndian.Uint64(v[9:]))
+	} else {
+		c.Value = -int64(binary.BigEndian.Uint64(v[9:]))
 	}
-	c.Value = count
-	return nil
+	c.UserValue = v[17:]
 }
 
-func (c *Command) AddCount(txn *store.Txn, userID uint16, typo ObjectType, hash uint64, key []byte, hashValue []byte, delta int64) (*Count, error) {
-	count, err := c.GetCount(txn, userID, typo, hash, key, hashValue)
-	if err != nil && err != store.KeyNotFound {
-		return count, err
-	}
-	value := count.Value + delta
-	utils.ZapLog.Debug("add count", zap.String("object", string(typo)), zap.ByteString("key", count.Key),
-		zap.Int64("delta", delta), zap.Int64("oldcount", count.Value), zap.Int64("newcount", value))
+func (c *Command) SetCount(txn *store.Txn, count *Count) error {
+	utils.ZapLog.Debug("set count", zap.Uint64("timestamp", count.Timestamp), zap.Int64("count", count.Value),
+		zap.ByteString("key", count.Key), zap.ByteString("user value", count.UserValue))
 	count.Timestamp = txn.Timestamp
-	count.Value = value
-	err = txn.Put(count.Key, EncodeCount(count))
-	return count, err
+	err := txn.Put(count.Key, EncodeCount(count))
+	return err
 }
 
-func (c *Command) ListCount(txn *store.Txn, userID uint16, typo ObjectType, hash uint16, key []byte) ([]*Count, error) {
+func (c *Command) ListCount(txn *store.Txn, userID uint16, dbID uint8, typo ObjectType, hash uint16, key []byte) ([]*Count, error) {
 	binary.BigEndian.PutUint16(key, userID)
-	start := c.GetUserCountBytes(typo, userID, key)
+	start := c.GetUserDBCountBytes(typo, userID, dbID, key)
 	end := utils.PrefixNext(start)
 	counts := make([]*Count, 0)
 	err := txn.List(start, end, int(hash+1), func(k []byte, v []byte) bool {
 		count := &Count{Key: k}
-		err := DecodeCount(count, v)
-		if err != nil {
-			utils.ZapLog.Error("decode count", zap.String("object", string(typo)),
-				zap.ByteString("key", k), zap.ByteString("value", v), zap.Error(err))
-			return true
-		}
+		DecodeCount(count, v)
 		count.Key = k
 		counts = append(counts, count)
 		return true
@@ -115,8 +115,8 @@ func (c *Command) ListCount(txn *store.Txn, userID uint16, typo ObjectType, hash
 	return counts, err
 }
 
-func (c *Command) DeleteCount(txn *store.Txn, userID uint16, typo ObjectType, hash uint16, key []byte, expire time.Time) error {
-	start := c.GetUserCountBytes(typo, userID, key)
+func (c *Command) DeleteCount(txn *store.Txn, userID uint16, dbID uint8, typo ObjectType, hash uint16, key []byte, expire time.Time) error {
+	start := c.GetUserDBCountBytes(typo, userID, dbID, key)
 	end := utils.PrefixNext(start)
 	it, err := txn.Iter(start, end, false)
 	if err != nil {
@@ -128,12 +128,7 @@ func (c *Command) DeleteCount(txn *store.Txn, userID uint16, typo ObjectType, ha
 	_, _, err = it.DeleteUntil(int(hash+1), func(k []byte, v []byte) bool {
 		sum++
 		count := &Count{Key: k}
-		err := DecodeCount(count, v)
-		if err != nil {
-			utils.ZapLog.Error("decode count", zap.String("object", string(typo)),
-				zap.ByteString("key", k), zap.ByteString("value", v), zap.Error(err))
-			return true
-		}
+		DecodeCount(count, v)
 		if expire.IsZero() {
 			return true
 		}
@@ -162,10 +157,10 @@ func (c *Command) DeleteCount(txn *store.Txn, userID uint16, typo ObjectType, ha
 	return err
 }
 
-func (c *Command) GetCount(txn *store.Txn, userID uint16, typo ObjectType, hash uint64, key []byte, hashValue []byte) (*Count, error) {
+func (c *Command) GetCount(txn *store.Txn, userID uint16, dbID uint8, typo ObjectType, hash uint64, key []byte, hashValue []byte) (*Count, error) {
 	var k []byte
+	var shard uint16
 	if hash > 0 {
-		var shard uint16
 		if hashValue != nil {
 			shard = utils.GetShard(hashValue, hash)
 		} else {
@@ -173,21 +168,16 @@ func (c *Command) GetCount(txn *store.Txn, userID uint16, typo ObjectType, hash 
 		}
 		shardBytes := make([]byte, 2)
 		binary.BigEndian.PutUint16(shardBytes, shard)
-		k = c.GetUserCountBytes(typo, userID, key, shardBytes)
+		k = c.GetUserDBCountBytes(typo, userID, dbID, key, shardBytes)
 	} else {
-		k = c.GetUserCountBytes(typo, userID, key)
+		k = c.GetUserDBCountBytes(typo, userID, dbID, key)
 	}
-	count := &Count{Timestamp: txn.Timestamp, Key: k}
+	count := &Count{Timestamp: txn.Timestamp, Key: k, Shard: shard}
 	b, err := txn.Get(k)
 	if err != nil {
 		return count, err
 	}
-	err = DecodeCount(count, b)
-	if err != nil {
-		utils.ZapLog.Error("decode count", zap.String("object", string(typo)),
-			zap.ByteString("key", k), zap.ByteString("value", b), zap.Error(err))
-		return count, err
-	}
+	DecodeCount(count, b)
 	utils.ZapLog.Debug("get count", zap.String("object", string(typo)), zap.ByteString("key", k), zap.Int64("count", count.Value))
 	return count, nil
 }

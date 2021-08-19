@@ -307,12 +307,38 @@ func NewCommand(cfg *config.Config) *Command {
 			NoSupportScript: true,
 			Type:            UserType,
 		},
+		SELECT_COMMAND: {
+			Func: c.SelectHandle,
+			ID:   128,
+			Type: UnknownType,
+		},
+		XADD_COMMAND: {
+			Func: c.XADDHandle,
+			ID:   480,
+			Type: StreamType,
+		},
+		XRANGE_COMMAND: {
+			Func:     c.XRangeHandle,
+			ReadOnly: true,
+			ID:       481,
+			Type:     StreamType,
+		},
+		PUBSUB_COMMAND: {
+			Func: c.PubSubHandle,
+			ID:   499,
+			Type: StreamType,
+		},
+		PUBLISH_COMMAND: {
+			Func: c.PublishHandle,
+			ID:   500,
+			Type: StreamType,
+		},
 		EVAL_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
 				return c.evalHandle(txn, args, EVAL_COMMAND)
 			},
 			NoSupportScript: true,
-			ID:              254,
+			ID:              508,
 			Type:            UnknownType,
 		},
 		EVALSHA_COMMAND: {
@@ -320,28 +346,8 @@ func NewCommand(cfg *config.Config) *Command {
 				return c.evalHandle(txn, args, EVALSHA_COMMAND)
 			},
 			NoSupportScript: true,
-			ID:              255,
+			ID:              509,
 			Type:            UnknownType,
-		},
-		FSUBSCRIBE_COMMAND: {
-			Func: c.FSubscribeHandle,
-			ID:   504,
-			Type: PubType,
-		},
-		PUBSUB_COMMAND: {
-			Func: c.PubSubHandle,
-			ID:   503,
-			Type: PubType,
-		},
-		FPUBLISH_COMMAND: {
-			Func: c.FPublishHandle,
-			ID:   502,
-			Type: PubType,
-		},
-		PUBLISH_COMMAND: {
-			Func: c.PublishHandle,
-			ID:   501,
-			Type: PubType,
 		},
 		EVAL_RO_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
@@ -349,7 +355,7 @@ func NewCommand(cfg *config.Config) *Command {
 			},
 			ReadOnly:        true,
 			NoSupportScript: true,
-			ID:              500,
+			ID:              510,
 			Type:            UnknownType,
 		},
 		EVALSHA_RO_COMMAND: {
@@ -358,13 +364,13 @@ func NewCommand(cfg *config.Config) *Command {
 			},
 			ReadOnly:        true,
 			NoSupportScript: true,
-			ID:              499,
+			ID:              511,
 			Type:            UnknownType,
 		},
 		SCRIPT_COMMAND: {
 			Func:            c.ScriptHandle,
 			NoSupportScript: true,
-			ID:              498,
+			ID:              512,
 			Type:            UnknownType,
 		},
 		JSONSET_COMMAND: {

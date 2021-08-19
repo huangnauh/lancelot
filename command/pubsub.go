@@ -22,6 +22,8 @@ import (
 const (
 	NormalChannel  = 0
 	PatternChannel = 1
+
+	PUBSUB_HELP = "PUBSUB HELP"
 )
 
 type psConn struct {
@@ -511,9 +513,9 @@ func (c *Command) PubSubHandle(txn *store.Txn, args [][]byte) interface{} {
 	var err error
 	var ret interface{}
 	switch subcommand {
-	case "channels":
+	case CHANNELS_COMMAND:
 		ret, err = c.psManager.pubSubChannels(txn, args[1:])
-	case "numsub":
+	case NUMSUB_COMMAND:
 		numsubs, err := c.psManager.pubSubNumsub(txn, args[1:])
 		if err != nil {
 			return txn.SetError(err)
@@ -524,7 +526,7 @@ func (c *Command) PubSubHandle(txn *store.Txn, args [][]byte) interface{} {
 			ret[2*i+1] = redcon.SimpleInt(numsub.Count)
 		}
 		return ret
-	case "numpat":
+	case NUMPAT_COMMAND:
 		ret, err = c.psManager.pubSubNumpat(txn, args[1:])
 	default:
 		return txn.SetWrongSubArgs(PUBSUB_COMMAND, PUBSUB_HELP)
@@ -538,7 +540,7 @@ func (c *Command) PubSubHandle(txn *store.Txn, args [][]byte) interface{} {
 // PUBSUB NUMPAT
 func (p *PsManager) pubSubNumpat(txn *store.Txn, args [][]byte) (redcon.SimpleInt, error) {
 	if len(args) != 0 {
-		return 0, xerror.WrongArgsError(PUBSUB_COMMAND)
+		return 0, xerror.WrongSubArgsError(NUMPAT_COMMAND, PUBSUB_HELP)
 	}
 	clients := p.Clients()
 	count := p.LocalNUMPAT()
@@ -569,7 +571,7 @@ func (p *PsManager) pubSubNumpat(txn *store.Txn, args [][]byte) (redcon.SimpleIn
 // PUBSUB CHANNELS [pattern]
 func (p *PsManager) pubSubChannels(txn *store.Txn, args [][]byte) ([]string, error) {
 	if len(args) > 1 {
-		return nil, xerror.WrongArgsError(PUBSUB_COMMAND)
+		return nil, xerror.WrongSubArgsError(CHANNELS_COMMAND, PUBSUB_HELP)
 	}
 	pattern := "*"
 	if len(args) == 1 {

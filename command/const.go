@@ -65,9 +65,19 @@ const (
 	TTL_COMMAND          = "ttl"
 	EXPIRE_COMMAND       = "expire"
 	OBJECT_COMMAND       = "object"
+	XADD_COMMAND         = "xadd"
+	XRANGE_COMMAND       = "xrange"
+	XGROUP_COMMAND       = "xgroup"
+	CREATE_COMMAND       = "create"
+	DESTORY_COMMAND      = "destroy"
+	SETID_COMMAND        = "setid"
+	CREATECONSUMER       = "createconsumer"
+	DELCONSUMER          = "delconsumer"
 	PUBLISH_COMMAND      = "publish"
-	FPUBLISH_COMMAND     = "fpublish"
 	PUBSUB_COMMAND       = "pubsub"
+	CHANNELS_COMMAND     = "channels"
+	NUMSUB_COMMAND       = "numsub"
+	NUMPAT_COMMAND       = "numpat"
 	SUBSCRIBE_COMMAND    = "subscribe"
 	PSUBSCRIBE_COMMAND   = "psubscribe"
 	UNSUBSCRIBE_COMMAND  = "unsubscribe"
@@ -107,7 +117,9 @@ const (
 	MULTI_COMMAND        = "multi"
 	DISCARD_COMMAND      = "discard"
 
-	MAX_COMMANDS = 1024
+	MAX_COMMANDS   = 1024
+	MAX_KEY_SIZE   = 4 * 1024
+	MAX_VALUE_SIZE = 5 * 1024 * 1024
 
 	ASYNC_OPTION = "async"
 	SYNC_OPTION  = "sync"
@@ -121,6 +133,10 @@ const (
 	UserPrefix  = 'u'
 	CountPrefix = 'c'
 	TTLPrefix   = 't'
+)
+
+var (
+	EmptySlice = []struct{}{}
 )
 
 func SimpleInt(n int64) redcon.SimpleInt {
