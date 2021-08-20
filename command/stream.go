@@ -260,14 +260,59 @@ func (c *Command) XgroupHandle(txn *store.Txn, args [][]byte) interface{} {
 	return nil
 }
 
+func (c *Command) CreateStream(txn *store.Txn, key []byte, object *Object) error {
+	id, err := uuid.NewUUID()
+	if err != nil {
+		return txn.SetError(err)
+	}
+	object.Value = id[:]
+	return txn.Put(key, ObjectEncode(object))
+}
+
+type Consumer struct {
+	Group      string
+	Offset     []int64
+	Watermark  []int64
+	Partitions []uint16
+}
+
+func EncodeConsumer(c *Consumer) ([]byte, error) {
+	return msgpack.Marshal(c)
+}
+
+func DecodeConsumer(b []byte) (*Consumer, error) {
+	var c Consumer
+	err := msgpack.Unmarshal(b, &c)
+	return &c, err
+}
+
+type Group struct {
+	Name      string
+	Consumers uint16
+	Timestamp int64
+	Consumer  []Consumer
+}
+
+func EncodeGroup(group *Group) []byte {
+	k := make([]byte, 6)
+	binary.BigEndian.PutUint32(k, uint32(group.Timestamp))
+	binary.BigEndian.PutUint16(k[4:], group.Consumers)
+	return k
+}
+
+func DecodeGroup(k []byte) *Group {
+	group := &Group{}
+	group.Timestamp = int64(binary.BigEndian.Uint32(k))
+	group.Consumers = binary.BigEndian.Uint16(k[4:])
+	return group
+}
+
 // (stream) XGROUP CREATE key groupname ID|$ [MKSTREAM]
 func (c *Command) XCreateHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 3 {
 		return txn.SetError(xerror.WrongSubArgsError(CREATE_COMMAND, XGROUP_HELP))
 	}
-	key := args[0]
-	groupName := args[1]
-	id := args[2]
+	// id := args[2]
 	create := false
 	if len(args) > 3 {
 		if strings.ToLower(utils.B2S(args[3])) != MKSTREAM {
@@ -275,6 +320,31 @@ func (c *Command) XCreateHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 		create = true
 	}
+
+	object := NewObject(txn.UserId, txn.DBId, StreamType, args[0])
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, create)
+	if err == store.KeyNotFound {
+		if !create {
+			return txn.SetError(xerror.XgroupRequireExist)
+		}
+		err = c.CreateStream(txn, key, object)
+	}
+
+	if err != nil {
+		return txn.SetError(err)
+	}
+
+	gobject := NewObject(txn.UserId, txn.DBId, GroupType, args[1])
+	key = object.GetKeyBytes()
+	err = getTxnObject(txn, key, gobject, true)
+	if err == nil {
+		return txn.SetError(xerror.XgroupAlreadyExist)
+	}
+	if err != store.KeyNotFound {
+		return txn.SetError(err)
+	}
+	// gobject.Value =
 
 	return nil
 }
@@ -506,27 +576,15 @@ LOOP:
 		if checkExist {
 			return nil
 		}
-		id, err := uuid.NewUUID()
-		if err != nil {
-			return txn.SetError(err)
-		}
-		object.Value = id[:]
-		object.ValueTTL = DefaultTTL
+		err = c.CreateStream(txn, key, object)
+	}
 
-		if partition > int64(object.Hash) {
-			return txn.SetError(xerror.InvalidPartition)
-		}
-
-		err = txn.Put(key, ObjectEncode(object))
-		if err != nil {
-			return txn.SetError(err)
-		}
-	} else if err != nil {
+	if err != nil {
 		return txn.SetError(err)
-	} else {
-		if partition > int64(object.Hash) {
-			return txn.SetError(xerror.InvalidPartition)
-		}
+	}
+
+	if partition > int64(object.Hash) {
+		return txn.SetError(xerror.InvalidPartition)
 	}
 
 	var msgCount *Count

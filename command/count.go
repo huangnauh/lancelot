@@ -101,14 +101,12 @@ func (c *Command) SetCount(txn *store.Txn, count *Count) error {
 }
 
 func (c *Command) ListCount(txn *store.Txn, userID uint16, dbID uint8, typo ObjectType, hash uint16, key []byte) ([]*Count, error) {
-	binary.BigEndian.PutUint16(key, userID)
 	start := c.GetUserDBCountBytes(typo, userID, dbID, key)
 	end := utils.PrefixNext(start)
 	counts := make([]*Count, 0)
 	err := txn.List(start, end, int(hash+1), func(k []byte, v []byte) bool {
 		count := &Count{Key: k}
 		DecodeCount(count, v)
-		count.Key = k
 		counts = append(counts, count)
 		return true
 	})

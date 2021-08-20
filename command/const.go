@@ -28,10 +28,43 @@ const (
 	JSONSET_COMMAND      = "json.set"
 	JSONGET_COMMAND      = "json.get"
 	JSONDEL_COMMAND      = "json.del"
+	HLEN_COMMAND         = "hlen"
 	HSET_COMMAND         = "hset"
+	HSETNX_COMMAND       = "hsetnx"
+	HMSET_COMMAND        = "hmset"
 	HGET_COMMAND         = "hget"
+	HSTRLEN_COMMAND      = "hstrlen"
+	HMGET_COMMAND        = "hmget"
+	HGETALL_COMMAND      = "hgetall"
+	HRANDFIELD_COMMAND   = "hrandfield"
+	HKEYS_COMMAND        = "hkeys"
+	HVALS_COMMAND        = "hvals"
+	HSCAN_COMMAND        = "hscan"
 	HEXISTS_COMMAND      = "hexists"
 	HDEL_COMMAND         = "hdel"
+	HINCRBY_COMMAND      = "hincrby"
+	HINCRBYFLOAT_COMMAND = "hincrbyfloat"
+	LPUSH_COMMAND        = "lpush"
+	LPUSHX_COMMAND       = "lpushx"
+	LPOP_COMMAND         = "lpop"
+	RPUSH_COMMAND        = "rpush"
+	RPUSHX_COMMAND       = "rpushx"
+	LINDEX_COMMAND       = "lindex"
+	LINSERT_COMMAND      = "linsert"
+	BLPOP_COMMAND        = "blpop"
+	BRPOP_COMMAND        = "brpop"
+	BRPOPLPUSH_COMMAND   = "brpoplpush"
+	BLMOVE_COMMAND       = "blmove"
+	RPOP_COMMAND         = "rpop"
+	LMOVE_COMMAND        = "lmove"
+	RPOPLPUSH_COMMAND    = "rpoplpush"
+	LREM_COMMAND         = "lrem"
+	LSET_COMMAND         = "lset"
+	LLEN_COMMAND         = "llen"
+	LRANGE_COMMAND       = "lrange"
+	LINFO_COMMAND        = "linfo"
+	LTRIM_COMMAND        = "ltrim"
+	LPOS_COMMAND         = "lpos"
 	SET_COMMAND          = "set"
 	MSET_COMMAND         = "mset"
 	SETRANGE_COMMAND     = "setrange"
@@ -133,10 +166,14 @@ const (
 	UserPrefix  = 'u'
 	CountPrefix = 'c'
 	TTLPrefix   = 't'
+
+	GenericCursor = "g"
+	HashCursor    = "h"
 )
 
 var (
-	EmptySlice = []struct{}{}
+	EmptySlice  = []struct{}{}
+	EmptyCursor = []interface{}{0, [][]byte{}}
 )
 
 func SimpleInt(n int64) redcon.SimpleInt {

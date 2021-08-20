@@ -88,6 +88,10 @@ func (t *Txn) Rollback() {
 }
 
 func (t *Txn) Commit() error {
+	if t.txn == nil {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.WriteTimeout)
 	defer cancel()
 	err := t.txn.Commit(ctx)
@@ -191,7 +195,14 @@ func (t *Txn) Iter(start, end []byte, reversed bool) (*Iterator, error) {
 }
 
 func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
-	it, err := t.Iter(start, end, false)
+	var it kv.Iterator
+	var err error
+	if bytes.Compare(end, start) >= 0 {
+		it, err = t.Iter(start, end, false)
+	} else {
+		start, end = end, start
+		it, err = t.Iter(start, end, true)
+	}
 	if err != nil {
 		utils.ZapLog.Error("[txn] iter", zap.String("remote", t.RemoteAddr()),
 			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("start", start), zap.ByteString("end", end),

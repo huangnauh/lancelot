@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -135,8 +136,8 @@ func DeleteKey(txn *store.Txn, key []byte, object *Object, now int64) error {
 		}
 	}
 
-	if !object.IsSimple() {
-		object.TTL = txn.Now
+	if !object.IsSimple() && now > 0 {
+		object.TTL = now
 		ttlValue := object.GetTTLValueBytes()
 		err = txn.Put(ttlValue, []byte{1})
 		if err != nil {
@@ -250,6 +251,40 @@ type ScanResult struct {
 	Keys   []string
 }
 
+func (c *Command) checkCursor(scanOpt *scanOptions, cursor []byte,
+	cursorPrefix string, start []byte) ([]byte, error) {
+	if scanOpt.cursor == ServerCursor {
+		cursorInt, err := strconv.ParseInt(utils.B2S(cursor), 10, 64)
+		if err != nil {
+			return nil, xerror.InvalidCursor
+		}
+		if cursorInt < 0 {
+			return nil, xerror.InvalidCursor
+		}
+
+		if cursorInt > 0 {
+			cur, ok := c.GetCursor(fmt.Sprintf("%s%d", cursorPrefix, cursorInt))
+			if ok {
+				cur := utils.NextKey(cur)
+				start = append(start, cur...)
+			}
+		}
+	} else {
+		if !bytes.Equal(cursor, []byte{'0'}) {
+			cur, err := base64.StdEncoding.DecodeString(utils.B2S(cursor))
+			if err != nil {
+				return nil, xerror.InvalidCursor
+			}
+			cur = utils.NextKey(cur)
+			start = append(start, cur...)
+		}
+	}
+	if _, err := glob.Match(scanOpt.match, utils.B2S(start)); err != nil {
+		return nil, err
+	}
+	return start, nil
+}
+
 // (generic) SCAN cursor [MATCH pattern] [COUNT count] [TYPE type] [CURSOR cursor]
 func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 1 {
@@ -264,48 +299,21 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	if scanOpt.typo == UnknownType {
-		return []interface{}{0, []string{}}
+		return EmptyCursor
 	}
 
 	prefix := glob.Prefix(scanOpt.match)
 	start := GetDataPrefix(txn.UserId, txn.DBId, KeyType, utils.S2B(prefix))
 	prefixLen := len(start)
 	end := utils.PrefixNext(start)
-	if scanOpt.cursor == ServerCursor {
-		cursorInt, err := strconv.ParseInt(utils.B2S(cursor), 10, 64)
-		if err != nil {
-			return txn.SetError(xerror.InvalidCursor)
-		}
-		if cursorInt < 0 {
-			return txn.SetError(xerror.InvalidCursor)
-		}
-
-		if cursorInt > 0 {
-			cur, ok := c.GetCursor(uint64(cursorInt))
-			if ok {
-				cur := utils.NextKey(cur)
-				start = append(start, cur...)
-			}
-		}
-	} else {
-		if !bytes.Equal(cursor, []byte{'0'}) {
-			cur, err := base64.StdEncoding.DecodeString(utils.B2S(cursor))
-			if err != nil {
-				return txn.SetError(xerror.InvalidCursor)
-			}
-			cur = utils.NextKey(cur)
-			start = append(start, cur...)
-		}
-	}
-
-	if _, err := glob.Match(scanOpt.match, utils.B2S(start)); err != nil {
-		utils.ZapLog.Error("scan invalid match", zap.String("remote", txn.RemoteAddr()),
-			zap.Uint64("timestamp", txn.Timestamp), zap.String("match", scanOpt.match), zap.ByteString("start", start))
+	start, err = c.checkCursor(scanOpt, cursor, GenericCursor, start)
+	if err != nil {
 		return txn.SetError(err)
 	}
 
-	retKeys := make([]string, 0)
+	retKeys := make([][]byte, 0)
 	var lastKey []byte
+	var callbackErr error
 	callback := func(key, value []byte) bool {
 		lastKey = key
 		object, err := GetObjectFromKV(key, value)
@@ -315,8 +323,9 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 			return true
 		}
 		utils.ZapLog.Debug("scan object", zap.Any("object", object))
-		matched, err := glob.Match(scanOpt.match, utils.B2S(object.Key))
-		if err != nil {
+		var matched bool
+		matched, callbackErr = glob.Match(scanOpt.match, utils.B2S(object.Key))
+		if callbackErr != nil {
 			utils.ZapLog.Error("scan invalid match", zap.String("remote", txn.RemoteAddr()),
 				zap.Uint64("timestamp", txn.Timestamp), zap.String("match", scanOpt.match), zap.ByteString("key", object.Key))
 			return false
@@ -334,12 +343,15 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 				return true
 			}
 		}
-		retKeys = append(retKeys, string(object.Key))
+		retKeys = append(retKeys, object.Key)
 		return true
 	}
 	utils.ZapLog.Debug("scan result", zap.String("remote", txn.RemoteAddr()),
-		zap.Uint64("timestamp", txn.Timestamp), zap.Strings("result", retKeys), zap.ByteString("last", lastKey))
+		zap.Uint64("timestamp", txn.Timestamp), zap.ByteStrings("result", retKeys), zap.ByteString("last", lastKey))
 	err = txn.List(start, end, scanOpt.count, callback)
+	if callbackErr != nil {
+		return txn.SetError(callbackErr)
+	}
 	if err == nil || len(lastKey) <= prefixLen {
 		return []interface{}{0, retKeys}
 	} else if err != store.ReachLimit {
@@ -348,7 +360,7 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	cur := lastKey[prefixLen:]
 	if scanOpt.cursor == ServerCursor {
-		c.SetCursor(txn.Timestamp, cur)
+		c.SetCursor(fmt.Sprintf("%s%d", GenericCursor, txn.Timestamp), cur)
 		return []interface{}{txn.Timestamp, retKeys}
 	} else {
 		cur := base64.StdEncoding.EncodeToString(cur)

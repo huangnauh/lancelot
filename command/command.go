@@ -275,6 +275,74 @@ func NewCommand(cfg *config.Config) *Command {
 			ReadOnly: true,
 			Type:     HashType,
 		},
+		HLEN_COMMAND: {
+			Func:     c.HLenHandle,
+			ID:       52,
+			ReadOnly: true,
+			Type:     HashType,
+		},
+		HGETALL_COMMAND: {
+			Func:     c.HGetAllHandle,
+			ID:       53,
+			ReadOnly: true,
+			Type:     HashType,
+		},
+		HINCRBY_COMMAND: {
+			Func: c.HIncrByHandle,
+			ID:   54,
+			Type: HashType,
+		},
+		HINCRBYFLOAT_COMMAND: {
+			Func: c.HIncrByFloatHandle,
+			ID:   55,
+			Type: HashType,
+		},
+		HKEYS_COMMAND: {
+			Func:     c.HKeysHandle,
+			ID:       56,
+			ReadOnly: true,
+			Type:     HashType,
+		},
+		HVALS_COMMAND: {
+			Func:     c.HValsHandle,
+			ID:       57,
+			ReadOnly: true,
+			Type:     HashType,
+		},
+		HMGET_COMMAND: {
+			Func:     c.HMGetHandle,
+			ID:       58,
+			ReadOnly: true,
+			Type:     HashType,
+		},
+		HMSET_COMMAND: {
+			Func: c.HMSetHandle,
+			ID:   59,
+			Type: HashType,
+		},
+		HSCAN_COMMAND: {
+			Func:     c.HScanHandle,
+			ID:       60,
+			ReadOnly: true,
+			Type:     HashType,
+		},
+		HSETNX_COMMAND: {
+			Func: c.HSetNXHandle,
+			ID:   61,
+			Type: HashType,
+		},
+		HSTRLEN_COMMAND: {
+			Func:     c.HStrLenHandle,
+			ID:       62,
+			ReadOnly: true,
+			Type:     HashType,
+		},
+		HRANDFIELD_COMMAND: {
+			Func:     c.HRandFieldHandle,
+			ID:       63,
+			ReadOnly: true,
+			Type:     HashType,
+		},
 		FLUSHALL_COMMAND: {
 			Func: c.FlushAllHandle,
 			ID:   64,
@@ -295,6 +363,116 @@ func NewCommand(cfg *config.Config) *Command {
 			Func: c.AclHandle,
 			ID:   67,
 			Type: UserType,
+		},
+		LINDEX_COMMAND: {
+			Func:     c.LIndexHandle,
+			ReadOnly: true,
+			ID:       80,
+			Type:     ListType,
+		},
+		LINSERT_COMMAND: {
+			Func: c.LInsertHandle,
+			ID:   81,
+			Type: ListType,
+		},
+		LLEN_COMMAND: {
+			Func:     c.LLenHandle,
+			ReadOnly: true,
+			ID:       82,
+			Type:     ListType,
+		},
+		LPOP_COMMAND: {
+			Func: c.LPopHandle,
+			ID:   83,
+			Type: ListType,
+		},
+		RPOP_COMMAND: {
+			Func: c.RPopHandle,
+			ID:   84,
+			Type: ListType,
+		},
+		RPOPLPUSH_COMMAND: {
+			Func: c.RPopLPopHandle,
+			ID:   85,
+			Type: ListType,
+		},
+		LPUSH_COMMAND: {
+			Func: c.LPushHandle,
+			ID:   86,
+			Type: ListType,
+		},
+		LPUSHX_COMMAND: {
+			Func: c.LPushXHandle,
+			ID:   87,
+			Type: ListType,
+		},
+		RPUSH_COMMAND: {
+			Func: c.RPushHandle,
+			ID:   88,
+			Type: ListType,
+		},
+		RPUSHX_COMMAND: {
+			Func: c.RPushXHandle,
+			ID:   89,
+			Type: ListType,
+		},
+		LREM_COMMAND: {
+			Func: c.LRemHandle,
+			ID:   90,
+			Type: ListType,
+		},
+		LSET_COMMAND: {
+			Func: c.LSetHandle,
+			ID:   91,
+			Type: ListType,
+		},
+		LTRIM_COMMAND: {
+			Func: c.LTrimHandle,
+			ID:   92,
+			Type: ListType,
+		},
+		LRANGE_COMMAND: {
+			Func:     c.LRangeHandle,
+			ReadOnly: true,
+			ID:       93,
+			Type:     ListType,
+		},
+		LINFO_COMMAND: {
+			Func:     c.LInfoHandle,
+			ReadOnly: true,
+			ID:       94,
+			Type:     ListType,
+		},
+		BLMOVE_COMMAND: {
+			Func: c.BlMoveHandle,
+			ID:   95,
+			Type: ListType,
+		},
+		BLPOP_COMMAND: {
+			Func: c.BlPopHandle,
+			ID:   96,
+			Type: ListType,
+		},
+		BRPOP_COMMAND: {
+			Func: c.BrPopHandle,
+			ID:   97,
+			Type: ListType,
+		},
+		BRPOPLPUSH_COMMAND: {
+			Func: c.BRPopLPushHandle,
+			ID:   98,
+			Type: ListType,
+		},
+		LPOS_COMMAND: {
+			Func:     c.LPosHandle,
+			ID:       99,
+			Type:     ListType,
+			ReadOnly: true,
+		},
+		LMOVE_COMMAND: {
+			Func: c.LMoveHandle,
+			ID:   100,
+			Type: ListType,
 		},
 		ALL_COMMAND: {
 			Func: c.AllHandle,
@@ -493,8 +671,7 @@ func (c *Command) watchLuaStatePool() {
 	}
 }
 
-func (c *Command) GetCursor(cursor uint64) ([]byte, bool) {
-	key := fmt.Sprintf("c%d", cursor)
+func (c *Command) GetCursor(key string) ([]byte, bool) {
 	v, err := c.cache.Get(utils.S2B(key))
 	if err != nil {
 		return nil, false
@@ -502,7 +679,6 @@ func (c *Command) GetCursor(cursor uint64) ([]byte, bool) {
 	return v, true
 }
 
-func (c *Command) SetCursor(cursor uint64, data []byte) {
-	key := fmt.Sprintf("c%d", cursor)
+func (c *Command) SetCursor(key string, data []byte) {
 	_ = c.cache.Set(utils.S2B(key), data, c.cfg.Key.CursorExpireSecond)
 }

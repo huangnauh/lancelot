@@ -253,7 +253,8 @@ func (c *Command) DeleteUserStream(userID uint16, dbID uint8, now int64, limit c
 				return true
 			}
 			channel := string(object.Key)
-			expire := now - object.ValueTTL
+			//TODO: check expire
+			expire := now //- object.ValueTTL
 			start := object.GetValueBytesPrefix(nil)
 			end := utils.PrefixNext(start)
 			channels[channel] = messgeGC{start, end, expire, object.Hash, object.Value, true}

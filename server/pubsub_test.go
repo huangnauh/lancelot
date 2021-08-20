@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = FDescribe("PubSub", func() {
+var _ = Describe("PubSub", func() {
 	ctx := context.TODO()
 	var client *redis.Client
 

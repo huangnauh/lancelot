@@ -26,7 +26,7 @@ func GetPositiveInt(arg []byte) (int, error) {
 		return 0, err
 	}
 	if offset <= 0 {
-		return 0, ErrInvalidInt
+		return offset, ErrInvalidInt
 	}
 	return offset, nil
 }

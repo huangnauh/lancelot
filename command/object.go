@@ -27,6 +27,7 @@ const (
 	UnknownType ObjectType = '?'
 	GeneralType ObjectType = '*'
 	StreamType  ObjectType = 'p'
+	GroupType   ObjectType = 'g'
 	MessageType ObjectType = 'm'
 
 	KeyTTL   TTL = 'k'
@@ -131,10 +132,10 @@ type Object struct {
 	Key       []byte
 	Type      ObjectType
 	TTL       int64
-	ValueTTL  int64
 	Timestamp uint64
 	Value     []byte
 	Hash      uint16
+	Extra     []byte
 }
 
 func NewObject(user uint16, db uint8, typo ObjectType, key []byte) *Object {
@@ -176,13 +177,6 @@ func GetDataPrefix(user uint16, db uint8, typo ObjectType, data []byte) []byte {
 
 func (o *Object) IsSimple() bool {
 	return o.Type == KeyType || o.Type == JsonType
-}
-
-func (o *Object) TTLType() TTL {
-	if o.Type != StreamType {
-		return KeyTTL
-	}
-	return ValueTTL
 }
 
 func (o *Object) getKeyBytes(typo ObjectType, data ...[]byte) []byte {
@@ -296,17 +290,15 @@ func (o *Object) ObjectEncoding() ObjectEncoding {
 }
 
 func ObjectEncode(o *Object) []byte {
-	b := make([]byte, len(o.Value)+1+8+8+2)
+	b := make([]byte, 1+8+8+2+len(o.Value)+len(o.Extra))
 	b[0] = byte(o.Type)
-	ttlType := o.TTLType()
-	if ttlType == KeyTTL {
-		binary.BigEndian.PutUint64(b[1:], uint64(o.TTL))
-	} else {
-		binary.BigEndian.PutUint64(b[1:], uint64(o.ValueTTL))
-	}
+	binary.BigEndian.PutUint64(b[1:], uint64(o.TTL))
 	binary.BigEndian.PutUint64(b[9:], o.Timestamp)
 	binary.BigEndian.PutUint16(b[17:], o.Hash)
 	copy(b[1+8+8+2:], o.Value)
+	if o.Extra != nil {
+		copy(b[19+len(o.Value):], o.Extra)
+	}
 	return b
 }
 
@@ -315,8 +307,8 @@ func (o *Object) CleanValue(typo ObjectType) {
 	o.TTL = 0
 	o.Timestamp = 0
 	o.Hash = DefaultHashMark
-	o.ValueTTL = 0
 	o.Value = nil
+	o.Extra = nil
 }
 
 func ObjectDecode(b []byte, o *Object) error {
@@ -324,15 +316,18 @@ func ObjectDecode(b []byte, o *Object) error {
 		return xerror.ErrValueTooShort
 	}
 	o.Type = ObjectType(b[0])
-	ttlType := o.TTLType()
-	if ttlType == KeyTTL {
-		o.TTL = int64(binary.BigEndian.Uint64(b[1:9]))
-	} else {
-		o.ValueTTL = int64(binary.BigEndian.Uint64(b[1:9]))
-	}
+	o.TTL = int64(binary.BigEndian.Uint64(b[1:9]))
 	o.Timestamp = binary.BigEndian.Uint64(b[9:17])
 	o.Hash = binary.BigEndian.Uint16(b[17:19])
-	o.Value = b[19:]
+	if o.IsSimple() {
+		o.Value = b[19:]
+	} else {
+		if len(b) < 19+16 {
+			return xerror.ErrValueTooShort
+		}
+		o.Value = b[19 : 19+16]
+		o.Extra = b[19+16:]
+	}
 	return nil
 }
 
