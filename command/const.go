@@ -28,6 +28,22 @@ const (
 	JSONSET_COMMAND      = "json.set"
 	JSONGET_COMMAND      = "json.get"
 	JSONDEL_COMMAND      = "json.del"
+	SADD_COMMAND         = "sadd"
+	SISMEMBER_COMMAND    = "sismember"
+	SMISMEMBER_COMMAND   = "smismember"
+	SPOP_COMMAND         = "spop"
+	SMEMBERS_COMMAND     = "smembers"
+	SRANDMEMBER_COMMAND  = "srandmember"
+	SSCAN_COMMAND        = "sscan"
+	SREM_COMMAND         = "srem"
+	SDIFF_COMMAND        = "sdiff"
+	SINTER_COMMAND       = "sinter"
+	SUNION_COMMAND       = "sunion"
+	SUNIONSTORE_COMMAND  = "sunionstore"
+	SDIFFSTORE_COMMAND   = "sdiffstore"
+	SINTERSTORE_COMMAND  = "sinterstore"
+	SCARD_COMMAND        = "scard"
+	SMOVE_COMMAND        = "smove"
 	HLEN_COMMAND         = "hlen"
 	HSET_COMMAND         = "hset"
 	HSETNX_COMMAND       = "hsetnx"
@@ -153,6 +169,7 @@ const (
 	MAX_COMMANDS   = 1024
 	MAX_KEY_SIZE   = 4 * 1024
 	MAX_VALUE_SIZE = 5 * 1024 * 1024
+	MINI_SCAN_SIZE = 256
 
 	ASYNC_OPTION = "async"
 	SYNC_OPTION  = "sync"
@@ -168,12 +185,12 @@ const (
 	TTLPrefix   = 't'
 
 	GenericCursor = "g"
-	HashCursor    = "h"
 )
 
 var (
 	EmptySlice  = []struct{}{}
 	EmptyCursor = []interface{}{0, [][]byte{}}
+	EmptyBytes  = [][]byte{}
 )
 
 func SimpleInt(n int64) redcon.SimpleInt {

@@ -110,7 +110,13 @@ func (c *Command) ListCount(txn *store.Txn, userID uint16, dbID uint8, typo Obje
 		counts = append(counts, count)
 		return true
 	})
-	return counts, err
+	if err == store.ReachLimit {
+		return counts, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return counts, nil
 }
 
 func (c *Command) DeleteCount(txn *store.Txn, userID uint16, dbID uint8, typo ObjectType, hash uint16, key []byte, expire time.Time) error {

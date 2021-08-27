@@ -231,27 +231,94 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:   24,
 			Type: KeyType,
 		},
-		DEL_COMMAND: {
-			Func: c.DELHandle,
-			ID:   31,
-			Type: KeyType,
+		SADD_COMMAND: {
+			Func: c.SAddHandle,
+			ID:   25,
+			Type: SetType,
 		},
-		TTL_COMMAND: {
-			Func:     c.TTLHandle,
+		SREM_COMMAND: {
+			Func: c.SRemHandle,
+			ID:   26,
+			Type: SetType,
+		},
+		SPOP_COMMAND: {
+			Func: c.SPopHandle,
+			ID:   27,
+			Type: SetType,
+		},
+		SMOVE_COMMAND: {
+			Func: c.SMoveHandle,
+			ID:   28,
+			Type: SetType,
+		},
+		SCARD_COMMAND: {
+			Func:     c.SCardHandle,
+			ID:       29,
+			Type:     SetType,
 			ReadOnly: true,
-			ID:       32,
-			Type:     KeyType,
 		},
-		EXPIRE_COMMAND: {
-			Func: c.ExpireHandle,
-			ID:   33,
-			Type: KeyType,
-		},
-		EXISTS_COMMAND: {
-			Func:     c.ExistsHandle,
+		SISMEMBER_COMMAND: {
+			Func:     c.SIsMemberHandle,
+			ID:       30,
+			Type:     SetType,
 			ReadOnly: true,
-			ID:       34,
-			Type:     KeyType,
+		},
+		SINTER_COMMAND: {
+			Func:     c.SInterHandle,
+			ID:       31,
+			Type:     SetType,
+			ReadOnly: true,
+		},
+		SINTERSTORE_COMMAND: {
+			Func: c.SInterStoreHandle,
+			ID:   32,
+			Type: SetType,
+		},
+		SUNION_COMMAND: {
+			Func:     c.SUnionHandle,
+			ID:       33,
+			Type:     SetType,
+			ReadOnly: true,
+		},
+		SUNIONSTORE_COMMAND: {
+			Func: c.SUnionStoreHandle,
+			ID:   34,
+			Type: SetType,
+		},
+		SDIFF_COMMAND: {
+			Func:     c.SDiffHandle,
+			ID:       35,
+			Type:     SetType,
+			ReadOnly: true,
+		},
+		SDIFFSTORE_COMMAND: {
+			Func: c.SDiffStoreHandle,
+			ID:   36,
+			Type: SetType,
+		},
+		SMEMBERS_COMMAND: {
+			Func:     c.SMembersHandle,
+			ID:       37,
+			Type:     SetType,
+			ReadOnly: true,
+		},
+		SRANDMEMBER_COMMAND: {
+			Func:     c.SRandMemberHandle,
+			ID:       38,
+			Type:     SetType,
+			ReadOnly: true,
+		},
+		SSCAN_COMMAND: {
+			Func:     c.SScanHandle,
+			ID:       39,
+			Type:     SetType,
+			ReadOnly: true,
+		},
+		SMISMEMBER_COMMAND: {
+			Func:     c.SMIsMemberHandle,
+			ID:       40,
+			Type:     SetType,
+			ReadOnly: true,
 		},
 		HGET_COMMAND: {
 			Func:     c.HGetHandle,
@@ -473,6 +540,28 @@ func NewCommand(cfg *config.Config) *Command {
 			Func: c.LMoveHandle,
 			ID:   100,
 			Type: ListType,
+		},
+		DEL_COMMAND: {
+			Func: c.DELHandle,
+			ID:   101,
+			Type: KeyType,
+		},
+		TTL_COMMAND: {
+			Func:     c.TTLHandle,
+			ReadOnly: true,
+			ID:       102,
+			Type:     KeyType,
+		},
+		EXPIRE_COMMAND: {
+			Func: c.ExpireHandle,
+			ID:   103,
+			Type: KeyType,
+		},
+		EXISTS_COMMAND: {
+			Func:     c.ExistsHandle,
+			ReadOnly: true,
+			ID:       104,
+			Type:     KeyType,
 		},
 		ALL_COMMAND: {
 			Func: c.AllHandle,

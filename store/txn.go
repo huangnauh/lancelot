@@ -2,6 +2,7 @@ package store
 
 import (
 	"bytes"
+	"container/heap"
 	"context"
 	"encoding/binary"
 	"sync/atomic"
@@ -174,10 +175,10 @@ func (t *Txn) LockKeys(keys [][]byte) error {
 }
 
 type Iterator struct {
+	kv.Iterator
 	start []byte
 	end   []byte
-	kv.Iterator
-	txn *Txn
+	txn   *Txn
 }
 
 func (t *Txn) Iter(start, end []byte, reversed bool) (*Iterator, error) {
@@ -191,7 +192,7 @@ func (t *Txn) Iter(start, end []byte, reversed bool) (*Iterator, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Iterator{start, end, it, t}, nil
+	return &Iterator{it, start, end, t}, nil
 }
 
 func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
@@ -280,4 +281,96 @@ func (t *Iterator) DeleteUntil(limit int, callback KVCallback) (key []byte, coun
 		}
 	}
 	return
+}
+
+type IterScan struct {
+	prefix  []byte
+	current []byte
+	iter    *Iterator
+}
+type IterList struct {
+	iters map[int]*IterScan
+	heap  *utils.BytesHeap
+}
+
+func NewIterList() *IterList {
+	return &IterList{}
+}
+
+func (i *IterList) Add(prefix []byte, iter *Iterator) {
+	i.iters[len(i.iters)] = &IterScan{prefix, prefix, iter}
+}
+
+func (i *IterList) Close() {
+	if len(i.iters) == 0 {
+		return
+	}
+	for _, iter := range i.iters {
+		iter.iter.Close()
+	}
+}
+
+func (i *IterList) Next() ([]byte, error) {
+	if i.heap == nil {
+		i.heap = utils.NewBytesHeap()
+		heap.Init(i.heap)
+	}
+	for j, it := range i.iters {
+		for it.iter.Valid() {
+			cur := it.iter.Key()
+			if len(cur) < len(it.prefix) {
+				continue
+			}
+			heap.Push(i.heap, cur[len(it.prefix):])
+			break
+		}
+		if !it.iter.Valid() {
+			delete(i.iters, j)
+		}
+	}
+	if i.heap.Len() == 0 {
+		return nil, nil
+	}
+	return i.heap.Pop().([]byte), nil
+}
+
+func (i *IterList) NextUntil(key []byte, all bool) (bool, error) {
+	var err error
+	for j, it := range i.iters {
+		c := bytes.Compare(it.current, key)
+		if c == 0 && !all {
+			return true, nil
+		} else if c > 0 && all {
+			return false, nil
+		}
+		if c >= 0 {
+			continue
+		}
+
+		for it.iter.Valid() {
+			it.current = it.iter.Key()
+			if len(key) >= len(it.prefix) {
+				c := bytes.Compare(it.current, key[len(it.prefix):])
+				if c < 0 {
+					continue
+				}
+
+				if c == 0 && !all {
+					return true, nil
+				} else if c > 0 && all {
+					return false, nil
+				}
+				break
+			}
+			err = it.iter.Next()
+			if err != nil {
+				return false, err
+			}
+		}
+
+		if !it.iter.Valid() {
+			delete(i.iters, j)
+		}
+	}
+	return all, nil
 }

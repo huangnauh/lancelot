@@ -397,3 +397,47 @@ func ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongSubArgs(subcommand, ObjectHelpCommand)
 	}
 }
+
+func (c *Command) PutOrDeleteKV(txn *store.Txn, object *Object, k, v []byte, delta int64) (int64, error) {
+	var err error
+	if v == nil {
+		err = txn.Del(k)
+	} else {
+		err = txn.Put(k, v)
+	}
+	if err != nil {
+		return 0, err
+	}
+	if delta == 0 {
+		return 0, nil
+	}
+
+	count, err := c.GetCount(txn, txn.UserId, txn.DBId, object.Type, uint64(object.Hash), object.Value, v)
+	if err == store.KeyNotFound {
+	} else if err != nil {
+		return 0, err
+	}
+	count.Value += delta
+	err = c.SetCount(txn, count)
+	return count.Value, err
+}
+
+func (c *Command) GetCountByKey(txn *store.Txn, arg []byte, typo ObjectType) (int64, error) {
+	object := NewObject(txn.UserId, txn.DBId, typo, arg)
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	}
+	counts, err := c.ListCount(txn, txn.UserId, txn.DBId, typo, uint16(object.Hash), object.Value)
+	if err != nil {
+		return 0, err
+	}
+	var sum int64
+	for _, count := range counts {
+		sum += count.Value
+	}
+	return sum, nil
+}

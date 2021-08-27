@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	HashKey   = 0x01
-	HashValue = 0x02
-	HashBoth  = HashKey | HashValue
+	OnlyKey   = 0x01
+	OnlyValue = 0x02
+	BothKV    = OnlyKey | OnlyValue
 )
 
 //(hash) HEXISTS key field
@@ -47,7 +47,7 @@ func (c *Command) HGetAllHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(HGETALL_COMMAND)
 	}
-	ret, err := c.hgetall(txn, args, HashBoth, 0)
+	ret, err := c.hgetall(txn, args, BothKV, 0)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -62,8 +62,9 @@ func (c *Command) HRandFieldHandle(txn *store.Txn, args [][]byte) interface{} {
 	single := len(args) == 1
 	var count int
 	var ucount int
+	var err error
 	if len(args) > 1 {
-		count, err := strconv.Atoi(string(args[1]))
+		count, err = strconv.Atoi(string(args[1]))
 		if err != nil {
 			return txn.SetError(xerror.ErrNotInteger)
 		}
@@ -75,12 +76,12 @@ func (c *Command) HRandFieldHandle(txn *store.Txn, args [][]byte) interface{} {
 			ucount = -count
 		}
 	}
-	getType := HashKey
+	getType := OnlyKey
 	if len(args) > 2 {
 		if strings.ToLower(utils.B2S(args[2])) != "withvalues" {
 			return txn.SetError(xerror.ErrSyntax)
 		}
-		getType = HashBoth
+		getType = BothKV
 	}
 	ret, err := c.hgetall(txn, args, getType, ucount)
 	if err != nil {
@@ -94,8 +95,8 @@ func (c *Command) HRandFieldHandle(txn *store.Txn, args [][]byte) interface{} {
 		return ret[0]
 	}
 
-	rand.Seed(int64(txn.Timestamp))
 	if count < 0 && len(ret) < ucount {
+		rand.Seed(int64(txn.Timestamp))
 		for i := len(ret); i < ucount; i++ {
 			ret = append(ret, ret[rand.Intn(len(ret))])
 		}
@@ -108,7 +109,7 @@ func (c *Command) HKeysHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(HKEYS_COMMAND)
 	}
-	ret, err := c.hgetall(txn, args, HashKey, 0)
+	ret, err := c.hgetall(txn, args, OnlyKey, 0)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -120,7 +121,7 @@ func (c *Command) HValsHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(HVALS_COMMAND)
 	}
-	ret, err := c.hgetall(txn, args, HashValue, 0)
+	ret, err := c.hgetall(txn, args, OnlyValue, 0)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -132,23 +133,11 @@ func (c *Command) HLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(HLEN_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
-	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
-	if err == store.KeyNotFound {
-		return redcon.SimpleInt(0)
-	} else if err != nil {
-		return txn.SetError(err)
-	}
-	counts, err := c.ListCount(txn, txn.UserId, txn.DBId, HashType, uint16(object.Hash), object.Value)
+	ret, err := c.GetCountByKey(txn, args[0], OnlyKey)
 	if err != nil {
 		return txn.SetError(err)
 	}
-	var hlen int64
-	for _, count := range counts {
-		hlen += count.Value
-	}
-	return redcon.SimpleInt(hlen)
+	return redcon.SimpleInt(ret)
 }
 
 //(hash) HSCAN key cursor [MATCH pattern] [COUNT count]
@@ -156,13 +145,17 @@ func (c *Command) HScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(HSCAN_COMMAND)
 	}
+	return c.TypeScan(txn, HashType, args, BothKV)
+}
+
+func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getType int) interface{} {
 	cursor := args[1]
 	opts := args[2:]
 	scanOpt, err := c.getScanOptions(opts)
 	if err != nil {
 		return txn.SetError(err)
 	}
-	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, typo, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -174,7 +167,7 @@ func (c *Command) HScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	prefix := object.GetKeyFieldBytes(nil)
 	start := object.GetKeyFieldBytes(utils.S2B(cursorPrefix))
 	end := utils.PrefixNext(prefix)
-	start, err = c.checkCursor(scanOpt, cursor, HashCursor, start)
+	start, err = c.checkCursor(scanOpt, cursor, typo, start)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -197,9 +190,14 @@ func (c *Command) HScanHandle(txn *store.Txn, args [][]byte) interface{} {
 		if !matched {
 			return true
 		}
-		hvalue := &Value{}
-		_ = DecodeValue(value, hvalue)
-		ret = append(ret, hkey, hvalue.Value)
+		if getType&OnlyKey == OnlyKey {
+			ret = append(ret, hkey)
+		}
+		if getType&OnlyValue == OnlyValue {
+			hvalue := &Value{}
+			_ = DecodeValue(value, hvalue)
+			ret = append(ret, hvalue.Value)
+		}
 		return true
 	})
 	if callbackErr != nil {
@@ -212,7 +210,7 @@ func (c *Command) HScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	cur := lastKey[len(prefix):]
 	if scanOpt.cursor == ServerCursor {
-		c.SetCursor(fmt.Sprintf("%s%d", HashCursor, txn.Timestamp), cur)
+		c.SetCursor(fmt.Sprintf("%s%d", typo, txn.Timestamp), cur)
 		return []interface{}{txn.Timestamp, ret}
 	} else {
 		cur := base64.StdEncoding.EncodeToString(cur)
@@ -240,10 +238,10 @@ func (c *Command) hgetall(txn *store.Txn, args [][]byte, getType int, limit int)
 			return true
 		}
 
-		if getType&HashKey == HashKey {
+		if getType&OnlyKey == OnlyKey {
 			ret = append(ret, key[len(start):])
 		}
-		if getType&HashValue == HashValue {
+		if getType&OnlyValue == OnlyValue {
 			hvalue := &Value{}
 			_ = DecodeValue(value, hvalue)
 			ret = append(ret, hvalue.Value)
@@ -365,7 +363,7 @@ func (c *Command) HDelHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 
 		ret++
-		_, err = c.hsetKV(txn, object, hkey, nil, -1)
+		_, err = c.PutOrDeleteKV(txn, object, hkey, nil, -1)
 		if err != nil {
 			return txn.SetError(err)
 		}
@@ -412,7 +410,7 @@ func (c *Command) HIncrByFloatHandle(txn *store.Txn, args [][]byte) interface{} 
 		Value:     utils.S2B(strconv.FormatFloat(floatValue, 'f', -1, 64)),
 		Timestamp: txn.Timestamp,
 	}
-	_, err = c.hsetKV(txn, object, hkey, EncodeValue(hvalue), delta)
+	_, err = c.PutOrDeleteKV(txn, object, hkey, EncodeValue(hvalue), delta)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -455,7 +453,7 @@ func (c *Command) HIncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	intValue += increment
 	hvalue := &Value{Value: utils.S2B(strconv.FormatInt(intValue, 10)), Timestamp: txn.Timestamp}
-	_, err = c.hsetKV(txn, object, hkey, EncodeValue(hvalue), delta)
+	_, err = c.PutOrDeleteKV(txn, object, hkey, EncodeValue(hvalue), delta)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -472,13 +470,12 @@ func (c *Command) GetOrCreateUUIDObject(txn *store.Txn, typo ObjectType, arg []b
 			return object, err
 		}
 		object.Value = id[:]
+		object.Timestamp = txn.Timestamp
+		err = txn.Put(key, ObjectEncode(object))
+		if err != nil {
+			return object, err
+		}
 	} else if err != nil {
-		return object, err
-	}
-	object.Timestamp = txn.Timestamp
-
-	err = txn.Put(key, ObjectEncode(object))
-	if err != nil {
 		return object, err
 	}
 	return object, nil
@@ -545,35 +542,11 @@ func (c *Command) hset(txn *store.Txn, args [][]byte, checkExist bool) (int64, e
 			continue
 		}
 		hvalue := &Value{Value: args[start+1], Timestamp: txn.Timestamp}
-		_, err = c.hsetKV(txn, object, hkey, EncodeValue(hvalue), delta)
+		_, err = c.PutOrDeleteKV(txn, object, hkey, EncodeValue(hvalue), delta)
 		if err != nil {
 			return ret, err
 		}
 	}
 
 	return ret, nil
-}
-
-func (c *Command) hsetKV(txn *store.Txn, object *Object, k, v []byte, delta int64) (int64, error) {
-	var err error
-	if v == nil {
-		err = txn.Del(k)
-	} else {
-		err = txn.Put(k, v)
-	}
-	if err != nil {
-		return 0, err
-	}
-	if delta == 0 {
-		return 0, nil
-	}
-
-	count, err := c.GetCount(txn, txn.UserId, txn.DBId, HashType, uint64(object.Hash), object.Value, v)
-	if err == store.KeyNotFound {
-	} else if err != nil {
-		return 0, err
-	}
-	count.Value += delta
-	err = c.SetCount(txn, count)
-	return count.Value, err
 }

@@ -43,7 +43,9 @@ type Value struct {
 func EncodeValue(v *Value) []byte {
 	k := make([]byte, 8+len(v.Value))
 	binary.BigEndian.PutUint64(k[0:8], v.Timestamp)
-	copy(k[8:], v.Value)
+	if len(v.Value) > 0 {
+		copy(k[8:], v.Value)
+	}
 	return k
 }
 
@@ -1072,10 +1074,8 @@ func (c *Command) pophandle(txn *store.Txn, args [][]byte, lfunc ListFunc) inter
 	opt := &lOpt{exist: true}
 	if len(args) == 2 {
 		count, err := utils.GetPositiveInt(args[1])
-		if err == utils.ErrInvalidInt {
-			if count == 0 {
-				return nil
-			}
+		if err == utils.ErrInvalidInt && count == 0 {
+			return nil
 		}
 		if err != nil {
 			return txn.SetError(xerror.ErrNotPositiveInteger)

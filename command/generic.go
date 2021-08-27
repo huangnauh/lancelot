@@ -252,7 +252,7 @@ type ScanResult struct {
 }
 
 func (c *Command) checkCursor(scanOpt *scanOptions, cursor []byte,
-	cursorPrefix string, start []byte) ([]byte, error) {
+	cursorPrefix ObjectType, start []byte) ([]byte, error) {
 	if scanOpt.cursor == ServerCursor {
 		cursorInt, err := strconv.ParseInt(utils.B2S(cursor), 10, 64)
 		if err != nil {
@@ -306,7 +306,7 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	start := GetDataPrefix(txn.UserId, txn.DBId, KeyType, utils.S2B(prefix))
 	prefixLen := len(start)
 	end := utils.PrefixNext(start)
-	start, err = c.checkCursor(scanOpt, cursor, GenericCursor, start)
+	start, err = c.checkCursor(scanOpt, cursor, KeyType, start)
 	if err != nil {
 		return txn.SetError(err)
 	}
