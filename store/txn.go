@@ -294,7 +294,7 @@ type IterList struct {
 }
 
 func NewIterList() *IterList {
-	return &IterList{}
+	return &IterList{iters: make(map[int]*IterScan)}
 }
 
 func (i *IterList) Add(prefix []byte, iter *Iterator) {

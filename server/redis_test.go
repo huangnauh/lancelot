@@ -1687,7 +1687,7 @@ var _ = Describe("Commands", func() {
 		})
 	})
 
-	FDescribe("hashes", func() {
+	Describe("hashes", func() {
 		It("should HDel", func() {
 			hSet := client.HSet(ctx, "hash", "key", "hello")
 			Expect(hSet.Err()).NotTo(HaveOccurred())
@@ -2467,7 +2467,7 @@ var _ = Describe("Commands", func() {
 	})
 
 	Describe("sets", func() {
-		It("should SAdd", func() {
+		FIt("should SAdd", func() {
 			sAdd := client.SAdd(ctx, "set", "Hello")
 			Expect(sAdd.Err()).NotTo(HaveOccurred())
 			Expect(sAdd.Val()).To(Equal(int64(1)))
@@ -2485,7 +2485,7 @@ var _ = Describe("Commands", func() {
 			Expect(sMembers.Val()).To(ConsistOf([]string{"Hello", "World"}))
 		})
 
-		It("should SAdd strings", func() {
+		FIt("should SAdd strings", func() {
 			set := []string{"Hello", "World", "World"}
 			sAdd := client.SAdd(ctx, "set", set)
 			Expect(sAdd.Err()).NotTo(HaveOccurred())
@@ -2496,7 +2496,7 @@ var _ = Describe("Commands", func() {
 			Expect(sMembers.Val()).To(ConsistOf([]string{"Hello", "World"}))
 		})
 
-		It("should SCard", func() {
+		FIt("should SCard", func() {
 			sAdd := client.SAdd(ctx, "set", "Hello")
 			Expect(sAdd.Err()).NotTo(HaveOccurred())
 			Expect(sAdd.Val()).To(Equal(int64(1)))
@@ -2510,7 +2510,7 @@ var _ = Describe("Commands", func() {
 			Expect(sCard.Val()).To(Equal(int64(2)))
 		})
 
-		It("should SDiff", func() {
+		FIt("should SDiff", func() {
 			sAdd := client.SAdd(ctx, "set1", "a")
 			Expect(sAdd.Err()).NotTo(HaveOccurred())
 			sAdd = client.SAdd(ctx, "set1", "b")
