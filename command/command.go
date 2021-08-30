@@ -541,6 +541,35 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:   100,
 			Type: ListType,
 		},
+		ZADD_COMMAND: {
+			Func: c.ZAddHandle,
+			ID:   101,
+			Type: ZsetType,
+		},
+		ZCARD_COMMAND: {
+			Func:     c.ZCardHandle,
+			ReadOnly: true,
+			ID:       102,
+			Type:     ZsetType,
+		},
+		ZCOUNT_COMMAND: {
+			Func:     c.ZCountHandle,
+			ReadOnly: true,
+			ID:       103,
+			Type:     ZsetType,
+		},
+		ZRANGEBYLEX_COMMAND: {
+			Func:     c.ZRangeByLexHandle,
+			ReadOnly: true,
+			ID:       104,
+			Type:     ZsetType,
+		},
+		ZRANGEBYSCORE_COMMAND: {
+			Func:     c.ZRangeByScoreHandle,
+			ReadOnly: true,
+			ID:       105,
+			Type:     ZsetType,
+		},
 		DEL_COMMAND: {
 			Func: c.DELHandle,
 			ID:   101,

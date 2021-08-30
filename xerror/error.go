@@ -7,13 +7,16 @@ import (
 )
 
 var (
-	ErrWatchInsideMulti    = "WATCH inside MULTI is not allowed"
-	ErrMultiNested         = "MULTI calls can not be nested"
-	ErrEXECErr             = "EXEC without MULTI"
-	ErrDISCARDErr          = "DISCARD without MULTI"
-	ErrMultiErr            = "without MULTI"
-	ErrTransactionErr      = "Transaction discarded because of previous errors."
+	ErrWatchInsideMulti = "WATCH inside MULTI is not allowed"
+	ErrMultiNested      = "MULTI calls can not be nested"
+	ErrEXECErr          = "EXEC without MULTI"
+	ErrDISCARDErr       = "DISCARD without MULTI"
+	ErrMultiErr         = "without MULTI"
+	ErrTransactionErr   = "Transaction discarded because of previous errors."
+
 	ErrNotInteger          = errors.New("value is not an integer or out of range")
+	ErrXXNXCompat          = errors.New("XX and NX options at the same time are not compatible")
+	ErrGTLTNXCompat        = errors.New("GT, LT, and/or NX options at the same time are not compatible")
 	ErrInvalidFloat        = errors.New("value is not a valid float")
 	ErrNotPositiveInteger  = errors.New("value is out of range, must be positive")
 	ErrRankZero            = errors.New("RANK can't be zero: use 1 to start from the first match, 2 from the second, ...")
@@ -26,6 +29,7 @@ var (
 	ErrTimeoutNegative     = errors.New("timeout is negative")
 	ErrLuaInvalidType      = errors.New("lua invalid type")
 	ErrSyntax              = errors.New("syntax error")
+	ErrMinMaxString        = errors.New("min or max not valid string range item")
 	ErrNotExpire           = errors.New("not expire")
 	WrongTypeError         = errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 	ErrNoMatchScript       = errors.New("No matching script. Please use EVAL.")
@@ -69,6 +73,7 @@ var (
 	InvalidOffset = errors.New("invalid offset")
 	InvalidLimit  = errors.New("invalid limit")
 	ErrClosed     = errors.New("closed")
+	ErrEmpty      = errors.New("emtpy")
 )
 
 func WrongArgsString(command string) string {

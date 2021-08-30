@@ -23,6 +23,16 @@ func EncodeFloat(f float64) []byte {
 	return k
 }
 
+func EncodeFloatBytes(f float64, k []byte) {
+	vi := math.Float64bits(f)
+	if vi>>63 != 0 {
+		vi = ^vi
+	} else {
+		vi |= (1 << 63)
+	}
+	binary.BigEndian.PutUint64(k, vi)
+}
+
 func DecodeFloat(k []byte) float64 {
 	vi := binary.BigEndian.Uint64(k)
 	if vi>>63 != 0 {

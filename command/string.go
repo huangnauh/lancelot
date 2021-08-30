@@ -30,14 +30,24 @@ const (
 	NX = "nx"
 	//XX
 	XX = "xx"
+	//CH
+	CH = "ch"
+	// LT
+	LT = "lt"
+	// GT
+	GT = "gt"
 	//GET
 	GET = "get"
+	//INCR
+	INCR = "incr"
 
-	NoCheck CheckType = 0
-	// Only set the key if it already exist.
-	CheckExist CheckType = 1
+	NoCheck CheckType = 0x00
 	// Only set the key if it does not already exist.
-	CheckNotExist CheckType = 2
+	CheckNotExist CheckType = 0x01
+	// Only set the key if it already exist.
+	CheckExist CheckType = 0x02
+	CheckLT    CheckType = 0x04
+	CheckGT    CheckType = 0x08
 )
 
 func getString(txn *store.Txn, arg []byte) ([]byte, error) {
