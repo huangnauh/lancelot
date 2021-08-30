@@ -431,7 +431,11 @@ func (c *Command) GetCountByKey(txn *store.Txn, arg []byte, typo ObjectType) (in
 	} else if err != nil {
 		return 0, err
 	}
-	counts, err := c.ListCount(txn, txn.UserId, txn.DBId, typo, uint16(object.Hash), object.Value)
+	return c.GetCountByObject(txn, object)
+}
+
+func (c *Command) GetCountByObject(txn *store.Txn, object *Object) (int64, error) {
+	counts, err := c.ListCount(txn, txn.UserId, txn.DBId, object.Type, uint16(object.Hash), object.Value)
 	if err != nil {
 		return 0, err
 	}

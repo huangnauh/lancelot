@@ -10,6 +10,7 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"go.uber.org/zap"
 )
 
 type SFunc func(txn *store.Txn, args [][]byte) ([][]byte, error)
@@ -25,8 +26,7 @@ func (c *Command) SMIsMemberHandle(txn *store.Txn, args [][]byte) interface{} {
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		return ret
-	}
-	if err != nil {
+	} else if err != nil {
 		return txn.SetError(err)
 	}
 	for i := 1; i < len(args); i++ {
@@ -266,20 +266,7 @@ func (c *Command) sinter(txn *store.Txn, args [][]byte) ([][]byte, error) {
 	var err error
 	min := int64(math.MaxInt64)
 	counts := make([]int64, len(args))
-	for i := 0; i < len(args); i++ {
-		count, err := c.GetCountByKey(txn, args[0], SetType)
-		if err != nil {
-			return nil, err
-		}
-		if count == 0 {
-			return EmptyBytes, nil
-		}
-		counts = append(counts, count)
-		if min < count {
-			min = count
-			mini = i
-		}
-	}
+	alist := make([]*Object, len(args))
 	for i := 0; i < len(args); i++ {
 		o := NewObject(txn.UserId, txn.DBId, SetType, args[i])
 		k := o.GetKeyBytes()
@@ -290,8 +277,24 @@ func (c *Command) sinter(txn *store.Txn, args [][]byte) ([][]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		count, err := c.GetCountByObject(txn, o)
+		if err != nil {
+			return nil, err
+		}
+		if count == 0 {
+			return EmptyBytes, nil
+		}
+		if min < count {
+			min = count
+			mini = i
+		}
+		counts[i] = count
+		alist[i] = o
+	}
+	for i, o := range alist {
 		if i == mini {
 			object = o
+			continue
 		}
 
 		if counts[i] > 10*min && counts[i] > MINI_SCAN_SIZE {
@@ -303,7 +306,7 @@ func (c *Command) sinter(txn *store.Txn, args [][]byte) ([][]byte, error) {
 			llist = append(llist, o)
 		}
 	}
-
+	utils.ZapLog.Debug("sinter", zap.Int("glist", len(glist)), zap.Int("llist", len(llist)))
 	start := object.GetKeyFieldBytes(nil)
 	end := utils.PrefixNext(start)
 	ret := make([][]byte, 0)
@@ -318,14 +321,15 @@ func (c *Command) sinter(txn *store.Txn, args [][]byte) ([][]byte, error) {
 		if iterList == nil && len(llist) > 0 {
 			iterList = store.NewIterList()
 			for _, o := range llist {
+				p := o.GetKeyFieldBytes(nil)
 				s := o.GetKeyFieldBytes(k)
-				e := utils.PrefixNext(o.GetKeyFieldBytes(nil))
+				e := utils.PrefixNext(p)
 				iter, err := txn.Iter(s, e, false)
 				if err != nil {
 					cbErr = err
 					return false
 				}
-				iterList.Add(s, iter)
+				iterList.Add(p, iter)
 			}
 		}
 
@@ -349,7 +353,7 @@ func (c *Command) sinter(txn *store.Txn, args [][]byte) ([][]byte, error) {
 				return false
 			}
 			if !ok {
-				return false
+				return true
 			}
 		}
 		ret = append(ret, k)
@@ -376,14 +380,17 @@ func (c *Command) sunion(txn *store.Txn, args [][]byte) ([][]byte, error) {
 		err = getTxnObject(txn, k, object, false)
 		if err == store.KeyNotFound {
 			continue
+		} else if err != nil {
+			return nil, err
 		}
-		s := object.GetKeyFieldBytes(k)
-		e := utils.PrefixNext(object.GetKeyFieldBytes(nil))
+		p := object.GetKeyFieldBytes(nil)
+		s := p
+		e := utils.PrefixNext(p)
 		iter, err := txn.Iter(s, e, false)
 		if err != nil {
 			return nil, err
 		}
-		iterList.Add(s, iter)
+		iterList.Add(p, iter)
 	}
 
 	ret := make([][]byte, 0)
@@ -431,7 +438,7 @@ func (c *Command) sdiff(txn *store.Txn, args [][]byte) ([][]byte, error) {
 		return ret, nil
 	}
 
-	count0, err := c.GetCountByKey(txn, args[0], SetType)
+	count0, err := c.GetCountByObject(txn, object)
 	if err != nil {
 		return nil, err
 	}
@@ -441,9 +448,10 @@ func (c *Command) sdiff(txn *store.Txn, args [][]byte) ([][]byte, error) {
 
 	glist := make([]*Object, 0)
 	llist := make([]*Object, 0)
-	for i := 0; i < len(args); i++ {
+	for i := 1; i < len(args); i++ {
 		o := NewObject(txn.UserId, txn.DBId, SetType, args[i])
 		k := o.GetKeyBytes()
+		utils.ZapLog.Debug("sdiff", zap.String("key", string(args[i])), zap.ByteString("k", k))
 		err = getTxnObject(txn, k, o, false)
 		if err == store.KeyNotFound {
 			continue
@@ -452,7 +460,7 @@ func (c *Command) sdiff(txn *store.Txn, args [][]byte) ([][]byte, error) {
 			return nil, err
 		}
 
-		count, err := c.GetCountByKey(txn, args[0], SetType)
+		count, err := c.GetCountByObject(txn, o)
 		if err != nil {
 			return nil, err
 		}
@@ -467,6 +475,8 @@ func (c *Command) sdiff(txn *store.Txn, args [][]byte) ([][]byte, error) {
 		}
 	}
 
+	utils.ZapLog.Debug("sdiff", zap.Int("glist", len(glist)), zap.Int("llist", len(llist)))
+
 	var iterList *store.IterList
 	var cbErr error
 	err = txn.List(start, end, c.cfg.Key.ScanMaxCount, func(key, value []byte) bool {
@@ -478,14 +488,15 @@ func (c *Command) sdiff(txn *store.Txn, args [][]byte) ([][]byte, error) {
 		if iterList == nil && len(llist) > 0 {
 			iterList = store.NewIterList()
 			for _, o := range llist {
+				p := o.GetKeyFieldBytes(nil)
 				s := o.GetKeyFieldBytes(k)
-				e := utils.PrefixNext(o.GetKeyFieldBytes(nil))
+				e := utils.PrefixNext(p)
 				iter, err := txn.Iter(s, e, false)
 				if err != nil {
 					cbErr = err
 					return false
 				}
-				iterList.Add(s, iter)
+				iterList.Add(p, iter)
 			}
 		}
 		// get check

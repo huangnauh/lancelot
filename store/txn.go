@@ -118,7 +118,8 @@ func (t *Txn) Get(key []byte) ([]byte, error) {
 	ctx = context.WithValue(ctx, execdetails.StmtExecDetailKey, execDetail)
 	defer cancel()
 	v, err := t.txn.Get(ctx, key)
-
+	utils.ZapLog.Debug("[txn] get", zap.String("remote", t.RemoteAddr()),
+		zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.ByteString("value", v))
 	spend := time.Since(start)
 	if spend > t.client.conf.SlowRequest {
 		utils.ZapLog.Warn("[txn] get slow request", zap.String("remote", t.RemoteAddr()),
@@ -315,14 +316,20 @@ func (i *IterList) Next() ([]byte, error) {
 		i.heap = utils.NewBytesHeap()
 		heap.Init(i.heap)
 	}
+	var err error
 	for j, it := range i.iters {
 		for it.iter.Valid() {
 			cur := it.iter.Key()
-			if len(cur) < len(it.prefix) {
-				continue
+			if len(cur) >= len(it.prefix) {
+				heap.Push(i.heap, []byte(cur[len(it.prefix):]))
 			}
-			heap.Push(i.heap, cur[len(it.prefix):])
-			break
+			err = it.iter.Next()
+			if err != nil {
+				return nil, err
+			}
+			if len(cur) >= len(it.prefix) {
+				break
+			}
 		}
 		if !it.iter.Valid() {
 			delete(i.iters, j)
@@ -331,40 +338,61 @@ func (i *IterList) Next() ([]byte, error) {
 	if i.heap.Len() == 0 {
 		return nil, nil
 	}
-	return i.heap.Pop().([]byte), nil
+	return heap.Pop(i.heap).([]byte), nil
 }
 
 func (i *IterList) NextUntil(key []byte, all bool) (bool, error) {
 	var err error
+	count := 0
+	if len(i.iters) == 0 {
+		return false, nil
+	}
+	num := len(i.iters)
 	for j, it := range i.iters {
-		c := bytes.Compare(it.current, key)
-		if c == 0 && !all {
-			return true, nil
-		} else if c > 0 && all {
-			return false, nil
-		}
-		if c >= 0 {
-			continue
+		utils.ZapLog.Debug("[txn] IterList NextUntil ", zap.ByteString("key", key),
+			zap.ByteString("prefix", it.prefix), zap.Int("len", len(i.iters)),
+			zap.ByteString("current", it.current[len(it.prefix):]))
+		if len(it.current) >= len(it.prefix) {
+			c := bytes.Compare(it.current[len(it.prefix):], key)
+			if c == 0 {
+				if !all {
+					return true, nil
+				}
+				count++
+				continue
+			} else if c > 0 && all {
+				return false, nil
+			}
+			if c >= 0 {
+				continue
+			}
 		}
 
 		for it.iter.Valid() {
 			it.current = it.iter.Key()
-			if len(key) >= len(it.prefix) {
-				c := bytes.Compare(it.current, key[len(it.prefix):])
-				if c < 0 {
-					continue
-				}
+			utils.ZapLog.Debug("[txn] IterList NextUntil ", zap.String("remote", it.iter.txn.RemoteAddr()),
+				zap.Uint64("timestamp", it.iter.txn.Timestamp), zap.ByteString("key", it.current))
 
-				if c == 0 && !all {
-					return true, nil
-				} else if c > 0 && all {
-					return false, nil
-				}
-				break
-			}
 			err = it.iter.Next()
 			if err != nil {
 				return false, err
+			}
+
+			if len(it.current) >= len(it.prefix) {
+				c := bytes.Compare(it.current[len(it.prefix):], key)
+				if c < 0 {
+					continue
+				} else if c == 0 {
+					if !all {
+						return true, nil
+					}
+					count++
+					break
+				} else if c > 0 && all {
+					return false, nil
+				} else {
+					break
+				}
 			}
 		}
 
@@ -372,5 +400,11 @@ func (i *IterList) NextUntil(key []byte, all bool) (bool, error) {
 			delete(i.iters, j)
 		}
 	}
-	return all, nil
+	if !all {
+		return false, nil
+	}
+	if count == num {
+		return true, nil
+	}
+	return false, nil
 }
