@@ -13,7 +13,13 @@ import (
 	"go.uber.org/zap"
 )
 
-type SFunc func(txn *store.Txn, args [][]byte) ([][]byte, error)
+type SFunc func(txn *store.Txn, args [][]byte, typo ObjectType, getKeyFunc GetKeyFunc, getType int, weight []int) ([]interface{}, error)
+
+type GetKeyFunc func(o *Object, field []byte) []byte
+
+func GetSetKey(o *Object, field []byte) []byte {
+	return o.GetKeyFieldBytes(field)
+}
 
 // (sets) SMISMEMBER key member [member ...]
 func (c *Command) SMIsMemberHandle(txn *store.Txn, args [][]byte) interface{} {
@@ -23,7 +29,7 @@ func (c *Command) SMIsMemberHandle(txn *store.Txn, args [][]byte) interface{} {
 	object := NewObject(txn.UserId, txn.DBId, SetType, args[0])
 	key := object.GetKeyBytes()
 	ret := make([]redcon.SimpleInt, len(args)-1)
-	err := getTxnObject(txn, key, object, true)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return ret
 	} else if err != nil {
@@ -181,7 +187,7 @@ func (c *Command) SUnionStoreHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(SUNIONSTORE_COMMAND)
 	}
-	return c.sstore(txn, args, c.sunion)
+	return c.sstore(txn, args, c.union)
 }
 
 // (sets) SINTERSTORE destination key [key ...]
@@ -189,7 +195,7 @@ func (c *Command) SInterStoreHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(SINTERSTORE_COMMAND)
 	}
-	return c.sstore(txn, args, c.sinter)
+	return c.sstore(txn, args, c.inter)
 }
 
 // (sets) SDIFFSTORE destination key [key ...]
@@ -197,7 +203,7 @@ func (c *Command) SDiffStoreHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(SDIFFSTORE_COMMAND)
 	}
-	return c.sstore(txn, args, c.sdiff)
+	return c.sstore(txn, args, c.diff)
 }
 
 // (sets) SDIFF key [key ...]
@@ -206,7 +212,7 @@ func (c *Command) SDiffHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(SDIFF_COMMAND)
 	}
 
-	ret, err := c.sdiff(txn, args)
+	ret, err := c.diff(txn, args, SetType, GetSetKey, OnlyKey, nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -219,7 +225,7 @@ func (c *Command) SInterHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(SINTER_COMMAND)
 	}
 
-	ret, err := c.sinter(txn, args)
+	ret, err := c.inter(txn, args, SetType, GetSetKey, OnlyKey, nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -227,17 +233,17 @@ func (c *Command) SInterHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) sstore(txn *store.Txn, args [][]byte, sfunc SFunc) interface{} {
-	object, err := c.GetOrCreateUUIDObject(txn, SetType, args[0])
+	object, err := c.DeleteThenCreateUUIDObject(txn, SetType, args[0])
 	if err != nil {
 		return txn.SetError(err)
 	}
-	ret, err := sfunc(txn, args[1:])
+	ret, err := sfunc(txn, args[1:], SetType, GetSetKey, OnlyKey, nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	for _, k := range ret {
 		svalue := &Value{Timestamp: txn.Timestamp}
-		skey := object.GetKeyFieldBytes(k)
+		skey := object.GetKeyFieldBytes(k.([]byte))
 		_, err = c.PutOrDeleteKV(txn, object, skey, EncodeValue(svalue), 1)
 		if err != nil {
 			return txn.SetError(err)
@@ -251,16 +257,16 @@ func (c *Command) SUnionHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 1 {
 		return txn.SetWrongArgs(SUNION_COMMAND)
 	}
-	ret, err := c.sunion(txn, args)
+	ret, err := c.union(txn, args, SetType, GetSetKey, OnlyKey, nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	return ret
 }
 
-func (c *Command) sinter(txn *store.Txn, args [][]byte) ([][]byte, error) {
-	glist := make([]*Object, 0)
-	llist := make([]*Object, 0)
+func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getKeyFunc GetKeyFunc, getType int, weight []int) ([]interface{}, error) {
+	glist := make(map[int]*Object)
+	llist := make(map[int]*Object)
 	var object *Object
 	var mini int
 	var err error
@@ -268,11 +274,11 @@ func (c *Command) sinter(txn *store.Txn, args [][]byte) ([][]byte, error) {
 	counts := make([]int64, len(args))
 	alist := make([]*Object, len(args))
 	for i := 0; i < len(args); i++ {
-		o := NewObject(txn.UserId, txn.DBId, SetType, args[i])
+		o := NewObject(txn.UserId, txn.DBId, typo, args[i])
 		k := o.GetKeyBytes()
 		err = getTxnObject(txn, k, o, false)
 		if err == store.KeyNotFound {
-			return EmptyBytes, nil
+			return EmptyInterface, nil
 		}
 		if err != nil {
 			return nil, err
@@ -282,7 +288,7 @@ func (c *Command) sinter(txn *store.Txn, args [][]byte) ([][]byte, error) {
 			return nil, err
 		}
 		if count == 0 {
-			return EmptyBytes, nil
+			return EmptyInterface, nil
 		}
 		if min < count {
 			min = count
@@ -298,18 +304,18 @@ func (c *Command) sinter(txn *store.Txn, args [][]byte) ([][]byte, error) {
 		}
 
 		if counts[i] > 10*min && counts[i] > MINI_SCAN_SIZE {
-			glist = append(glist, o)
+			glist[i] = o
 		} else {
 			if int(counts[i]) > c.cfg.Key.ScanMaxCount {
 				return nil, store.ReachLimit
 			}
-			llist = append(llist, o)
+			llist[i] = o
 		}
 	}
-	utils.ZapLog.Debug("sinter", zap.Int("glist", len(glist)), zap.Int("llist", len(llist)))
+	utils.ZapLog.Debug("inter", zap.Int("glist", len(glist)), zap.Int("llist", len(llist)))
 	start := object.GetKeyFieldBytes(nil)
 	end := utils.PrefixNext(start)
-	ret := make([][]byte, 0)
+	ret := make([]interface{}, 0)
 	var iterList *store.IterList
 	var cbErr error
 	err = txn.List(start, end, c.cfg.Key.ScanMaxCount, func(key, value []byte) bool {
@@ -320,43 +326,76 @@ func (c *Command) sinter(txn *store.Txn, args [][]byte) ([][]byte, error) {
 		k := key[len(start):]
 		if iterList == nil && len(llist) > 0 {
 			iterList = store.NewIterList()
-			for _, o := range llist {
-				p := o.GetKeyFieldBytes(nil)
-				s := o.GetKeyFieldBytes(k)
+			for idx, o := range llist {
+				p := getKeyFunc(o, nil)
+				s := getKeyFunc(o, k)
 				e := utils.PrefixNext(p)
 				iter, err := txn.Iter(s, e, false)
 				if err != nil {
 					cbErr = err
 					return false
 				}
-				iterList.Add(p, iter)
+				iterList.Add(p, idx, iter)
+			}
+		}
+
+		// list check
+		var lvalues map[int][]byte
+		if iterList != nil {
+			lvalues, err = iterList.NextUntil(k, true)
+			if err != nil {
+				cbErr = err
+				return false
+			}
+			if len(lvalues) < len(llist) {
+				return true
 			}
 		}
 
 		// get check
-		for _, o := range glist {
-			skey := o.GetKeyFieldBytes(k)
-			_, err := txn.Get(skey)
+		for idx, o := range glist {
+			skey := getKeyFunc(o, k)
+			v, err := txn.Get(skey)
 			if err == store.KeyNotFound {
 				return false
 			} else if err != nil {
 				cbErr = err
 				return false
 			}
+			lvalues[idx] = v
 		}
 
-		// list check
-		if iterList != nil {
-			ok, err := iterList.NextUntil(k, true)
-			if err != nil {
-				cbErr = err
-				return false
-			}
-			if !ok {
-				return true
-			}
+		if getType&OnlyKey == OnlyKey {
+			ret = append(ret, k)
 		}
-		ret = append(ret, k)
+		if getType&OnlyValue == OnlyValue {
+			zv := &Value{}
+			DecodeValue(value, zv)
+			score := utils.DecodeFloat(zv.Value)
+			if len(weight) > 0 {
+				score *= float64(weight[mini])
+			}
+			for idx, v := range lvalues {
+				zv := &Value{}
+				DecodeValue(v, zv)
+				s := utils.DecodeFloat(zv.Value)
+				if len(weight) > 0 {
+					s *= float64(weight[idx])
+				}
+				if getType&SumAGG == SumAGG {
+					score += s
+				} else if getType&MaxAGG == MaxAGG {
+					if s > score {
+						score = s
+					}
+				} else if getType&MinAGG == MinAGG {
+					if s < score {
+						score = s
+					}
+				}
+			}
+			ret = append(ret, score)
+		}
 		return true
 	})
 	if cbErr != nil {
@@ -371,11 +410,11 @@ func (c *Command) sinter(txn *store.Txn, args [][]byte) ([][]byte, error) {
 	return ret, nil
 }
 
-func (c *Command) sunion(txn *store.Txn, args [][]byte) ([][]byte, error) {
+func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getKeyFunc GetKeyFunc, getType int, weight []int) ([]interface{}, error) {
 	var err error
 	iterList := store.NewIterList()
 	for i := 0; i < len(args); i++ {
-		object := NewObject(txn.UserId, txn.DBId, SetType, args[i])
+		object := NewObject(txn.UserId, txn.DBId, typo, args[i])
 		k := object.GetKeyBytes()
 		err = getTxnObject(txn, k, object, false)
 		if err == store.KeyNotFound {
@@ -383,47 +422,75 @@ func (c *Command) sunion(txn *store.Txn, args [][]byte) ([][]byte, error) {
 		} else if err != nil {
 			return nil, err
 		}
-		p := object.GetKeyFieldBytes(nil)
+		p := getKeyFunc(object, nil)
 		s := p
 		e := utils.PrefixNext(p)
 		iter, err := txn.Iter(s, e, false)
 		if err != nil {
 			return nil, err
 		}
-		iterList.Add(p, iter)
+		iterList.Add(p, i, iter)
 	}
 
-	ret := make([][]byte, 0)
+	ret := make([]interface{}, 0)
+	var preKey []byte
+	var preScore float64
 	for {
-		value, err := iterList.Next()
+		kv, err := iterList.Next()
 		if err != nil {
 			return nil, err
 		}
-		if value == nil {
+		if kv.Key == nil {
 			break
 		}
-		if len(ret) > 0 && bytes.Equal(ret[len(ret)-1], value) {
-			continue
+		new := preKey != nil && !bytes.Equal(preKey, kv.Key)
+		if getType&OnlyKey == OnlyKey {
+			if new {
+				ret = append(ret, preKey)
+			}
+			preKey = kv.Key
 		}
-		ret = append(ret, value)
+		if getType&OnlyValue == OnlyValue {
+			if new {
+				ret = append(ret, preScore)
+				preScore = 0
+			}
+			zv := &Value{}
+			DecodeValue(kv.Value, zv)
+			score := utils.DecodeFloat(zv.Value)
+			if len(weight) > 0 {
+				score *= float64(weight[kv.Idx])
+			}
+			if getType&SumAGG == SumAGG {
+				preScore += score
+			} else if getType&MaxAGG == MaxAGG {
+				if score > preScore {
+					preScore = score
+				}
+			} else if getType&MinAGG == MinAGG {
+				if score < preScore {
+					preScore = score
+				}
+			}
+		}
 	}
 	return ret, nil
 }
 
-func (c *Command) sdiff(txn *store.Txn, args [][]byte) ([][]byte, error) {
-	object := NewObject(txn.UserId, txn.DBId, SetType, args[0])
+func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getKeyFunc GetKeyFunc, getType int, weight []int) ([]interface{}, error) {
+	object := NewObject(txn.UserId, txn.DBId, typo, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
-		return EmptyBytes, nil
+		return EmptyInterface, nil
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	start := object.GetKeyFieldBytes(nil)
+	start := getKeyFunc(object, nil)
 	end := utils.PrefixNext(start)
-	ret := make([][]byte, 0)
+	ret := make([]interface{}, 0)
 	if len(args) == 1 {
 		err = txn.List(start, end, c.cfg.Key.ScanMaxCount, func(key, value []byte) bool {
 			if len(key) < len(start) {
@@ -446,12 +513,12 @@ func (c *Command) sdiff(txn *store.Txn, args [][]byte) ([][]byte, error) {
 		return nil, store.ReachLimit
 	}
 
-	glist := make([]*Object, 0)
-	llist := make([]*Object, 0)
+	glist := make(map[int]*Object)
+	llist := make(map[int]*Object)
 	for i := 1; i < len(args); i++ {
 		o := NewObject(txn.UserId, txn.DBId, SetType, args[i])
 		k := o.GetKeyBytes()
-		utils.ZapLog.Debug("sdiff", zap.String("key", string(args[i])), zap.ByteString("k", k))
+		utils.ZapLog.Debug("diff", zap.String("key", string(args[i])), zap.ByteString("k", k))
 		err = getTxnObject(txn, k, o, false)
 		if err == store.KeyNotFound {
 			continue
@@ -466,16 +533,16 @@ func (c *Command) sdiff(txn *store.Txn, args [][]byte) ([][]byte, error) {
 		}
 
 		if count > 10*count0 && count > MINI_SCAN_SIZE {
-			glist = append(glist, o)
+			glist[i] = o
 		} else {
 			if int(count) > c.cfg.Key.ScanMaxCount {
 				return nil, store.ReachLimit
 			}
-			llist = append(llist, o)
+			llist[i] = o
 		}
 	}
 
-	utils.ZapLog.Debug("sdiff", zap.Int("glist", len(glist)), zap.Int("llist", len(llist)))
+	utils.ZapLog.Debug("diff", zap.Int("glist", len(glist)), zap.Int("llist", len(llist)))
 
 	var iterList *store.IterList
 	var cbErr error
@@ -487,21 +554,21 @@ func (c *Command) sdiff(txn *store.Txn, args [][]byte) ([][]byte, error) {
 		k := key[len(start):]
 		if iterList == nil && len(llist) > 0 {
 			iterList = store.NewIterList()
-			for _, o := range llist {
-				p := o.GetKeyFieldBytes(nil)
-				s := o.GetKeyFieldBytes(k)
+			for i, o := range llist {
+				p := getKeyFunc(o, nil)
+				s := getKeyFunc(o, k)
 				e := utils.PrefixNext(p)
 				iter, err := txn.Iter(s, e, false)
 				if err != nil {
 					cbErr = err
 					return false
 				}
-				iterList.Add(p, iter)
+				iterList.Add(p, i, iter)
 			}
 		}
 		// get check
 		for _, o := range glist {
-			skey := o.GetKeyFieldBytes(k)
+			skey := getKeyFunc(o, k)
 			_, err := txn.Get(skey)
 			if err == nil {
 				return true
@@ -515,16 +582,23 @@ func (c *Command) sdiff(txn *store.Txn, args [][]byte) ([][]byte, error) {
 
 		// list check
 		if iterList != nil {
-			ok, err := iterList.NextUntil(k, false)
+			values, err := iterList.NextUntil(k, false)
 			if err != nil {
 				cbErr = err
 				return false
 			}
-			if ok {
+			if len(values) > 0 {
 				return true
 			}
 		}
-		ret = append(ret, k)
+		if getType&OnlyKey == OnlyKey {
+			ret = append(ret, k)
+		}
+		if getType&OnlyValue == OnlyValue {
+			v := &Value{}
+			DecodeValue(value, v)
+			ret = append(ret, v.Value)
+		}
 		return true
 	})
 	if cbErr != nil {

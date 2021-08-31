@@ -20,6 +20,9 @@ const (
 	OnlyKey   = 0x01
 	OnlyValue = 0x02
 	BothKV    = OnlyKey | OnlyValue
+	MinAGG    = 0x04
+	MaxAGG    = 0x08
+	SumAGG    = 0x10
 )
 
 //(hash) HEXISTS key field
@@ -458,6 +461,32 @@ func (c *Command) HIncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 	return redcon.SimpleInt(intValue)
+}
+
+func (c *Command) DeleteThenCreateUUIDObject(txn *store.Txn, typo ObjectType, arg []byte) (*Object, error) {
+	object := NewObject(txn.UserId, txn.DBId, KeyType, arg)
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, true)
+	if err == store.KeyNotFound {
+	} else if err != nil && err != xerror.WrongTypeError {
+		return object, err
+	} else {
+		err = DeleteKey(txn, key, object, txn.Now)
+		if err != nil {
+			return object, err
+		}
+	}
+	id, err := uuid.NewUUID()
+	if err != nil {
+		return object, err
+	}
+	object.Value = id[:]
+	object.Timestamp = txn.Timestamp
+	err = txn.Put(key, ObjectEncode(object))
+	if err != nil {
+		return object, err
+	}
+	return object, nil
 }
 
 func (c *Command) GetOrCreateUUIDObject(txn *store.Txn, typo ObjectType, arg []byte) (*Object, error) {

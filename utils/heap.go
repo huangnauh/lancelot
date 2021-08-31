@@ -2,7 +2,13 @@ package utils
 
 import "bytes"
 
-type BytesHeap [][]byte
+type KV struct {
+	Idx   int
+	Key   []byte
+	Value []byte
+}
+
+type BytesHeap []KV
 
 func NewBytesHeap() *BytesHeap {
 	return &BytesHeap{}
@@ -13,7 +19,7 @@ func (h BytesHeap) Len() int {
 }
 
 func (h BytesHeap) Less(i, j int) bool {
-	return bytes.Compare(h[i], h[j]) < 0
+	return bytes.Compare(h[i].Key, h[j].Key) < 0
 }
 
 func (h BytesHeap) Swap(i, j int) {
@@ -21,7 +27,7 @@ func (h BytesHeap) Swap(i, j int) {
 }
 
 func (h *BytesHeap) Push(x interface{}) {
-	*h = append(*h, x.([]byte))
+	*h = append(*h, x.(KV))
 }
 
 func (h *BytesHeap) Pop() interface{} {

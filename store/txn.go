@@ -287,6 +287,7 @@ func (t *Iterator) DeleteUntil(limit int, callback KVCallback) (key []byte, coun
 type IterScan struct {
 	prefix  []byte
 	current []byte
+	idx     int
 	iter    *Iterator
 }
 type IterList struct {
@@ -298,8 +299,8 @@ func NewIterList() *IterList {
 	return &IterList{iters: make(map[int]*IterScan)}
 }
 
-func (i *IterList) Add(prefix []byte, iter *Iterator) {
-	i.iters[len(i.iters)] = &IterScan{prefix, prefix, iter}
+func (i *IterList) Add(prefix []byte, idx int, iter *Iterator) {
+	i.iters[len(i.iters)] = &IterScan{prefix, prefix, idx, iter}
 }
 
 func (i *IterList) Close() {
@@ -311,21 +312,26 @@ func (i *IterList) Close() {
 	}
 }
 
-func (i *IterList) Next() ([]byte, error) {
+func (i *IterList) Next() (utils.KV, error) {
 	if i.heap == nil {
 		i.heap = utils.NewBytesHeap()
 		heap.Init(i.heap)
 	}
 	var err error
+	var kv utils.KV
 	for j, it := range i.iters {
 		for it.iter.Valid() {
 			cur := it.iter.Key()
 			if len(cur) >= len(it.prefix) {
-				heap.Push(i.heap, []byte(cur[len(it.prefix):]))
+				heap.Push(i.heap, utils.KV{
+					Idx:   it.idx,
+					Key:   cur[len(it.prefix):],
+					Value: it.iter.Value(),
+				})
 			}
 			err = it.iter.Next()
 			if err != nil {
-				return nil, err
+				return kv, err
 			}
 			if len(cur) >= len(it.prefix) {
 				break
@@ -336,18 +342,17 @@ func (i *IterList) Next() ([]byte, error) {
 		}
 	}
 	if i.heap.Len() == 0 {
-		return nil, nil
+		return kv, nil
 	}
-	return heap.Pop(i.heap).([]byte), nil
+	return heap.Pop(i.heap).(utils.KV), nil
 }
 
-func (i *IterList) NextUntil(key []byte, all bool) (bool, error) {
+func (i *IterList) NextUntil(key []byte, all bool) (map[int][]byte, error) {
 	var err error
-	count := 0
+	values := make(map[int][]byte)
 	if len(i.iters) == 0 {
-		return false, nil
+		return nil, nil
 	}
-	num := len(i.iters)
 	for j, it := range i.iters {
 		utils.ZapLog.Debug("[txn] IterList NextUntil ", zap.ByteString("key", key),
 			zap.ByteString("prefix", it.prefix), zap.Int("len", len(i.iters)),
@@ -355,13 +360,13 @@ func (i *IterList) NextUntil(key []byte, all bool) (bool, error) {
 		if len(it.current) >= len(it.prefix) {
 			c := bytes.Compare(it.current[len(it.prefix):], key)
 			if c == 0 {
+				values[it.idx] = it.iter.Value()
 				if !all {
-					return true, nil
+					return values, nil
 				}
-				count++
 				continue
 			} else if c > 0 && all {
-				return false, nil
+				return nil, nil
 			}
 			if c >= 0 {
 				continue
@@ -375,7 +380,7 @@ func (i *IterList) NextUntil(key []byte, all bool) (bool, error) {
 
 			err = it.iter.Next()
 			if err != nil {
-				return false, err
+				return nil, err
 			}
 
 			if len(it.current) >= len(it.prefix) {
@@ -383,28 +388,22 @@ func (i *IterList) NextUntil(key []byte, all bool) (bool, error) {
 				if c < 0 {
 					continue
 				} else if c == 0 {
+					values[it.idx] = it.iter.Value()
 					if !all {
-						return true, nil
+						return values, nil
 					}
-					count++
 					break
 				} else if c > 0 && all {
-					return false, nil
+					return nil, nil
 				} else {
 					break
 				}
 			}
 		}
 
-		if !it.iter.Valid() {
+		if !all && !it.iter.Valid() {
 			delete(i.iters, j)
 		}
 	}
-	if !all {
-		return false, nil
-	}
-	if count == num {
-		return true, nil
-	}
-	return false, nil
+	return values, nil
 }

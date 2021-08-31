@@ -30,18 +30,29 @@ const (
 	JSONDEL_COMMAND          = "json.del"
 	ZCARD_COMMAND            = "zcard"
 	ZCOUNT_COMMAND           = "zcount"
+	ZPOPMIN_COMMAND          = "zpopmin"
+	ZPOPMAX_COMMAND          = "zpopmax"
 	ZRANGEBYSCORE_COMMAND    = "zrangebyscore"
 	ZRANGEBYLEX_COMMAND      = "zrangebylex"
+	ZLEXCOUNT_COMMAND        = "zlexcount"
 	ZRANK_COMMAND            = "zrank"
 	ZREVRANK_COMMAND         = "zrevrank"
 	ZREVRANGEBYSCORE_COMMAND = "zrevrangebyscore"
 	ZSCORE_COMMAND           = "zscore"
+	ZMSCORE_COMMAND          = "zmscore"
 	ZINCRBY_COMMAND          = "zincrby"
 	ZRANGE_COMMAND           = "zrange"
 	ZREVRANGE_COMMAND        = "zrevrange"
 	ZREMRANGEBYRANK_COMMAND  = "zremrangebyrank"
 	ZREMRANGEBYSCORE_COMMAND = "zremrangebyscore"
 	ZREMRANGEBYLEX_COMMAND   = "zremrangebylex"
+	ZDIFF_COMMAND            = "zdiff"
+	ZDIFFSTORE_COMMAND       = "zdiffstore"
+	ZINTER_COMMAND           = "zinter"
+	ZINTERCARD_COMMAND       = "zintercard"
+	ZINTERSTORE_COMMAND      = "zinterstore"
+	ZUNION_COMMAND           = "zunion"
+	ZUNIONSTORE_COMMAND      = "zunionstore"
 	ZADD_COMMAND             = "zadd"
 	SADD_COMMAND             = "sadd"
 	SISMEMBER_COMMAND        = "sismember"
@@ -203,9 +214,10 @@ const (
 )
 
 var (
-	EmptySlice  = []struct{}{}
-	EmptyCursor = []interface{}{0, [][]byte{}}
-	EmptyBytes  = [][]byte{}
+	EmptySlice     = []struct{}{}
+	EmptyCursor    = []interface{}{0, [][]byte{}}
+	EmptyBytes     = [][]byte{}
+	EmptyInterface = []interface{}{}
 )
 
 func SimpleInt(n int64) redcon.SimpleInt {
