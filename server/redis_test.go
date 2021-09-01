@@ -2466,7 +2466,7 @@ var _ = Describe("Commands", func() {
 		})
 	})
 
-	FDescribe("sets", func() {
+	Describe("sets", func() {
 		It("should SAdd", func() {
 			sAdd := client.SAdd(ctx, "set", "Hello")
 			Expect(sAdd.Err()).NotTo(HaveOccurred())
@@ -2960,7 +2960,7 @@ var _ = Describe("Commands", func() {
 			Expect(stats.Timeouts).To(Equal(uint32(0)))
 		})
 
-		It("should ZAdd", func() {
+		FIt("should ZAdd", func() {
 			added, err := client.ZAdd(ctx, "zset", &redis.Z{
 				Score:  1,
 				Member: "one",

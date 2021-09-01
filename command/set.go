@@ -13,13 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type SFunc func(txn *store.Txn, args [][]byte, typo ObjectType, getKeyFunc GetKeyFunc, getType int, weight []int) ([]interface{}, error)
-
-type GetKeyFunc func(o *Object, field []byte) []byte
-
-func GetSetKey(o *Object, field []byte) []byte {
-	return o.GetKeyFieldBytes(field)
-}
+type SFunc func(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []int) ([]interface{}, error)
 
 // (sets) SMISMEMBER key member [member ...]
 func (c *Command) SMIsMemberHandle(txn *store.Txn, args [][]byte) interface{} {
@@ -212,7 +206,7 @@ func (c *Command) SDiffHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(SDIFF_COMMAND)
 	}
 
-	ret, err := c.diff(txn, args, SetType, GetSetKey, OnlyKey, nil)
+	ret, err := c.diff(txn, args, SetType, OnlyKey, nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -225,7 +219,7 @@ func (c *Command) SInterHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(SINTER_COMMAND)
 	}
 
-	ret, err := c.inter(txn, args, SetType, GetSetKey, OnlyKey, nil)
+	ret, err := c.inter(txn, args, SetType, OnlyKey, nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -237,7 +231,7 @@ func (c *Command) sstore(txn *store.Txn, args [][]byte, sfunc SFunc) interface{}
 	if err != nil {
 		return txn.SetError(err)
 	}
-	ret, err := sfunc(txn, args[1:], SetType, GetSetKey, OnlyKey, nil)
+	ret, err := sfunc(txn, args[1:], SetType, OnlyKey, nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -257,14 +251,19 @@ func (c *Command) SUnionHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 1 {
 		return txn.SetWrongArgs(SUNION_COMMAND)
 	}
-	ret, err := c.union(txn, args, SetType, GetSetKey, OnlyKey, nil)
+	ret, err := c.union(txn, args, SetType, OnlyKey, nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	return ret
 }
 
-func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getKeyFunc GetKeyFunc, getType int, weight []int) ([]interface{}, error) {
+func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []int) ([]interface{}, error) {
+	getKeyFunc, ok := GetKeyFuncs[typo]
+	if !ok {
+		return nil, xerror.ErrNotSupport
+	}
+
 	glist := make(map[int]*Object)
 	llist := make(map[int]*Object)
 	var object *Object
@@ -368,7 +367,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getKeyFu
 		if getType&OnlyKey == OnlyKey {
 			ret = append(ret, k)
 		}
-		if getType&OnlyValue == OnlyValue {
+		if getType&OnlyValue == OnlyValue && typo == ZsetType {
 			zv := &Value{}
 			DecodeValue(value, zv)
 			score := utils.DecodeFloat(zv.Value)
@@ -410,7 +409,12 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getKeyFu
 	return ret, nil
 }
 
-func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getKeyFunc GetKeyFunc, getType int, weight []int) ([]interface{}, error) {
+func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []int) ([]interface{}, error) {
+	getKeyFunc, ok := GetKeyFuncs[typo]
+	if !ok {
+		return nil, xerror.ErrNotSupport
+	}
+
 	var err error
 	iterList := store.NewIterList()
 	for i := 0; i < len(args); i++ {
@@ -440,9 +444,6 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getKeyFu
 		if err != nil {
 			return nil, err
 		}
-		if kv.Key == nil {
-			break
-		}
 		new := preKey != nil && !bytes.Equal(preKey, kv.Key)
 		if getType&OnlyKey == OnlyKey {
 			if new {
@@ -450,7 +451,7 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getKeyFu
 			}
 			preKey = kv.Key
 		}
-		if getType&OnlyValue == OnlyValue {
+		if getType&OnlyValue == OnlyValue && typo == ZsetType {
 			if new {
 				ret = append(ret, preScore)
 				preScore = 0
@@ -473,11 +474,14 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getKeyFu
 				}
 			}
 		}
+		if kv.Key == nil {
+			break
+		}
 	}
 	return ret, nil
 }
 
-func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getKeyFunc GetKeyFunc, getType int, weight []int) ([]interface{}, error) {
+func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []int) ([]interface{}, error) {
 	object := NewObject(txn.UserId, txn.DBId, typo, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
@@ -488,6 +492,10 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getKeyFun
 		return nil, err
 	}
 
+	getKeyFunc, ok := GetKeyFuncs[typo]
+	if !ok {
+		return nil, xerror.ErrNotSupport
+	}
 	start := getKeyFunc(object, nil)
 	end := utils.PrefixNext(start)
 	ret := make([]interface{}, 0)

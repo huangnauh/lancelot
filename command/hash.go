@@ -152,6 +152,11 @@ func (c *Command) HScanHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getType int) interface{} {
+	getKeyFunc, ok := GetKeyFuncs[typo]
+	if !ok {
+		return txn.SetError(xerror.ErrNotSupport)
+	}
+
 	cursor := args[1]
 	opts := args[2:]
 	scanOpt, err := c.getScanOptions(opts)
@@ -167,14 +172,14 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 		return txn.SetError(err)
 	}
 	cursorPrefix := glob.Prefix(scanOpt.match)
-	prefix := object.GetKeyFieldBytes(nil)
-	start := object.GetKeyFieldBytes(utils.S2B(cursorPrefix))
+	prefix := getKeyFunc(object, nil)
+	start := getKeyFunc(object, utils.S2B(cursorPrefix))
 	end := utils.PrefixNext(prefix)
 	start, err = c.checkCursor(scanOpt, cursor, typo, start)
 	if err != nil {
 		return txn.SetError(err)
 	}
-	ret := make([][]byte, 0)
+	ret := make([]interface{}, 0)
 	var lastKey []byte
 	var callbackErr error
 	err = txn.List(start, end, scanOpt.count, func(key, value []byte) bool {
@@ -199,7 +204,12 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 		if getType&OnlyValue == OnlyValue {
 			hvalue := &Value{}
 			_ = DecodeValue(value, hvalue)
-			ret = append(ret, hvalue.Value)
+			if typo != ZsetType {
+				ret = append(ret, hvalue.Value)
+			} else {
+				score := utils.DecodeFloat(hvalue.Value)
+				ret = append(ret, score)
+			}
 		}
 		return true
 	})
@@ -213,7 +223,7 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 	}
 	cur := lastKey[len(prefix):]
 	if scanOpt.cursor == ServerCursor {
-		c.SetCursor(fmt.Sprintf("%s%d", typo, txn.Timestamp), cur)
+		c.SetCursor(fmt.Sprintf("%s%d", string(typo), txn.Timestamp), cur)
 		return []interface{}{txn.Timestamp, ret}
 	} else {
 		cur := base64.StdEncoding.EncodeToString(cur)
@@ -464,7 +474,7 @@ func (c *Command) HIncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) DeleteThenCreateUUIDObject(txn *store.Txn, typo ObjectType, arg []byte) (*Object, error) {
-	object := NewObject(txn.UserId, txn.DBId, KeyType, arg)
+	object := NewObject(txn.UserId, txn.DBId, typo, arg)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
@@ -475,6 +485,7 @@ func (c *Command) DeleteThenCreateUUIDObject(txn *store.Txn, typo ObjectType, ar
 		if err != nil {
 			return object, err
 		}
+		object.CleanValue(typo)
 	}
 	id, err := uuid.NewUUID()
 	if err != nil {

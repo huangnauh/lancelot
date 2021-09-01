@@ -1,6 +1,7 @@
 package command
 
 import (
+	"bytes"
 	"math"
 	"strconv"
 	"strings"
@@ -9,6 +10,12 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
+)
+
+const (
+	BYSCORE = 0x01
+	BYLEX   = 0x02
+	BYRANK  = 0x04
 )
 
 var (
@@ -133,6 +140,56 @@ func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score floa
 	return score, count, nil
 }
 
+func (c *Command) zrem(txn *store.Txn, object *Object, member []byte) (bool, error) {
+	zkey := object.GetKeyFieldBytes(EncodeMemberKey(member))
+	v, err := txn.Get(zkey)
+	if err == store.KeyNotFound {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	zvalue := &Value{}
+	err = DecodeValue(v, zvalue)
+	if err != nil {
+		return false, err
+	}
+	score := utils.DecodeFloat(zvalue.Value)
+	// zvalue.Value = utils.EncodeFloat(score)
+	// zvalue.Timestamp = txn.Timestamp
+	_, err = c.PutZset(txn, object, zkey, member, score, 0, -1)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// ZREM key member [member ...]
+func (c *Command) ZRemHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 2 {
+		return txn.SetWrongArgs(ZREM_COMMAND)
+	}
+	object := NewObject(txn.UserId, txn.DBId, ZsetType, args[0])
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return redcon.SimpleInt(0)
+	} else if err != nil {
+		return txn.SetError(err)
+	}
+
+	count := 0
+	for i := 1; i < len(args); i++ {
+		ok, err := c.zrem(txn, object, args[i])
+		if err != nil {
+			return txn.SetError(err)
+		}
+		if ok {
+			count++
+		}
+	}
+	return redcon.SimpleInt(count)
+}
+
 // ZADD key [NX|XX] [GT|LT] [CH] [INCR] score member [score member ...]
 func (c *Command) ZAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 3 {
@@ -173,10 +230,6 @@ func (c *Command) ZAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	return redcon.SimpleInt(count)
 }
 
-func GetZSetKey(o *Object, field []byte) []byte {
-	return o.GetKeyFieldBytes(EncodeMemberKey(field))
-}
-
 func EncodeMemberKey(member []byte) []byte {
 	k := make([]byte, 1+len(member))
 	k[0] = 'm'
@@ -194,19 +247,30 @@ func EncodeScoreKey(score float64, member []byte) []byte {
 
 func (c *Command) PutZset(txn *store.Txn, object *Object, zkey, member []byte,
 	score, oldScore float64, delta int64) (int64, error) {
-	v := EncodeValue(&Value{
-		Value:     utils.EncodeFloat(score),
-		Timestamp: txn.Timestamp,
-	})
-	err := txn.Put(zkey, v)
+	var err error
+	if delta >= 0 {
+		v := EncodeValue(&Value{
+			Value:     utils.EncodeFloat(score),
+			Timestamp: txn.Timestamp,
+		})
+		err = txn.Put(zkey, v)
+	} else {
+		err = txn.Del(zkey)
+	}
 	if err != nil {
 		return 0, err
 	}
+
 	vkey := EncodeScoreKey(score, member)
 	skey := object.GetKeyFieldBytes(vkey)
-	err = txn.Put(skey, EncodeValue(&Value{
-		Timestamp: txn.Timestamp,
-	}))
+	if delta >= 0 {
+		err = txn.Put(skey, EncodeValue(&Value{
+			Timestamp: txn.Timestamp,
+		}))
+	} else {
+		err = txn.Del(skey)
+	}
+
 	if err != nil {
 		return 0, err
 	}
@@ -227,8 +291,76 @@ func (c *Command) PutZset(txn *store.Txn, object *Object, zkey, member []byte,
 	return count.Value, err
 }
 
+// ZRANK key member
+func (c *Command) ZRankHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 2 {
+		return txn.SetWrongArgs(ZRANK_COMMAND)
+	}
+	ret, ok, err := c.zrank(txn, args, false)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	if !ok {
+		return nil
+	}
+	return redcon.SimpleInt(ret)
+}
+
+// ZREVRANK key member
+func (c *Command) ZRevRankHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 2 {
+		return txn.SetWrongArgs(ZREVRANK_COMMAND)
+	}
+	ret, ok, err := c.zrank(txn, args, true)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	if !ok {
+		return nil
+	}
+	return redcon.SimpleInt(ret)
+}
+
+func (c *Command) zrank(txn *store.Txn, args [][]byte, reversed bool) (int64, bool, error) {
+	object := NewObject(txn.UserId, txn.DBId, ZsetType, args[0])
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return 0, false, nil
+	} else if err != nil {
+		return 0, false, err
+	}
+	zkey := object.GetKeyFieldBytes(EncodeMemberKey(args[1]))
+	v, err := txn.Get(zkey)
+	if err != store.KeyNotFound && err != nil {
+		return 0, false, err
+	}
+	if v == nil {
+		return 0, false, nil
+	}
+
+	prefix := object.GetKeyFieldBytes(nil)
+	var count int64
+	callback := func(k, v []byte) bool {
+		if len(k) < len(prefix)+8+1 {
+			return true
+		}
+		memb := k[len(prefix)+8+1:]
+		if bytes.Equal(memb, args[1]) {
+			return false
+		}
+		count++
+		return count < int64(c.cfg.Key.ScanMaxCount)
+	}
+	err = c.ListByScore(txn, object, args[0], -math.MaxFloat64, math.MaxFloat64, true, true, callback, reversed)
+	if err != nil {
+		return 0, false, err
+	}
+	return count, true, nil
+}
+
 // ZMSCORE key member [member ...]
-func (c *Command) ZMScore(txn *store.Txn, args [][]byte) interface{} {
+func (c *Command) ZMScoreHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(ZMSCORE_COMMAND)
 	}
@@ -240,7 +372,7 @@ func (c *Command) ZMScore(txn *store.Txn, args [][]byte) interface{} {
 }
 
 // ZSCORE key member
-func (c *Command) ZScore(txn *store.Txn, args [][]byte) interface{} {
+func (c *Command) ZScoreHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 {
 		return txn.SetWrongArgs(ZSCORE_COMMAND)
 	}
@@ -267,7 +399,7 @@ func (c *Command) zscore(txn *store.Txn, args [][]byte) ([]interface{}, error) {
 	for i := 1; i < len(args); i++ {
 		zkey := object.GetKeyFieldBytes(EncodeMemberKey(args[i]))
 		v, err := txn.Get(zkey)
-		if err != nil {
+		if err != store.KeyNotFound && err != nil {
 			return nil, err
 		}
 		if v == nil {
@@ -295,16 +427,12 @@ func (c *Command) ZCardHandle(txn *store.Txn, args [][]byte) interface{} {
 	return redcon.SimpleInt(ret)
 }
 
-func checkMinMaxScore(args [][]byte) (float64, float64, bool, bool, error) {
-	if len(args) < 2 {
-		return 0, 0, false, false, xerror.ErrSyntax
-	}
-
+func checkMinMaxScore(argMin, argMax []byte) (float64, float64, bool, bool, error) {
 	var err error
 	var min, max float64
 	includeMin := true
 	includeMax := true
-	str := strings.ToLower(utils.B2S(args[0]))
+	str := strings.ToLower(utils.B2S(argMin))
 	if str == "inf" || str == "+inf" {
 		return min, max, includeMin, includeMax, xerror.ErrEmpty
 	} else if str == "-inf" {
@@ -321,7 +449,7 @@ func checkMinMaxScore(args [][]byte) (float64, float64, bool, bool, error) {
 			return min, max, includeMin, includeMax, xerror.ErrInvalidFloat
 		}
 	}
-	str = strings.ToLower(utils.B2S(args[1]))
+	str = strings.ToLower(utils.B2S(argMax))
 	if str == "-inf" {
 		return min, max, includeMin, includeMax, xerror.ErrEmpty
 	} else if str == "inf" || str == "+inf" {
@@ -363,7 +491,7 @@ func (c *Command) ZCountHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 3 {
 		return txn.SetWrongArgs(ZCOUNT_COMMAND)
 	}
-	min, max, includeMin, includeMax, err := checkMinMaxScore(args[1:])
+	min, max, includeMin, includeMax, err := checkMinMaxScore(args[1], args[2])
 	if err == xerror.ErrEmpty {
 		return redcon.SimpleInt(0)
 	} else if err != nil {
@@ -408,8 +536,7 @@ func (c *Command) ListByScore(txn *store.Txn, object *Object, arg []byte, min, m
 }
 
 func (c *Command) ListByMember(txn *store.Txn, object *Object, arg []byte, min, max []byte,
-	includeMin, includeMax bool, callback store.KVCallback) error {
-
+	includeMin, includeMax bool, callback store.KVCallback, reversed bool) error {
 	var start, end []byte
 	if includeMin {
 		min = utils.NextKey(min)
@@ -422,6 +549,9 @@ func (c *Command) ListByMember(txn *store.Txn, object *Object, arg []byte, min, 
 			max = utils.NextKey(max)
 		}
 		end = object.GetKeyFieldBytes(EncodeMemberKey(max))
+	}
+	if reversed {
+		start, end = end, start
 	}
 	return txn.List(start, end, c.cfg.Key.ScanMaxCount, callback)
 }
@@ -444,12 +574,50 @@ func (c *Command) checkLimit(args [][]byte) (int64, int64, error) {
 	return offset, limit, nil
 }
 
+// BZPOPMIN key [key ...] timeout
+func (c *Command) BZPopMinHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 2 {
+		return txn.SetWrongArgs(BZPOPMIN_COMMAND)
+	}
+	ret, err := c.BlockHandle(txn, args, func(txn *store.Txn, args [][]byte) (interface{}, error) {
+		return c.zpopMany(txn, args, false)
+	})
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return ret
+}
+
+// BZPOPMAX key [key ...] timeout
+func (c *Command) BZPopMaxHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 2 {
+		return txn.SetWrongArgs(BZPOPMAX_COMMAND)
+	}
+	ret, err := c.BlockHandle(txn, args, func(txn *store.Txn, args [][]byte) (interface{}, error) {
+		return c.zpopMany(txn, args, true)
+	})
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return ret
+}
+
 // ZPOPMIN key [count]
 func (c *Command) ZPopMinHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 1 || len(args) > 2 {
 		return txn.SetWrongArgs(ZPOPMIN_COMMAND)
 	}
-	ret, err := c.zpop(txn, args, false)
+	limit := int64(1)
+	if len(args) == 2 {
+		limit, err := utils.GetNonnegativeInt64(args[1])
+		if err != nil {
+			return txn.SetError(xerror.ErrCountNegative)
+		}
+		if limit == 0 {
+			return EmptyInterface
+		}
+	}
+	ret, err := c.zpop(txn, args[0], limit, false)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -461,26 +629,285 @@ func (c *Command) ZPopMaxHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 1 || len(args) > 2 {
 		return txn.SetWrongArgs(ZPOPMAX_COMMAND)
 	}
-	ret, err := c.zpop(txn, args, true)
+	limit := int64(1)
+	if len(args) == 2 {
+		limit, err := utils.GetNonnegativeInt64(args[1])
+		if err != nil {
+			return txn.SetError(xerror.ErrCountNegative)
+		}
+		if limit == 0 {
+			return EmptyInterface
+		}
+	}
+	ret, err := c.zpop(txn, args[0], limit, true)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	return ret
 }
 
-func (c *Command) zpop(txn *store.Txn, args [][]byte, reversed bool) ([]interface{}, error) {
+func (c *Command) zpopMany(txn *store.Txn, args [][]byte, reversed bool) (interface{}, error) {
+	var ret []interface{}
 	var err error
-	limit := int64(1)
-	if len(args) == 2 {
-		limit, err = utils.GetNonnegativeInt64(args[1])
-		if err != nil {
-			return nil, xerror.ErrCountNegative
+	for i := 0; i < len(args); i++ {
+		object := NewObject(txn.UserId, txn.DBId, ZsetType, args[i])
+		key := object.GetKeyBytes()
+		err = getTxnObject(txn, key, object, false)
+		if err == store.KeyNotFound {
+			continue
+		} else if err != nil {
+			return nil, err
 		}
-		if limit == 0 {
-			return EmptyInterface, nil
+		ret, err = c.objectZpop(txn, object, args[i], 1, reversed)
+		if err != nil {
+			return nil, err
+		}
+		if len(ret) > 0 {
+			err = c.ZremValues(txn, object, ret)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return ret, nil
+	}
+	return nil, nil
+}
+
+func (c *Command) zpop(txn *store.Txn, arg []byte, limit int64, reversed bool) ([]interface{}, error) {
+	var err error
+	object := NewObject(txn.UserId, txn.DBId, ZsetType, arg)
+	key := object.GetKeyBytes()
+	err = getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return EmptyInterface, nil
+	} else if err != nil {
+		return nil, err
+	}
+	return c.objectZpop(txn, object, arg, limit, reversed)
+}
+
+func (c *Command) objectZpop(txn *store.Txn, object *Object, arg []byte, limit int64, reversed bool) ([]interface{}, error) {
+	ret, err := c.objectZRangeByScore(txn, object, arg, -math.MaxFloat64, math.MaxFloat64, true, true, &zRangeOption{
+		reversed:   reversed,
+		limit:      limit,
+		withScores: true,
+		offset:     0,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = c.ZremValues(txn, object, ret)
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+func (c *Command) ZremValues(txn *store.Txn, object *Object, ret []interface{}) error {
+	var err error
+	for i := 0; i < len(ret); i += 2 {
+		member := ret[i].([]byte)
+		zkey := object.GetKeyFieldBytes(EncodeMemberKey(member))
+		_, err = c.PutZset(txn, object, zkey, member, ret[i+1].(float64), 0, -1)
+		if err != nil {
+			return err
 		}
 	}
-	return c.zrangeByScore(txn, args[0], -math.MaxFloat64, math.MaxFloat64, true, true, true, reversed, 0, limit)
+	return nil
+}
+
+func (c *Command) ZaddValues(txn *store.Txn, object *Object, ret []interface{}) (int, error) {
+	count := 0
+	for i := 0; i < len(ret); i += 2 {
+		_, c, err := c.zadd(txn, object, ret[i].([]byte), ret[i+1].(float64), &ZAddOption{})
+		if err != nil {
+			return count, err
+		}
+		count += c
+	}
+	return count, nil
+}
+
+type zRangeOption struct {
+	offset     int64
+	limit      int64
+	withScores bool
+	reversed   bool
+	by         int
+}
+
+func (c *Command) checkZRangeOption(args [][]byte) (*zRangeOption, error) {
+	opt := &zRangeOption{limit: int64(c.cfg.Key.ScanMaxCount), by: BYRANK}
+	var err error
+	for i := 0; i < len(args); i++ {
+		str := strings.ToLower(utils.B2S(args[i]))
+		switch str {
+		case "withscores":
+			opt.withScores = true
+		case "limit":
+			opt.offset, opt.limit, err = c.checkLimit(args[i:])
+			if err != nil {
+				return nil, err
+			}
+			i += 2
+		case "rev":
+			opt.reversed = true
+		case "byscore":
+			if opt.by&^BYSCORE != 0 {
+				return nil, xerror.ErrSyntax
+			}
+			opt.by = BYSCORE
+		case "bylex":
+			if opt.by&^BYLEX != 0 {
+				return nil, xerror.ErrSyntax
+			}
+			opt.by = BYLEX
+		default:
+			return nil, xerror.ErrSyntax
+		}
+	}
+	return opt, nil
+}
+
+// ZREVRANGE key start stop [WITHSCORES]
+func (c *Command) ZRevRangeHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 3 || len(args) > 4 {
+		return txn.SetWrongArgs(ZREVRANGE_COMMAND)
+	}
+	withScores := false
+	if len(args) == 4 {
+		if strings.ToLower(utils.B2S(args[3])) != "withscores" {
+			return txn.SetWrongArgs(ZREVRANGE_COMMAND)
+		}
+		withScores = true
+	}
+	min, max, includeMin, includeMax, err := checkMinMaxScore(args[2], args[1])
+	if err != nil {
+		return txn.SetError(err)
+	}
+	ret, err := c.zrangeByScore(txn, args[0], max, min, includeMax, includeMin, &zRangeOption{
+		withScores: withScores,
+		reversed:   true,
+		limit:      int64(c.cfg.Key.ScanMaxCount),
+	})
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return ret
+}
+
+// ZRANGESTORE dst src min max [BYSCORE|BYLEX] [REV] [LIMIT offset count]
+func (c *Command) ZRangeStoreHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 4 {
+		return txn.SetWrongArgs(ZRANGESTORE_COMMAND)
+	}
+	object, err := c.DeleteThenCreateUUIDObject(txn, SetType, args[0])
+	if err != nil {
+		return txn.SetError(err)
+	}
+	opt, err := c.checkZRangeOption(args[4:])
+	if err != nil {
+		return txn.SetError(err)
+	}
+	opt.withScores = true
+	ret, err := c.zrange(txn, args[1:], opt)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	count, err := c.ZaddValues(txn, object, ret)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return redcon.SimpleInt(count)
+}
+
+// ZRANGE key min max [BYSCORE|BYLEX] [REV] [LIMIT offset count] [WITHSCORES]
+func (c *Command) ZRangeHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 3 {
+		return txn.SetWrongArgs(ZRANGE_COMMAND)
+	}
+	opt, err := c.checkZRangeOption(args[3:])
+	if err != nil {
+		return txn.SetError(err)
+	}
+	if opt.limit == 0 {
+		return EmptyInterface
+	}
+	ret, err := c.zrange(txn, args, opt)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return ret
+}
+
+func (c *Command) zrange(txn *store.Txn, args [][]byte, opt *zRangeOption) ([]interface{}, error) {
+	var ret []interface{}
+	var err error
+	if opt.by == BYSCORE {
+		var min, max float64
+		var includeMin, includeMax bool
+		if opt.reversed {
+			min, max, includeMin, includeMax, err = checkMinMaxScore(args[2], args[1])
+		} else {
+			min, max, includeMin, includeMax, err = checkMinMaxScore(args[1], args[2])
+		}
+		if err == xerror.ErrEmpty {
+			return EmptyInterface, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		ret, err = c.zrangeByScore(txn, args[0], min, max, includeMin, includeMax, opt)
+	} else if opt.by == BYLEX {
+		var min, max string
+		var includeMin, includeMax bool
+		if opt.reversed {
+			min, max, includeMin, includeMax, err = checkMinMaxLex(args[2], args[1])
+		} else {
+			min, max, includeMin, includeMax, err = checkMinMaxLex(args[1], args[2])
+		}
+		if err == xerror.ErrEmpty {
+			return EmptyInterface, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		ret, err = c.zrangeByLex(txn, args[0], min, max, includeMin, includeMax, opt)
+	} else {
+		object, start, end, ok, err := c.checkMinMaxRank(txn, args)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return EmptyInterface, nil
+		}
+		ret, err = c.objectZrangeByRank(txn, object, args[0], start, end, opt)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+// ZREVRANGEBYSCORE key max min [WITHSCORES] [LIMIT offset count]
+func (c *Command) ZRevRangeByScoreHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 3 {
+		return txn.SetWrongArgs(ZREVRANGEBYSCORE_COMMAND)
+	}
+	min, max, includeMin, includeMax, err := checkMinMaxScore(args[2], args[1])
+	if err == xerror.ErrEmpty {
+		return EmptyInterface
+	}
+	if err != nil {
+		return txn.SetError(err)
+	}
+	ret, err := c.zrangeByScoreHandle(txn, args, min, max, includeMin, includeMax, true)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return ret
 }
 
 // ZRANGEBYSCORE key min max [WITHSCORES] [LIMIT offset count]
@@ -488,44 +915,33 @@ func (c *Command) ZRangeByScoreHandle(txn *store.Txn, args [][]byte) interface{}
 	if len(args) < 3 {
 		return txn.SetWrongArgs(ZRANGEBYSCORE_COMMAND)
 	}
-	min, max, includeMin, includeMax, err := checkMinMaxScore(args[1:])
+	min, max, includeMin, includeMax, err := checkMinMaxScore(args[1], args[2])
 	if err == xerror.ErrEmpty {
 		return EmptyInterface
 	}
 	if err != nil {
 		return txn.SetError(err)
 	}
-	var withScores bool
-	var offset int64
-	limit := int64(c.cfg.Key.ScanMaxCount)
-LOOP:
-	for i := 3; i < len(args); i++ {
-		str := strings.ToLower(utils.B2S(args[i]))
-		switch str {
-		case "withscores":
-			withScores = true
-		case "limit":
-			offset, limit, err = c.checkLimit(args[i:])
-			if err != nil {
-				return txn.SetError(err)
-			}
-			if limit == 0 {
-				return EmptySlice
-			}
-			break LOOP
-		default:
-			return txn.SetError(xerror.ErrSyntax)
-		}
-	}
-	ret, err := c.zrangeByScore(txn, args[0], min, max, includeMin, includeMax, withScores, false, offset, limit)
+	ret, err := c.zrangeByScoreHandle(txn, args, min, max, includeMin, includeMax, false)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	return ret
 }
 
+func (c *Command) zrangeByScoreHandle(txn *store.Txn, args [][]byte, min, max float64, includeMin, includeMax, reversed bool) ([]interface{}, error) {
+	opt, err := c.checkZRangeOption(args[3:])
+	if err != nil {
+		return nil, err
+	}
+	if opt.limit == 0 {
+		return EmptyInterface, nil
+	}
+	return c.zrangeByScore(txn, args[0], min, max, includeMin, includeMax, opt)
+}
+
 func (c *Command) zrangeByScore(txn *store.Txn, arg []byte, min, max float64,
-	includeMin, includeMax, withScores, reversed bool, offset, limit int64) ([]interface{}, error) {
+	includeMin, includeMax bool, opt *zRangeOption) ([]interface{}, error) {
 	object := NewObject(txn.UserId, txn.DBId, ZsetType, arg)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
@@ -534,6 +950,52 @@ func (c *Command) zrangeByScore(txn *store.Txn, arg []byte, min, max float64,
 	} else if err != nil {
 		return nil, err
 	}
+	return c.objectZRangeByScore(txn, object, arg, min, max, includeMin, includeMax, opt)
+}
+
+func (c *Command) objectZremRangeByRank(txn *store.Txn, object *Object, arg []byte, min, max int64) (int, error) {
+	ret, err := c.objectZrangeByRank(txn, object, arg, min, max, &zRangeOption{withScores: true})
+	if err != nil {
+		return 0, err
+	}
+	err = c.ZremValues(txn, object, ret)
+	if err != nil {
+		return 0, err
+	}
+	return len(ret) / 2, nil
+}
+
+func (c *Command) objectZrangeByRank(txn *store.Txn, object *Object, arg []byte, min, max int64, opt *zRangeOption) ([]interface{}, error) {
+	prefix := object.GetKeyFieldBytes(nil)
+	var count int64
+	ret := make([]interface{}, 0)
+	callback := func(k, v []byte) bool {
+		if len(k) < len(prefix)+8+1 {
+			return true
+		}
+		if count >= min && count <= max {
+			score := utils.DecodeFloat(k[len(prefix)+1:])
+			memb := k[len(prefix)+8+1:]
+			ret = append(ret, memb)
+			if opt.withScores {
+				ret = append(ret, score)
+			}
+		}
+		count++
+		if count > max && count > min {
+			return false
+		}
+		return true
+	}
+	err := c.ListByScore(txn, object, arg, -math.MaxFloat64, math.MaxFloat64, true, true, callback, opt.reversed)
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+func (c *Command) objectZRangeByScore(txn *store.Txn, object *Object, arg []byte, min, max float64,
+	includeMin, includeMax bool, opt *zRangeOption) ([]interface{}, error) {
 	prefix := object.GetKeyFieldBytes(nil)
 	ret := make([]interface{}, 0)
 	var count, cnt int64
@@ -543,17 +1005,17 @@ func (c *Command) zrangeByScore(txn *store.Txn, arg []byte, min, max float64,
 			return ok
 		}
 		count++
-		if count < offset+1 {
+		if count < opt.offset+1 {
 			return true
 		}
 		ret = append(ret, memb)
-		if withScores {
+		if opt.withScores {
 			ret = append(ret, score)
 		}
 		cnt++
-		return cnt < limit
+		return cnt < opt.limit
 	}
-	err = c.ListByScore(txn, object, arg, min, max, includeMin, includeMax, callback, reversed)
+	err := c.ListByScore(txn, object, arg, min, max, includeMin, includeMax, callback, opt.reversed)
 	if err != nil {
 		return nil, err
 	}
@@ -584,7 +1046,7 @@ func (c *Command) ZLexCountHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 3 {
 		return txn.SetWrongArgs(ZLEXCOUNT_COMMAND)
 	}
-	max, min, includeMin, includeMax, err := checkMinMaxMember(args[1:3])
+	min, max, includeMin, includeMax, err := checkMinMaxLex(args[1], args[2])
 	if err == xerror.ErrEmpty {
 		return redcon.SimpleInt(0)
 	}
@@ -599,19 +1061,141 @@ func (c *Command) ZLexCountHandle(txn *store.Txn, args [][]byte) interface{} {
 		return redcon.SimpleInt(count)
 	}
 
-	ret, err := c.zrangeByLex(txn, args, max, min, includeMin, includeMax)
+	ret, err := c.zrangeByLexHandle(txn, args, min, max, includeMin, includeMax, false)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	return redcon.SimpleInt(len(ret))
 }
 
-// ZRANGEBYLEX key min max [LIMIT offset count]
-func (c *Command) ZRangeByLexHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) < 3 {
-		return txn.SetWrongArgs(ZRANGEBYLEX_COMMAND)
+// ZREMRANGEBYRANK key start stop
+func (c *Command) ZRemRangeByRankHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 3 {
+		return txn.SetWrongArgs(ZREMRANGEBYRANK_COMMAND)
 	}
-	max, min, includeMin, includeMax, err := checkMinMaxMember(args[1:3])
+
+	object, start, end, ok, err := c.checkMinMaxRank(txn, args)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	if !ok {
+		return redcon.SimpleInt(0)
+	}
+	ret, err := c.objectZremRangeByRank(txn, object, args[0], start, end)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return redcon.SimpleInt(ret)
+}
+
+func (c *Command) checkMinMaxRank(txn *store.Txn, args [][]byte) (*Object, int64, int64, bool, error) {
+	start, err := strconv.ParseInt(utils.B2S(args[1]), 10, 64)
+	if err != nil {
+		return nil, 0, 0, false, xerror.ErrNotInteger
+	}
+	end, err := strconv.ParseInt(utils.B2S(args[2]), 10, 64)
+	if err != nil {
+		return nil, 0, 0, false, xerror.ErrNotInteger
+	}
+	object := NewObject(txn.UserId, txn.DBId, ZsetType, args[0])
+	key := object.GetKeyBytes()
+	err = getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return object, 0, 0, false, nil
+	} else if err != nil {
+		return object, 0, 0, false, err
+	}
+	count, err := c.GetCountByObject(txn, object)
+	if err != nil {
+		return object, 0, 0, false, err
+	}
+	if end < 0 {
+		end = count + end
+	}
+	if end < 0 {
+		return object, 0, 0, false, nil
+	}
+
+	if start < 0 {
+		start = count + start
+	}
+
+	if start < 0 {
+		start = 0
+	}
+	if start > end {
+		return object, 0, 0, false, nil
+	}
+	return object, start, end, true, nil
+}
+
+// ZREMRANGEBYSCORE key min max
+func (c *Command) ZRemRangeByScoreHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 3 {
+		return txn.SetWrongArgs(ZREMRANGEBYSCORE_COMMAND)
+	}
+	min, max, includeMin, includeMax, err := checkMinMaxScore(args[1], args[2])
+	if err == xerror.ErrEmpty {
+		return redcon.SimpleInt(0)
+	}
+	if err != nil {
+		return txn.SetError(err)
+	}
+	object := NewObject(txn.UserId, txn.DBId, ZsetType, args[0])
+	key := object.GetKeyBytes()
+	err = getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return redcon.SimpleInt(0)
+	} else if err != nil {
+		return txn.SetError(err)
+	}
+	ret, err := c.objectZRangeByScore(txn, object, args[0], min, max, includeMin, includeMax, &zRangeOption{
+		offset: 0, limit: int64(c.cfg.Key.ScanMaxCount), withScores: true})
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return redcon.SimpleInt(len(ret) / 2)
+}
+
+// ZREMRANGEBYLEX key min max
+func (c *Command) ZRemRangeByLexHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 3 {
+		return txn.SetWrongArgs(ZREMRANGEBYLEX_COMMAND)
+	}
+	min, max, includeMin, includeMax, err := checkMinMaxLex(args[1], args[2])
+	if err == xerror.ErrEmpty {
+		return redcon.SimpleInt(0)
+	}
+	if err != nil {
+		return txn.SetError(err)
+	}
+
+	object := NewObject(txn.UserId, txn.DBId, ZsetType, args[0])
+	key := object.GetKeyBytes()
+	err = getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return redcon.SimpleInt(0)
+	} else if err != nil {
+		return txn.SetError(err)
+	}
+	ret, err := c.objectZrangeByLex(txn, object, args[0], min, max, includeMin, includeMax, &zRangeOption{
+		offset: 0, limit: int64(c.cfg.Key.ScanMaxCount), withScores: true})
+	if err != nil {
+		return txn.SetError(err)
+	}
+	err = c.ZremValues(txn, object, ret)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return redcon.SimpleInt(len(ret) / 2)
+}
+
+// ZREVRANGEBYLEX key max min [LIMIT offset count]
+func (c *Command) ZRevRangeByLexHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 3 {
+		return txn.SetWrongArgs(ZREVRANGEBYLEX_COMMAND)
+	}
+	min, max, includeMin, includeMax, err := checkMinMaxLex(args[2], args[1])
 	if err == xerror.ErrEmpty {
 		return EmptySlice
 	}
@@ -619,19 +1203,38 @@ func (c *Command) ZRangeByLexHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 
-	ret, err := c.zrangeByLex(txn, args, max, min, includeMin, includeMax)
+	ret, err := c.zrangeByLexHandle(txn, args, min, max, includeMin, includeMax, true)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	return ret
 }
 
-func checkMinMaxMember(args [][]byte) (string, string, bool, bool, error) {
-	min, includeMin, err := checkStr(args[0])
+// ZRANGEBYLEX key min max [LIMIT offset count]
+func (c *Command) ZRangeByLexHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 3 {
+		return txn.SetWrongArgs(ZRANGEBYLEX_COMMAND)
+	}
+	min, max, includeMin, includeMax, err := checkMinMaxLex(args[1], args[2])
+	if err == xerror.ErrEmpty {
+		return EmptySlice
+	}
+	if err != nil {
+		return txn.SetError(err)
+	}
+	ret, err := c.zrangeByLexHandle(txn, args, min, max, includeMin, includeMax, false)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return ret
+}
+
+func checkMinMaxLex(argMin, argMax []byte) (string, string, bool, bool, error) {
+	min, includeMin, err := checkStr(argMin)
 	if err != nil {
 		return "", "", false, false, err
 	}
-	max, includeMax, err := checkStr(args[1])
+	max, includeMax, err := checkStr(argMax)
 	if err != nil {
 		return "", "", false, false, err
 	}
@@ -646,7 +1249,7 @@ func checkMinMaxMember(args [][]byte) (string, string, bool, bool, error) {
 	return min, max, includeMin, includeMax, nil
 }
 
-func (c *Command) zrangeByLex(txn *store.Txn, args [][]byte, max, min string, includeMin, includeMax bool) ([][]byte, error) {
+func (c *Command) zrangeByLexHandle(txn *store.Txn, args [][]byte, min, max string, includeMin, includeMax, reversed bool) ([]interface{}, error) {
 	var offset int64
 	var err error
 	limit := int64(c.cfg.Key.ScanMaxCount)
@@ -655,32 +1258,45 @@ func (c *Command) zrangeByLex(txn *store.Txn, args [][]byte, max, min string, in
 		if err != nil {
 			return nil, err
 		}
+		if limit == 0 {
+			return EmptyInterface, nil
+		}
 	}
-	object := NewObject(txn.UserId, txn.DBId, ZsetType, args[0])
+	return c.zrangeByLex(txn, args[0], min, max, includeMin, includeMax, &zRangeOption{
+		offset: offset, limit: limit, reversed: reversed})
+}
+
+func (c *Command) zrangeByLex(txn *store.Txn, arg []byte, min, max string, includeMin, includeMax bool, opt *zRangeOption) ([]interface{}, error) {
+	object := NewObject(txn.UserId, txn.DBId, ZsetType, arg)
 	key := object.GetKeyBytes()
-	err = getTxnObject(txn, key, object, false)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
-		return EmptyBytes, nil
+		return EmptyInterface, nil
 	} else if err != nil {
 		return nil, err
 	}
+	return c.objectZrangeByLex(txn, object, arg, min, max, includeMin, includeMax, opt)
+}
+
+func (c *Command) objectZrangeByLex(txn *store.Txn, object *Object, arg []byte, min, max string,
+	includeMin, includeMax bool, opt *zRangeOption) ([]interface{}, error) {
 	prefix := object.GetKeyFieldBytes(nil)
-	ret := make([][]byte, 0)
+	ret := make([]interface{}, 0)
 	var count, cnt int64
 	callback := func(k, v []byte) bool {
 		if len(k) < len(prefix)+1 {
 			return true
 		}
 		count++
-		if count < offset+1 {
+		if count < opt.offset+1 {
 			return true
 		}
 		key := k[len(prefix)+1:]
 		ret = append(ret, key)
 		cnt++
-		return cnt < limit
+		return cnt < opt.limit
 	}
-	err = c.ListByMember(txn, object, args[0], utils.S2B(min), utils.S2B(max), includeMin, includeMax, callback)
+	err := c.ListByMember(txn, object, arg, utils.S2B(min), utils.S2B(max), includeMin, includeMax, callback, opt.reversed)
 	if err != nil {
 		return nil, err
 	}
@@ -709,7 +1325,7 @@ func (c *Command) ZDiffHandle(txn *store.Txn, args [][]byte) interface{} {
 		getType = BothKV
 	}
 
-	ret, err := c.diff(txn, args, ZsetType, GetZSetKey, getType, nil)
+	ret, err := c.diff(txn, args, ZsetType, getType, nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -785,7 +1401,7 @@ func (c *Command) ZInterHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	ret, err := c.inter(txn, args[1:opt.num+1], ZsetType, GetZSetKey, opt.getType, opt.weights)
+	ret, err := c.inter(txn, args[1:opt.num+1], ZsetType, opt.getType, opt.weights)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -801,7 +1417,7 @@ func (c *Command) ZInterCardHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	ret, err := c.inter(txn, args[1:opt.num+1], ZsetType, GetZSetKey, OnlyKey, nil)
+	ret, err := c.inter(txn, args[1:opt.num+1], ZsetType, OnlyKey, nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -817,7 +1433,7 @@ func (c *Command) ZUnionHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	ret, err := c.union(txn, args[1:opt.num+1], ZsetType, GetZSetKey, opt.getType, opt.weights)
+	ret, err := c.union(txn, args[1:opt.num+1], ZsetType, opt.getType, opt.weights)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -859,17 +1475,21 @@ func (c *Command) zstore(txn *store.Txn, args [][]byte, sfunc SFunc) interface{}
 		return txn.SetError(err)
 	}
 
-	ret, err := sfunc(txn, args[2:opt.num+2], SetType, GetSetKey, opt.getType, opt.weights)
+	ret, err := sfunc(txn, args[2:opt.num+2], ZsetType, opt.getType, opt.weights)
 	if err != nil {
 		return txn.SetError(err)
 	}
-	var count int
-	for i := 0; i < len(ret); i += 2 {
-		_, c, err := c.zadd(txn, object, ret[i].([]byte), ret[i+1].(float64), &ZAddOption{})
-		if err != nil {
-			return txn.SetError(err)
-		}
-		count += c
+	count, err := c.ZaddValues(txn, object, ret)
+	if err != nil {
+		return txn.SetError(err)
 	}
 	return redcon.SimpleInt(count)
+}
+
+// ZSCAN key cursor [MATCH pattern] [COUNT count]
+func (c *Command) ZScanHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 2 {
+		return txn.SetWrongArgs(ZSCAN_COMMAND)
+	}
+	return c.TypeScan(txn, ZsetType, args, BothKV)
 }

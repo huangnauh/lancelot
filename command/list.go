@@ -922,7 +922,10 @@ func (c *Command) BrPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(BRPOP_COMMAND)
 	}
-	ret, err := c.listManyHandle(txn, args, rPop)
+	bfunc := func(txn *store.Txn, args [][]byte) (interface{}, error) {
+		return c.listMany(txn, args, rPop)
+	}
+	ret, err := c.BlockHandle(txn, args, bfunc)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -946,9 +949,13 @@ func (c *Command) BlMoveHandle(txn *store.Txn, args [][]byte) interface{} {
 	var err error
 	sargs := [][]byte{args[0], args[4]}
 	if sstr == "left" {
-		value, err = c.listManyHandle(txn, sargs, lPop)
+		value, err = c.BlockHandle(txn, sargs, func(txn *store.Txn, args [][]byte) (interface{}, error) {
+			return c.listMany(txn, args, lPop)
+		})
 	} else {
-		value, err = c.listManyHandle(txn, sargs, rPop)
+		value, err = c.BlockHandle(txn, sargs, func(txn *store.Txn, args [][]byte) (interface{}, error) {
+			return c.listMany(txn, args, rPop)
+		})
 	}
 	if err != nil {
 		return txn.SetError(err)
@@ -974,7 +981,10 @@ func (c *Command) BRPopLPushHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(BRPOPLPUSH_COMMAND)
 	}
 	sargs := [][]byte{args[0], args[2]}
-	value, err := c.listManyHandle(txn, sargs, rPop)
+	bfunc := func(txn *store.Txn, args [][]byte) (interface{}, error) {
+		return c.listMany(txn, args, rPop)
+	}
+	value, err := c.BlockHandle(txn, sargs, bfunc)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -994,64 +1004,14 @@ func (c *Command) BlPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(BLPOP_COMMAND)
 	}
-	ret, err := c.listManyHandle(txn, args, lPop)
+	bfunc := func(txn *store.Txn, args [][]byte) (interface{}, error) {
+		return c.listMany(txn, args, lPop)
+	}
+	ret, err := c.BlockHandle(txn, args, bfunc)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	return ret
-}
-
-func (c *Command) listManyHandle(txn *store.Txn, args [][]byte, lfunc ListFunc) (interface{}, error) {
-	start := txn.NowTime()
-	second, err := strconv.ParseFloat(utils.B2S(args[len(args)-1]), 64)
-	if err != nil {
-		return nil, xerror.ErrNotFloat
-	}
-	if second < 0 {
-		return nil, xerror.ErrTimeoutNegative
-	}
-	timeout := time.Duration(second * float64(time.Second))
-	ret, err := c.listMany(txn, args[0:len(args)-1], lfunc)
-	if err != nil {
-		return nil, err
-	}
-	if ret != nil {
-		return ret, nil
-	}
-	if txn.Multi {
-		return nil, nil
-	}
-
-	now := time.Now()
-	if timeout > 0 && now.Add(PullInternal).Sub(txn.NowTime()) >= timeout {
-		return nil, nil
-	}
-	pullInternal := PullInternal
-	if timeout == 0 || timeout > 50*PullInternal {
-		pullInternal = 5 * PullInternal
-	}
-	txn.Rollback()
-	tick := time.NewTicker(pullInternal)
-	defer tick.Stop()
-	for range tick.C {
-		err = txn.Begin()
-		if err != nil {
-			return nil, err
-		}
-		ret, err := c.listMany(txn, args[0:len(args)-1], lfunc)
-		if err != nil {
-			return nil, err
-		}
-		if ret != nil {
-			return ret, nil
-		}
-		txn.Rollback()
-		now := time.Now()
-		if timeout > 0 && now.Add(PullInternal).Sub(start) >= timeout {
-			return nil, nil
-		}
-	}
-	return nil, nil
 }
 
 //(list) RPOP key [count]

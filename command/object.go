@@ -2,7 +2,9 @@ package command
 
 import (
 	"encoding/binary"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"gitlab.s.upyun.com/platform/lancelot/store"
@@ -123,6 +125,24 @@ var (
 		[]byte("    <key>."),
 		[]byte("HELP"),
 		[]byte("    Prints this help."),
+	}
+)
+
+type GetKeyFunc func(o *Object, field []byte) []byte
+
+func GetHashKey(o *Object, field []byte) []byte {
+	return o.GetKeyFieldBytes(field)
+}
+
+func GetZsetKey(o *Object, field []byte) []byte {
+	return o.GetKeyFieldBytes(EncodeMemberKey(field))
+}
+
+var (
+	GetKeyFuncs = map[ObjectType]GetKeyFunc{
+		HashType: GetHashKey,
+		SetType:  GetHashKey,
+		ZsetType: GetZsetKey,
 	}
 )
 
@@ -444,4 +464,59 @@ func (c *Command) GetCountByObject(txn *store.Txn, object *Object) (int64, error
 		sum += count.Value
 	}
 	return sum, nil
+}
+
+type BFunc func(txn *store.Txn, args [][]byte) (interface{}, error)
+
+func (c *Command) BlockHandle(txn *store.Txn, args [][]byte, bfunc BFunc) (interface{}, error) {
+	start := txn.NowTime()
+	second, err := strconv.ParseFloat(utils.B2S(args[len(args)-1]), 64)
+	if err != nil {
+		return nil, xerror.ErrNotFloat
+	}
+	if second < 0 {
+		return nil, xerror.ErrTimeoutNegative
+	}
+	timeout := time.Duration(second * float64(time.Second))
+	ret, err := bfunc(txn, args[0:len(args)-1])
+	if err != nil {
+		return nil, err
+	}
+	if ret != nil {
+		return ret, nil
+	}
+	if txn.Multi {
+		return nil, nil
+	}
+
+	now := time.Now()
+	if timeout > 0 && now.Add(PullInternal).Sub(txn.NowTime()) >= timeout {
+		return nil, nil
+	}
+	pullInternal := PullInternal
+	if timeout == 0 || timeout > 50*PullInternal {
+		pullInternal = 5 * PullInternal
+	}
+	txn.Rollback()
+	tick := time.NewTicker(pullInternal)
+	defer tick.Stop()
+	for range tick.C {
+		err = txn.Begin()
+		if err != nil {
+			return nil, err
+		}
+		ret, err := bfunc(txn, args[0:len(args)-1])
+		if err != nil {
+			return nil, err
+		}
+		if ret != nil {
+			return ret, nil
+		}
+		txn.Rollback()
+		now := time.Now()
+		if timeout > 0 && now.Add(PullInternal).Sub(start) >= timeout {
+			return nil, nil
+		}
+	}
+	return nil, nil
 }
