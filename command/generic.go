@@ -263,7 +263,7 @@ func (c *Command) checkCursor(scanOpt *scanOptions, cursor []byte,
 		}
 
 		if cursorInt > 0 {
-			cur, ok := c.GetCursor(fmt.Sprintf("%s%d", cursorPrefix, cursorInt))
+			cur, ok := c.GetCursor(fmt.Sprintf("%s%d", string(cursorPrefix), cursorInt))
 			if ok {
 				cur := utils.NextKey(cur)
 				start = append(start, cur...)
