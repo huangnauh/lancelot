@@ -875,7 +875,10 @@ func (c *Command) zrange(txn *store.Txn, args [][]byte, opt *zRangeOption) ([]in
 		}
 		ret, err = c.zrangeByLex(txn, args[0], min, max, includeMin, includeMax, opt)
 	} else {
-		object, start, end, ok, err := c.checkMinMaxRank(txn, args)
+		var object *Object
+		var start, end int64
+		var ok bool
+		object, start, end, ok, err = c.checkMinMaxRank(txn, args)
 		if err != nil {
 			return nil, err
 		}
