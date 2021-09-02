@@ -675,6 +675,12 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:       124,
 			Type:     ZsetType,
 		},
+		ZINTER_COMMAND: {
+			Func:     c.ZInterHandle,
+			ReadOnly: true,
+			ID:       125,
+			Type:     ZsetType,
+		},
 		DEL_COMMAND: {
 			Func: c.DELHandle,
 			ID:   101,

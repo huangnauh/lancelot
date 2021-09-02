@@ -502,6 +502,7 @@ type Marshaler interface {
 //   Marshaler       -> raw bytes
 //   everything-else -> bulk-string representation using fmt.Sprint()
 func AppendAny(b []byte, v interface{}) []byte {
+	// fmt.Printf("AppendAny %#v %s\n", v, reflect.TypeOf(v))
 	switch v := v.(type) {
 	case SimpleString:
 		b = AppendString(b, string(v))

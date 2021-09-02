@@ -351,7 +351,7 @@ func (i *IterList) NextUntil(key []byte, all bool) (map[int][]byte, error) {
 	var err error
 	values := make(map[int][]byte)
 	if len(i.iters) == 0 {
-		return nil, nil
+		return values, nil
 	}
 	for j, it := range i.iters {
 		utils.ZapLog.Debug("[txn] IterList NextUntil ", zap.ByteString("key", key),
@@ -375,9 +375,10 @@ func (i *IterList) NextUntil(key []byte, all bool) (map[int][]byte, error) {
 
 		for it.iter.Valid() {
 			it.current = it.iter.Key()
+			value := it.iter.Value()
 			utils.ZapLog.Debug("[txn] IterList NextUntil ", zap.String("remote", it.iter.txn.RemoteAddr()),
-				zap.Uint64("timestamp", it.iter.txn.Timestamp), zap.ByteString("key", it.current))
-
+				zap.Uint64("timestamp", it.iter.txn.Timestamp), zap.ByteString("key", it.current),
+				zap.ByteString("value", value))
 			err = it.iter.Next()
 			if err != nil {
 				return nil, err
@@ -388,7 +389,7 @@ func (i *IterList) NextUntil(key []byte, all bool) (map[int][]byte, error) {
 				if c < 0 {
 					continue
 				} else if c == 0 {
-					values[it.idx] = it.iter.Value()
+					values[it.idx] = value
 					if !all {
 						return values, nil
 					}

@@ -312,7 +312,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 		}
 	}
 	utils.ZapLog.Debug("inter", zap.Int("glist", len(glist)), zap.Int("llist", len(llist)))
-	start := object.GetKeyFieldBytes(nil)
+	start := getKeyFunc(object, nil)
 	end := utils.PrefixNext(start)
 	ret := make([]interface{}, 0)
 	var iterList *store.IterList
@@ -339,7 +339,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 		}
 
 		// list check
-		var lvalues map[int][]byte
+		lvalues := make(map[int][]byte)
 		if iterList != nil {
 			lvalues, err = iterList.NextUntil(k, true)
 			if err != nil {
@@ -356,7 +356,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 			skey := getKeyFunc(o, k)
 			v, err := txn.Get(skey)
 			if err == store.KeyNotFound {
-				return false
+				return true
 			} else if err != nil {
 				cbErr = err
 				return false

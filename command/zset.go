@@ -10,6 +10,7 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"go.uber.org/zap"
 )
 
 const (
@@ -103,9 +104,6 @@ func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score floa
 		if opt.Check&CheckNotExist == CheckNotExist {
 			return 0, 0, nil
 		}
-		if opt.Changed {
-			count++
-		}
 		zvalue := &Value{}
 		err = DecodeValue(v, zvalue)
 		if err != nil {
@@ -130,12 +128,15 @@ func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score floa
 		if score == oldScore {
 			return score, 0, nil
 		}
+		if opt.Changed {
+			count++
+		}
 	}
 	// zvalue.Value = utils.EncodeFloat(score)
 	// zvalue.Timestamp = txn.Timestamp
 	_, err = c.PutZset(txn, object, zkey, member, score, oldScore, delta)
 	if err != nil {
-		return 0, 0, nil
+		return 0, 0, err
 	}
 	return score, count, nil
 }
@@ -206,6 +207,9 @@ func (c *Command) ZAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	if opt.Incr && len(args) > i+2 {
 		return txn.SetError(xerror.ErrSyntax)
 	}
+	if opt.Incr {
+		opt.Changed = true
+	}
 	members := make(map[string]float64)
 	for ; i < len(args); i += 2 {
 		score, err := strconv.ParseFloat(utils.B2S(args[i]), 64)
@@ -218,16 +222,24 @@ func (c *Command) ZAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
+	var s float64
 	count := 0
 	for member, score := range members {
 		memb := utils.S2B(member)
-		_, c, err := c.zadd(txn, object, memb, score, opt)
+		score, c, err := c.zadd(txn, object, memb, score, opt)
 		if err != nil {
 			return txn.SetError(err)
 		}
 		count += c
+		s = score
 	}
-	return redcon.SimpleInt(count)
+	if !opt.Incr {
+		return redcon.SimpleInt(count)
+	}
+	if count == 0 {
+		return nil
+	}
+	return s
 }
 
 func EncodeMemberKey(member []byte) []byte {
@@ -368,6 +380,9 @@ func (c *Command) ZMScoreHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
+	if ret == nil {
+		return make([]interface{}, len(args)-1)
+	}
 	return ret
 }
 
@@ -468,7 +483,7 @@ func checkMinMaxScore(argMin, argMax []byte) (float64, float64, bool, bool, erro
 }
 
 func getScoreMember(k, v, prefix []byte, min, max float64,
-	includeMin, includeMax bool) (float64, []byte, bool, bool) {
+	includeMin, includeMax bool, reversed bool) (float64, []byte, bool, bool) {
 	if len(k) < len(prefix)+8+1 {
 		return 0, nil, true, false
 	}
@@ -478,10 +493,10 @@ func getScoreMember(k, v, prefix []byte, min, max float64,
 		return score, memb, false, false
 	}
 	if !includeMin && score == min {
-		return score, memb, true, false
+		return score, memb, !reversed, false
 	}
 	if !includeMax && score == max {
-		return score, memb, false, false
+		return score, memb, reversed, false
 	}
 	return score, memb, true, true
 }
@@ -508,7 +523,7 @@ func (c *Command) ZCountHandle(txn *store.Txn, args [][]byte) interface{} {
 	prefix := object.GetKeyFieldBytes(nil)
 	var count int64
 	callback := func(k, v []byte) bool {
-		_, _, ok, found := getScoreMember(k, v, prefix, min, max, includeMin, includeMax)
+		_, _, ok, found := getScoreMember(k, v, prefix, min, max, includeMin, includeMax, false)
 		if !found {
 			return ok
 		}
@@ -524,11 +539,14 @@ func (c *Command) ZCountHandle(txn *store.Txn, args [][]byte) interface{} {
 
 func (c *Command) ListByScore(txn *store.Txn, object *Object, arg []byte, min, max float64,
 	includeMin, includeMax bool, callback store.KVCallback, reversed bool) error {
-	start := object.GetKeyFieldBytes(EncodeScoreKey(min, arg))
+	utils.ZapLog.Debug("ListByScore", zap.String("arg", utils.B2S(arg)), zap.Float64("min", min),
+		zap.Float64("max", max), zap.Bool("includeMin", includeMin), zap.Bool("includeMax", includeMax),
+		zap.Bool("reversed", reversed))
+	start := object.GetKeyFieldBytes(EncodeScoreKey(min, nil))
 	if includeMax {
 		max = max + 1
 	}
-	end := object.GetKeyFieldBytes(EncodeScoreKey(max, arg))
+	end := object.GetKeyFieldBytes(EncodeScoreKey(max, nil))
 	if reversed {
 		start, end = end, start
 	}
@@ -537,8 +555,11 @@ func (c *Command) ListByScore(txn *store.Txn, object *Object, arg []byte, min, m
 
 func (c *Command) ListByMember(txn *store.Txn, object *Object, arg []byte, min, max []byte,
 	includeMin, includeMax bool, callback store.KVCallback, reversed bool) error {
+	utils.ZapLog.Debug("ListByMember", zap.String("arg", utils.B2S(arg)), zap.String("min", utils.B2S(min)),
+		zap.String("max", utils.B2S(max)), zap.Bool("includeMin", includeMin), zap.Bool("includeMax", includeMax),
+		zap.Bool("reversed", reversed))
 	var start, end []byte
-	if includeMin {
+	if !includeMin {
 		min = utils.NextKey(min)
 	}
 	start = object.GetKeyFieldBytes(EncodeMemberKey(min))
@@ -608,8 +629,9 @@ func (c *Command) ZPopMinHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(ZPOPMIN_COMMAND)
 	}
 	limit := int64(1)
+	var err error
 	if len(args) == 2 {
-		limit, err := utils.GetNonnegativeInt64(args[1])
+		limit, err = utils.GetNonnegativeInt64(args[1])
 		if err != nil {
 			return txn.SetError(xerror.ErrCountNegative)
 		}
@@ -630,8 +652,9 @@ func (c *Command) ZPopMaxHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(ZPOPMAX_COMMAND)
 	}
 	limit := int64(1)
+	var err error
 	if len(args) == 2 {
-		limit, err := utils.GetNonnegativeInt64(args[1])
+		limit, err = utils.GetNonnegativeInt64(args[1])
 		if err != nil {
 			return txn.SetError(xerror.ErrCountNegative)
 		}
@@ -738,7 +761,7 @@ type zRangeOption struct {
 }
 
 func (c *Command) checkZRangeOption(args [][]byte) (*zRangeOption, error) {
-	opt := &zRangeOption{limit: int64(c.cfg.Key.ScanMaxCount), by: BYRANK}
+	opt := &zRangeOption{limit: int64(c.cfg.Key.ScanMaxCount)}
 	var err error
 	for i := 0; i < len(args); i++ {
 		str := strings.ToLower(utils.B2S(args[i]))
@@ -767,12 +790,15 @@ func (c *Command) checkZRangeOption(args [][]byte) (*zRangeOption, error) {
 			return nil, xerror.ErrSyntax
 		}
 	}
+	if opt.by == 0 {
+		opt.by = BYRANK
+	}
 	return opt, nil
 }
 
 // ZREVRANGE key start stop [WITHSCORES]
 func (c *Command) ZRevRangeHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) < 3 || len(args) > 4 {
+	if len(args) != 3 || len(args) != 4 {
 		return txn.SetWrongArgs(ZREVRANGE_COMMAND)
 	}
 	withScores := false
@@ -782,11 +808,14 @@ func (c *Command) ZRevRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 		withScores = true
 	}
-	min, max, includeMin, includeMax, err := checkMinMaxScore(args[2], args[1])
+	object, start, end, ok, err := c.checkMinMaxRank(txn, args)
 	if err != nil {
 		return txn.SetError(err)
 	}
-	ret, err := c.zrangeByScore(txn, args[0], max, min, includeMax, includeMin, &zRangeOption{
+	if !ok {
+		return EmptyInterface
+	}
+	ret, err := c.objectZrangeByRank(txn, object, args[0], start, end, &zRangeOption{
 		withScores: withScores,
 		reversed:   true,
 		limit:      int64(c.cfg.Key.ScanMaxCount),
@@ -1003,7 +1032,7 @@ func (c *Command) objectZRangeByScore(txn *store.Txn, object *Object, arg []byte
 	ret := make([]interface{}, 0)
 	var count, cnt int64
 	callback := func(k, v []byte) bool {
-		score, memb, ok, found := getScoreMember(k, v, prefix, min, max, includeMin, includeMax)
+		score, memb, ok, found := getScoreMember(k, v, prefix, min, max, includeMin, includeMax, opt.reversed)
 		if !found {
 			return ok
 		}
@@ -1027,7 +1056,7 @@ func (c *Command) objectZRangeByScore(txn *store.Txn, object *Object, arg []byte
 
 func checkStr(arg []byte) (string, bool, error) {
 	key := utils.B2S(arg)
-	if len(key) < 2 {
+	if len(key) < 1 {
 		return key, false, xerror.ErrSyntax
 	}
 	include := false
@@ -1040,6 +1069,10 @@ func checkStr(arg []byte) (string, bool, error) {
 		return "", false, nil
 	} else {
 		return key, false, xerror.ErrMinMaxString
+	}
+
+	if len(key) < 2 {
+		return key, false, xerror.ErrSyntax
 	}
 	return key[1:], include, nil
 }
@@ -1473,7 +1506,7 @@ func (c *Command) zstore(txn *store.Txn, args [][]byte, sfunc SFunc) interface{}
 		return txn.SetError(err)
 	}
 	opt.getType |= BothKV
-	object, err := c.DeleteThenCreateUUIDObject(txn, SetType, args[0])
+	object, err := c.DeleteThenCreateUUIDObject(txn, ZsetType, args[0])
 	if err != nil {
 		return txn.SetError(err)
 	}
