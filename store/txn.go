@@ -348,12 +348,13 @@ func (i *IterList) Next() (utils.KV, error) {
 }
 
 func (i *IterList) NextUntil(key []byte, all bool) (map[int][]byte, error) {
+	utils.ZapLog.Debug("[txn] IterList NextUntil ", zap.ByteString("key", key), zap.Bool("all", all))
 	var err error
 	values := make(map[int][]byte)
 	if len(i.iters) == 0 {
 		return values, nil
 	}
-	for j, it := range i.iters {
+	for _, it := range i.iters {
 		utils.ZapLog.Debug("[txn] IterList NextUntil ", zap.ByteString("key", key),
 			zap.ByteString("prefix", it.prefix), zap.Int("len", len(i.iters)),
 			zap.ByteString("current", it.current[len(it.prefix):]))
@@ -400,10 +401,6 @@ func (i *IterList) NextUntil(key []byte, all bool) (map[int][]byte, error) {
 					break
 				}
 			}
-		}
-
-		if !all && !it.iter.Valid() {
-			delete(i.iters, j)
 		}
 	}
 	return values, nil

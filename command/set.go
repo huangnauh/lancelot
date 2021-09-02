@@ -410,6 +410,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 }
 
 func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []int) ([]interface{}, error) {
+	utils.ZapLog.Debug("union", zap.ByteStrings("args", args), zap.Int("weight", len(weight)), zap.Int("getType", getType))
 	getKeyFunc, ok := GetKeyFuncs[typo]
 	if !ok {
 		return nil, xerror.ErrNotSupport
@@ -455,6 +456,9 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 			if new {
 				ret = append(ret, preScore)
 				preScore = 0
+			}
+			if kv.Key == nil {
+				break
 			}
 			zv := &Value{}
 			DecodeValue(kv.Value, zv)
@@ -524,7 +528,7 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 	glist := make(map[int]*Object)
 	llist := make(map[int]*Object)
 	for i := 1; i < len(args); i++ {
-		o := NewObject(txn.UserId, txn.DBId, SetType, args[i])
+		o := NewObject(txn.UserId, txn.DBId, typo, args[i])
 		k := o.GetKeyBytes()
 		utils.ZapLog.Debug("diff", zap.String("key", string(args[i])), zap.ByteString("k", k))
 		err = getTxnObject(txn, k, o, false)
@@ -602,10 +606,11 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 		if getType&OnlyKey == OnlyKey {
 			ret = append(ret, k)
 		}
-		if getType&OnlyValue == OnlyValue {
-			v := &Value{}
-			DecodeValue(value, v)
-			ret = append(ret, v.Value)
+		if getType&OnlyValue == OnlyValue && typo == ZsetType {
+			zv := &Value{}
+			DecodeValue(value, zv)
+			score := utils.DecodeFloat(zv.Value)
+			ret = append(ret, score)
 		}
 		return true
 	})
@@ -684,7 +689,7 @@ func (c *Command) SRandMemberHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	single := len(args) == 1
 	var count int
-	var ucount int
+	ucount := 1
 	var err error
 	if len(args) == 2 {
 		count, err = strconv.Atoi(string(args[1]))

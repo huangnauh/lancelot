@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"math"
+	"math/rand"
 	"strconv"
 	"strings"
 
@@ -686,10 +687,7 @@ func (c *Command) zpopMany(txn *store.Txn, args [][]byte, reversed bool) (interf
 			return nil, err
 		}
 		if len(ret) > 0 {
-			err = c.ZremValues(txn, object, ret)
-			if err != nil {
-				return nil, err
-			}
+			return []interface{}{args[i], ret[0], ret[1]}, nil
 		}
 		return ret, nil
 	}
@@ -765,11 +763,15 @@ func (c *Command) checkZRangeOption(args [][]byte) (*zRangeOption, error) {
 	var err error
 	for i := 0; i < len(args); i++ {
 		str := strings.ToLower(utils.B2S(args[i]))
+		// fmt.Printf("%s %d/%d\n", str, i, len(args))
 		switch str {
 		case "withscores":
 			opt.withScores = true
 		case "limit":
-			opt.offset, opt.limit, err = c.checkLimit(args[i:])
+			if len(args) < i+3 {
+				return nil, xerror.ErrSyntax
+			}
+			opt.offset, opt.limit, err = c.checkLimit(args[i : i+3])
 			if err != nil {
 				return nil, err
 			}
@@ -798,7 +800,7 @@ func (c *Command) checkZRangeOption(args [][]byte) (*zRangeOption, error) {
 
 // ZREVRANGE key start stop [WITHSCORES]
 func (c *Command) ZRevRangeHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 3 || len(args) != 4 {
+	if len(args) != 3 && len(args) != 4 {
 		return txn.SetWrongArgs(ZREVRANGE_COMMAND)
 	}
 	withScores := false
@@ -831,7 +833,7 @@ func (c *Command) ZRangeStoreHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 4 {
 		return txn.SetWrongArgs(ZRANGESTORE_COMMAND)
 	}
-	object, err := c.DeleteThenCreateUUIDObject(txn, SetType, args[0])
+	object, err := c.DeleteThenCreateUUIDObject(txn, ZsetType, args[0])
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -849,6 +851,69 @@ func (c *Command) ZRangeStoreHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 	return redcon.SimpleInt(count)
+}
+
+// ZRANDMEMBER key [count [WITHSCORES]]
+func (c *Command) ZRandMemberHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 1 || len(args) > 3 {
+		return txn.SetWrongArgs(ZRANDMEMBER_COMMAND)
+	}
+	single := len(args) == 1
+	var count int
+	ucount := 1
+	var err error
+	if len(args) >= 2 {
+		count, err = strconv.Atoi(string(args[1]))
+		if err != nil {
+			return txn.SetError(xerror.ErrNotInteger)
+		}
+		if count == 0 {
+			return [][]byte{}
+		} else if count > 0 {
+			ucount = count
+		} else {
+			ucount = -count
+		}
+	}
+	withScores := false
+	if len(args) == 3 {
+		if strings.ToLower(utils.B2S(args[2])) != "withscores" {
+			return txn.SetWrongArgs(ZRANDMEMBER_COMMAND)
+		}
+		withScores = true
+	}
+
+	ret, err := c.zrangeByScore(txn, args[0], -math.MaxFloat64, math.MaxFloat64, true, true, &zRangeOption{
+		limit:      int64(ucount),
+		withScores: withScores,
+	})
+	if err != nil {
+		return txn.SetError(err)
+	}
+	if single {
+		if len(ret) == 0 {
+			return nil
+		}
+		return ret[0]
+	}
+	if count < 0 {
+		cur := len(ret)
+		if withScores {
+			cur /= 2
+		}
+		if cur < ucount {
+			rand.Seed(int64(txn.Timestamp))
+			for i := cur; i < ucount; i++ {
+				if !withScores {
+					ret = append(ret, ret[rand.Intn(cur)])
+				} else {
+					c := rand.Intn(cur * 2)
+					ret = append(ret, ret[c], ret[c+1])
+				}
+			}
+		}
+	}
+	return ret
 }
 
 // ZRANGE key min max [BYSCORE|BYLEX] [REV] [LIMIT offset count] [WITHSCORES]
@@ -969,6 +1034,7 @@ func (c *Command) zrangeByScoreHandle(txn *store.Txn, args [][]byte, min, max fl
 	if opt.limit == 0 {
 		return EmptyInterface, nil
 	}
+	opt.reversed = reversed
 	return c.zrangeByScore(txn, args[0], min, max, includeMin, includeMax, opt)
 }
 
@@ -1190,6 +1256,13 @@ func (c *Command) ZRemRangeByScoreHandle(txn *store.Txn, args [][]byte) interfac
 	if err != nil {
 		return txn.SetError(err)
 	}
+	if len(ret) == 0 {
+		return redcon.SimpleInt(0)
+	}
+	err = c.ZremValues(txn, object, ret)
+	if err != nil {
+		return txn.SetError(err)
+	}
 	return redcon.SimpleInt(len(ret) / 2)
 }
 
@@ -1329,6 +1402,12 @@ func (c *Command) objectZrangeByLex(txn *store.Txn, object *Object, arg []byte, 
 		}
 		key := k[len(prefix)+1:]
 		ret = append(ret, key)
+		if opt.withScores {
+			zvalue := &Value{}
+			DecodeValue(v, zvalue)
+			score := utils.DecodeFloat(zvalue.Value)
+			ret = append(ret, score)
+		}
 		cnt++
 		return cnt < opt.limit
 	}
@@ -1361,7 +1440,7 @@ func (c *Command) ZDiffHandle(txn *store.Txn, args [][]byte) interface{} {
 		getType = BothKV
 	}
 
-	ret, err := c.diff(txn, args, ZsetType, getType, nil)
+	ret, err := c.diff(txn, args[1:num+1], ZsetType, getType, nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -1386,7 +1465,7 @@ func checkZsetOptions(args [][]byte) (*zsetOptions, error) {
 
 	opt := &zsetOptions{getType: OnlyKey, num: num}
 	var agg bool
-	for i := 1; i < len(args); i++ {
+	for i := num + 1; i < len(args); i++ {
 		str := strings.ToLower(utils.B2S(args[i]))
 		switch str {
 		case "weights":
@@ -1403,7 +1482,7 @@ func checkZsetOptions(args [][]byte) (*zsetOptions, error) {
 			}
 			i += opt.num
 		case "withscores":
-			opt.getType = BothKV
+			opt.getType |= BothKV
 		case "aggregate":
 			if i+1 >= len(args) {
 				return nil, xerror.ErrSyntax
@@ -1420,6 +1499,9 @@ func checkZsetOptions(args [][]byte) (*zsetOptions, error) {
 				return nil, xerror.ErrSyntax
 			}
 			agg = true
+			i++
+		default:
+			return nil, xerror.ErrSyntax
 		}
 	}
 	if !agg {

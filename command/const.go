@@ -45,6 +45,7 @@ const (
 	ZMSCORE_COMMAND          = "zmscore"
 	ZINCRBY_COMMAND          = "zincrby"
 	ZRANGE_COMMAND           = "zrange"
+	ZRANDMEMBER_COMMAND      = "zrandmember"
 	ZREVRANGE_COMMAND        = "zrevrange"
 	ZREMRANGEBYRANK_COMMAND  = "zremrangebyrank"
 	ZREMRANGEBYSCORE_COMMAND = "zremrangebyscore"

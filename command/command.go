@@ -681,6 +681,44 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:       125,
 			Type:     ZsetType,
 		},
+		ZRANGESTORE_COMMAND: {
+			Func: c.ZRangeStoreHandle,
+			ID:   126,
+			Type: ZsetType,
+		},
+		ZREM_COMMAND: {
+			Func: c.ZRemHandle,
+			ID:   127,
+			Type: ZsetType,
+		},
+		ZUNION_COMMAND: {
+			Func:     c.ZUnionHandle,
+			ReadOnly: true,
+			ID:       128,
+			Type:     ZsetType,
+		},
+		ZRANDMEMBER_COMMAND: {
+			Func:     c.ZRandMemberHandle,
+			ReadOnly: true,
+			ID:       129,
+			Type:     ZsetType,
+		},
+		ZDIFF_COMMAND: {
+			Func:     c.ZDiffHandle,
+			ReadOnly: true,
+			ID:       130,
+			Type:     ZsetType,
+		},
+		BZPOPMAX_COMMAND: {
+			Func: c.BZPopMaxHandle,
+			ID:   131,
+			Type: ZsetType,
+		},
+		BZPOPMIN_COMMAND: {
+			Func: c.BZPopMinHandle,
+			ID:   132,
+			Type: ZsetType,
+		},
 		DEL_COMMAND: {
 			Func: c.DELHandle,
 			ID:   101,
