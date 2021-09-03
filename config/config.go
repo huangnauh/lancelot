@@ -61,20 +61,21 @@ type PubSub struct {
 }
 
 type Config struct {
-	LogLevel  string `yaml:"log-level"`
-	PIDFile   string `yaml:"pid-file"`
-	Host      string `yaml:"host"`
-	RedisPort int    `yaml:"redis-port"`
-	HttpPort  int    `yaml:"http-port"`
-	RpcPort   int    `yaml:"rpc-port"`
-	CacheSize int    `yaml:"cache-size"`
-	Store     Store  `yaml:"store"`
-	GC        GC     `yaml:"gc"`
-	Lua       Lua    `yaml:"lua"`
-	Auth      Auth   `yaml:"auth"`
-	Key       Key    `yaml:"key"`
-	Rpc       Rpc    `yaml:"rpc"`
-	PubSub    PubSub `yaml:"pubsub"`
+	StartAt   time.Time `yaml:"-"`
+	LogLevel  string    `yaml:"log-level"`
+	PIDFile   string    `yaml:"pid-file"`
+	Host      string    `yaml:"host"`
+	RedisPort int       `yaml:"redis-port"`
+	HttpPort  int       `yaml:"http-port"`
+	RpcPort   int       `yaml:"rpc-port"`
+	CacheSize int       `yaml:"cache-size"`
+	Store     Store     `yaml:"store"`
+	GC        GC        `yaml:"gc"`
+	Lua       Lua       `yaml:"lua"`
+	Auth      Auth      `yaml:"auth"`
+	Key       Key       `yaml:"key"`
+	Rpc       Rpc       `yaml:"rpc"`
+	PubSub    PubSub    `yaml:"pubsub"`
 }
 
 var cfg = &Config{
@@ -134,6 +135,7 @@ func LoadYAMLConfig(filename string) error {
 		return fmt.Errorf("ReadFile: %v", err)
 	}
 	err = yaml.Unmarshal(data, cfg)
+	cfg.StartAt = time.Now()
 	return err
 }
 

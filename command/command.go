@@ -719,6 +719,30 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:   132,
 			Type: ZsetType,
 		},
+		INFO_COMMAND: {
+			Func:     c.InfoHandle,
+			ReadOnly: true,
+			ID:       133,
+			Type:     UnknownType,
+		},
+		CLIENT_COMMAND: {
+			Func:     c.ClientHandle,
+			ReadOnly: true,
+			ID:       134,
+			Type:     UnknownType,
+		},
+		ECHO_COMMAND: {
+			Func:     c.EchoHandle,
+			ReadOnly: true,
+			ID:       135,
+			Type:     UnknownType,
+		},
+		PING_COMMAND: {
+			Func:     c.PingHandle,
+			ReadOnly: true,
+			ID:       136,
+			Type:     UnknownType,
+		},
 		DEL_COMMAND: {
 			Func: c.DELHandle,
 			ID:   101,
@@ -874,6 +898,10 @@ func (c *Command) Start() error {
 
 func (c *Command) GetClient() *store.Client {
 	return c.client
+}
+
+func (c *Command) GetCurrentID() (uint64, error) {
+	return c.client.CurrentVersion()
 }
 
 func (c *Command) SetLocalUsers(users map[string]*User) {

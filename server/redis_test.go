@@ -75,7 +75,7 @@ var _ = Describe("Commands", func() {
 			Expect(stats.IdleConns).To(Equal(uint32(1)))
 		})
 
-		It("should Echo", func() {
+		FIt("should Echo", func() {
 			pipe := client.Pipeline()
 			echo := pipe.Echo(ctx, "hello")
 			_, err := pipe.Exec(ctx)
@@ -85,7 +85,7 @@ var _ = Describe("Commands", func() {
 			Expect(echo.Val()).To(Equal("hello"))
 		})
 
-		It("should Ping", func() {
+		FIt("should Ping", func() {
 			ping := client.Ping(ctx)
 			Expect(ping.Err()).NotTo(HaveOccurred())
 			Expect(ping.Val()).To(Equal("PONG"))
@@ -2018,7 +2018,7 @@ var _ = Describe("Commands", func() {
 			Expect(err).To(Equal(redis.Nil))
 			Expect(val).To(BeNil())
 
-			// Expect(client.Ping(ctx).Err()).NotTo(HaveOccurred())
+			Expect(client.Ping(ctx).Err()).NotTo(HaveOccurred())
 
 			// stats := client.PoolStats()
 			// Expect(stats.Hits).To(Equal(uint32(2)))
@@ -2871,7 +2871,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(BeNil())
 
 			//TODO:
-			// Expect(client.Ping(ctx).Err()).NotTo(HaveOccurred())
+			Expect(client.Ping(ctx).Err()).NotTo(HaveOccurred())
 
 			// stats := client.PoolStats()
 			// Expect(stats.Hits).To(Equal(uint32(2)))
@@ -2954,7 +2954,7 @@ var _ = Describe("Commands", func() {
 			Expect(val).To(BeNil())
 
 			// TODO：
-			// Expect(client.Ping(ctx).Err()).NotTo(HaveOccurred())
+			Expect(client.Ping(ctx).Err()).NotTo(HaveOccurred())
 
 			// stats := client.PoolStats()
 			// Expect(stats.Hits).To(Equal(uint32(2)))

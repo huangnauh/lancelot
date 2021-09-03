@@ -316,11 +316,14 @@ func serve(s *Server) error {
 			}
 			continue
 		}
+		now := time.Now()
 		c := &Conn{
-			conn: lnconn,
-			addr: lnconn.RemoteAddr().String(),
-			wr:   NewWriter(lnconn),
-			rd:   NewReader(lnconn),
+			conn:      lnconn,
+			addr:      lnconn.RemoteAddr().String(),
+			wr:        NewWriter(lnconn),
+			rd:        NewReader(lnconn),
+			CreatedAt: now,
+			UpdatedAt: now,
 		}
 		c.setState(StateNew)
 		s.mu.Lock()
@@ -368,6 +371,7 @@ func handle(s *Server, c *Conn) {
 				c.conn.SetReadDeadline(time.Now().Add(c.idleClose))
 			}
 			cmds, err := c.rd.readCommands(nil)
+			c.UpdatedAt = time.Now()
 			if err != nil {
 				if err, ok := err.(*errProtocol); ok {
 					// All protocol errors should attempt a response to
@@ -416,11 +420,13 @@ type Transaction interface{}
 type Conn struct {
 	conn      net.Conn
 	Auth      bool
-	ID        int64
+	ID        uint64
 	Name      string
 	DBId      uint8
 	UserId    uint16
 	UserName  string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 	wr        *Writer
 	rd        *Reader
 	addr      string
@@ -533,6 +539,7 @@ func (dc *DetachedConn) ReadCommand() (Command, error) {
 		return cmd, nil
 	}
 	cmd, err := dc.rd.ReadCommand()
+	dc.UpdatedAt = time.Now()
 	if err != nil {
 		return Command{}, err
 	}

@@ -65,6 +65,12 @@ type PsManager struct {
 	hubs       [2]map[string]*Hub
 }
 
+func (p *PsManager) Channels() (int, int) {
+	p.RLock()
+	defer p.RUnlock()
+	return len(p.hubs[0]), len(p.hubs[1])
+}
+
 type Hub struct {
 	sync.RWMutex
 	subscribes map[*psConn]bool
