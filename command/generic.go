@@ -334,7 +334,7 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	if len(lastKey) <= prefixLen {
+	if len(lastKey) <= prefixLen || len(retKeys) < scanOpt.count {
 		return []interface{}{0, retKeys}
 	}
 

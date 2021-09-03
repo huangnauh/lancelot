@@ -136,7 +136,7 @@ func (c *Command) HLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(HLEN_COMMAND)
 	}
-	ret, err := c.GetCountByKey(txn, args[0], OnlyKey)
+	ret, err := c.GetCountByKey(txn, args[0], HashType)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -182,7 +182,8 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 	ret := make([]interface{}, 0)
 	var lastKey []byte
 	var callbackErr error
-	err = txn.List(start, end, scanOpt.count, func(key, value []byte) bool {
+	count := 0
+	err = txn.List(start, end, c.cfg.Key.ScanMaxCount, func(key, value []byte) bool {
 		lastKey = key
 		if len(key) < len(start) {
 			return true
@@ -211,7 +212,8 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 				ret = append(ret, score)
 			}
 		}
-		return true
+		count++
+		return count < scanOpt.count
 	})
 	if callbackErr != nil {
 		return txn.SetError(callbackErr)

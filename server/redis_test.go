@@ -1016,7 +1016,7 @@ var _ = Describe("Commands", func() {
 		})
 	})
 
-	Describe("strings", func() {
+	FDescribe("strings", func() {
 		It("should Append", func() {
 			n, err := client.Exists(ctx, "key").Result()
 			Expect(err).NotTo(HaveOccurred())
@@ -1687,7 +1687,7 @@ var _ = Describe("Commands", func() {
 		})
 	})
 
-	Describe("hashes", func() {
+	FDescribe("hashes", func() {
 		It("should HDel", func() {
 			hSet := client.HSet(ctx, "hash", "key", "hello")
 			Expect(hSet.Err()).NotTo(HaveOccurred())
