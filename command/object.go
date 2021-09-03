@@ -17,7 +17,9 @@ type ObjectType byte
 type TTL byte
 
 const (
+	NoType      ObjectType = 0
 	KeyType     ObjectType = 'k'
+	StringType  ObjectType = 's'
 	JsonType    ObjectType = 'j'
 	ListType    ObjectType = 'l'
 	SetType     ObjectType = 's'

@@ -743,15 +743,22 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:       136,
 			Type:     UnknownType,
 		},
+
+		KEYS_COMMAND: {
+			Func:     c.KeysHandle,
+			ReadOnly: true,
+			ID:       152,
+			Type:     KeyType,
+		},
 		DEL_COMMAND: {
 			Func: c.DELHandle,
-			ID:   101,
+			ID:   153,
 			Type: KeyType,
 		},
 		TTL_COMMAND: {
 			Func:     c.TTLHandle,
 			ReadOnly: true,
-			ID:       102,
+			ID:       154,
 			Type:     KeyType,
 		},
 		EXPIRE_COMMAND: {

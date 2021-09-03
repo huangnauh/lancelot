@@ -24,7 +24,7 @@ func IsExpired(txn *store.Txn, o *Object) (int64, bool) {
 	return 0, true
 }
 
-// (generic) EXPIRE key seconds
+// (generic) EXPIRE key seconds [NX|XX|GT|LT]
 func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 {
 		return txn.SetWrongArgs(EXPIRE_COMMAND)
@@ -200,7 +200,7 @@ func (c *Command) getScanOptions(opts [][]byte) (*scanOptions, error) {
 	scanOptions := &scanOptions{
 		count:  10,
 		match:  "*",
-		typo:   KeyType,
+		typo:   NoType,
 		cursor: ServerCursor,
 	}
 	for i := 0; i < len(opts); i += 2 {
@@ -285,6 +285,25 @@ func (c *Command) checkCursor(scanOpt *scanOptions, cursor []byte,
 	return start, nil
 }
 
+// (generic) KEYS pattern
+func (c *Command) KeysHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongArgs(KEYS_COMMAND)
+	}
+	match := utils.B2S(args[0])
+	prefix := glob.Prefix(match)
+	start := GetDataPrefix(txn.UserId, txn.DBId, KeyType, utils.S2B(prefix))
+	end := utils.PrefixNext(start)
+	retKeys, _, err := c.scan(txn, start, end, &scanOptions{
+		match: match,
+		count: c.cfg.Key.ScanMaxCount,
+	})
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return retKeys
+}
+
 // (generic) SCAN cursor [MATCH pattern] [COUNT count] [TYPE type] [CURSOR cursor]
 func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 1 {
@@ -311,6 +330,27 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 
+	retKeys, lastKey, err := c.scan(txn, start, end, scanOpt)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	if len(lastKey) <= prefixLen {
+		return []interface{}{0, retKeys}
+	}
+
+	cur := lastKey[prefixLen:]
+	if scanOpt.cursor == ServerCursor {
+		c.SetCursor(fmt.Sprintf("%s%d", GenericCursor, txn.Timestamp), cur)
+		return []interface{}{txn.Timestamp, retKeys}
+	} else {
+		cur := base64.StdEncoding.EncodeToString(cur)
+		return []interface{}{cur, retKeys}
+	}
+}
+
+func (c *Command) scan(txn *store.Txn, start, end []byte, scanOpt *scanOptions) ([][]byte, []byte, error) {
+	utils.ZapLog.Debug("scan", zap.ByteString("start", start), zap.ByteString("end", end),
+		zap.Int("count", scanOpt.count), zap.String("match", scanOpt.match), zap.String("type", string(scanOpt.typo)))
 	retKeys := make([][]byte, 0)
 	var lastKey []byte
 	var callbackErr error
@@ -322,7 +362,7 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 				zap.Uint64("timestamp", txn.Timestamp), zap.Binary("key", key), zap.Binary("value", value), zap.Error(err))
 			return true
 		}
-		utils.ZapLog.Debug("scan object", zap.Any("object", object))
+		utils.ZapLog.Debug("scan object", zap.Any("keys", retKeys))
 		var matched bool
 		matched, callbackErr = glob.Match(scanOpt.match, utils.B2S(object.Key))
 		if callbackErr != nil {
@@ -334,7 +374,7 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 			return true
 		}
 
-		if object.Type != scanOpt.typo {
+		if scanOpt.typo != NoType && object.Type != scanOpt.typo {
 			return true
 		}
 		if object.TTL > 0 {
@@ -344,28 +384,18 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 			}
 		}
 		retKeys = append(retKeys, object.Key)
-		return true
+		return len(retKeys) < scanOpt.count
 	}
 	utils.ZapLog.Debug("scan result", zap.String("remote", txn.RemoteAddr()),
 		zap.Uint64("timestamp", txn.Timestamp), zap.ByteStrings("result", retKeys), zap.ByteString("last", lastKey))
-	err = txn.List(start, end, scanOpt.count, callback)
+	err := txn.List(start, end, c.cfg.Key.ScanMaxCount, callback)
 	if callbackErr != nil {
-		return txn.SetError(callbackErr)
+		return nil, lastKey, callbackErr
 	}
-	if err == nil || len(lastKey) <= prefixLen {
-		return []interface{}{0, retKeys}
-	} else if err != store.ReachLimit {
-		return txn.SetError(err)
+	if err != nil && err != store.ReachLimit {
+		return nil, lastKey, err
 	}
-
-	cur := lastKey[prefixLen:]
-	if scanOpt.cursor == ServerCursor {
-		c.SetCursor(fmt.Sprintf("%s%d", GenericCursor, txn.Timestamp), cur)
-		return []interface{}{txn.Timestamp, retKeys}
-	} else {
-		cur := base64.StdEncoding.EncodeToString(cur)
-		return []interface{}{cur, retKeys}
-	}
+	return retKeys, lastKey, nil
 }
 
 // all

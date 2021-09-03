@@ -143,6 +143,7 @@ const (
 	BITFIELD_COMMAND         = "bitfield"
 	DEL_COMMAND              = "del"
 	SCAN_COMMAND             = "scan"
+	KEYS_COMMAND             = "keys"
 	ALL_COMMAND              = "all"
 	TTL_COMMAND              = "ttl"
 	EXPIRE_COMMAND           = "expire"
