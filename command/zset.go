@@ -91,7 +91,7 @@ func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score floa
 	var delta int64
 	var oldScore float64
 	var count int
-	zkey := object.GetKeyFieldBytes(EncodeMemberKey(member))
+	zkey := object.GetValueBytes(EncodeMemberKey(member))
 	v, err := txn.Get(zkey)
 	if err == store.KeyNotFound {
 		if opt.Check&CheckExist == CheckExist {
@@ -143,7 +143,7 @@ func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score floa
 }
 
 func (c *Command) zrem(txn *store.Txn, object *Object, member []byte) (bool, error) {
-	zkey := object.GetKeyFieldBytes(EncodeMemberKey(member))
+	zkey := object.GetValueBytes(EncodeMemberKey(member))
 	v, err := txn.Get(zkey)
 	if err == store.KeyNotFound {
 		return false, nil
@@ -275,7 +275,7 @@ func (c *Command) PutZset(txn *store.Txn, object *Object, zkey, member []byte,
 	}
 
 	vkey := EncodeScoreKey(score, member)
-	skey := object.GetKeyFieldBytes(vkey)
+	skey := object.GetValueBytes(vkey)
 	if delta >= 0 {
 		err = txn.Put(skey, EncodeValue(&Value{
 			Timestamp: txn.Timestamp,
@@ -289,18 +289,18 @@ func (c *Command) PutZset(txn *store.Txn, object *Object, zkey, member []byte,
 	}
 
 	if delta == 0 {
-		skey = object.GetKeyFieldBytes(EncodeScoreKey(oldScore, member))
+		skey = object.GetValueBytes(EncodeScoreKey(oldScore, member))
 		err = txn.Del(skey)
 		return 0, err
 	}
 
-	count, err := c.GetCount(txn, txn.UserId, txn.DBId, object.Type, uint64(object.Hash), object.Value, member)
+	count, err := GetCount(txn, txn.UserId, txn.DBId, uint64(object.Hash), object.Value, member)
 	if err == store.KeyNotFound {
 	} else if err != nil {
 		return 0, err
 	}
 	count.Value += delta
-	err = c.SetCount(txn, count)
+	err = SetCount(txn, count)
 	return count.Value, err
 }
 
@@ -343,7 +343,7 @@ func (c *Command) zrank(txn *store.Txn, args [][]byte, reversed bool) (int64, bo
 	} else if err != nil {
 		return 0, false, err
 	}
-	zkey := object.GetKeyFieldBytes(EncodeMemberKey(args[1]))
+	zkey := object.GetValueBytes(EncodeMemberKey(args[1]))
 	v, err := txn.Get(zkey)
 	if err != store.KeyNotFound && err != nil {
 		return 0, false, err
@@ -352,7 +352,7 @@ func (c *Command) zrank(txn *store.Txn, args [][]byte, reversed bool) (int64, bo
 		return 0, false, nil
 	}
 
-	prefix := object.GetKeyFieldBytes(nil)
+	prefix := object.GetValueBytes(nil)
 	var count int64
 	callback := func(k, v []byte) bool {
 		if len(k) < len(prefix)+8+1 {
@@ -413,7 +413,7 @@ func (c *Command) zscore(txn *store.Txn, args [][]byte) ([]interface{}, error) {
 	}
 	ret := make([]interface{}, len(args)-1)
 	for i := 1; i < len(args); i++ {
-		zkey := object.GetKeyFieldBytes(EncodeMemberKey(args[i]))
+		zkey := object.GetValueBytes(EncodeMemberKey(args[i]))
 		v, err := txn.Get(zkey)
 		if err != store.KeyNotFound && err != nil {
 			return nil, err
@@ -521,7 +521,7 @@ func (c *Command) ZCountHandle(txn *store.Txn, args [][]byte) interface{} {
 	} else if err != nil {
 		return txn.SetError(err)
 	}
-	prefix := object.GetKeyFieldBytes(nil)
+	prefix := object.GetValueBytes(nil)
 	var count int64
 	callback := func(k, v []byte) bool {
 		_, _, ok, found := getScoreMember(k, v, prefix, min, max, includeMin, includeMax, false)
@@ -543,11 +543,11 @@ func (c *Command) ListByScore(txn *store.Txn, object *Object, arg []byte, min, m
 	utils.ZapLog.Debug("ListByScore", zap.String("arg", utils.B2S(arg)), zap.Float64("min", min),
 		zap.Float64("max", max), zap.Bool("includeMin", includeMin), zap.Bool("includeMax", includeMax),
 		zap.Bool("reversed", reversed))
-	start := object.GetKeyFieldBytes(EncodeScoreKey(min, nil))
+	start := object.GetValueBytes(EncodeScoreKey(min, nil))
 	if includeMax {
 		max = max + 1
 	}
-	end := object.GetKeyFieldBytes(EncodeScoreKey(max, nil))
+	end := object.GetValueBytes(EncodeScoreKey(max, nil))
 	if reversed {
 		start, end = end, start
 	}
@@ -563,14 +563,14 @@ func (c *Command) ListByMember(txn *store.Txn, object *Object, arg []byte, min, 
 	if !includeMin {
 		min = utils.NextKey(min)
 	}
-	start = object.GetKeyFieldBytes(EncodeMemberKey(min))
+	start = object.GetValueBytes(EncodeMemberKey(min))
 	if len(max) == 0 {
-		end = object.GetKeyFieldBytes(EndMemberKey)
+		end = object.GetValueBytes(EndMemberKey)
 	} else {
 		if includeMax {
 			max = utils.NextKey(max)
 		}
-		end = object.GetKeyFieldBytes(EncodeMemberKey(max))
+		end = object.GetValueBytes(EncodeMemberKey(max))
 	}
 	if reversed {
 		start, end = end, start
@@ -729,7 +729,7 @@ func (c *Command) ZremValues(txn *store.Txn, object *Object, ret []interface{}) 
 	var err error
 	for i := 0; i < len(ret); i += 2 {
 		member := ret[i].([]byte)
-		zkey := object.GetKeyFieldBytes(EncodeMemberKey(member))
+		zkey := object.GetValueBytes(EncodeMemberKey(member))
 		_, err = c.PutZset(txn, object, zkey, member, ret[i+1].(float64), 0, -1)
 		if err != nil {
 			return err
@@ -1064,7 +1064,7 @@ func (c *Command) objectZremRangeByRank(txn *store.Txn, object *Object, arg []by
 }
 
 func (c *Command) objectZrangeByRank(txn *store.Txn, object *Object, arg []byte, min, max int64, opt *zRangeOption) ([]interface{}, error) {
-	prefix := object.GetKeyFieldBytes(nil)
+	prefix := object.GetValueBytes(nil)
 	var count int64
 	ret := make([]interface{}, 0)
 	callback := func(k, v []byte) bool {
@@ -1094,7 +1094,7 @@ func (c *Command) objectZrangeByRank(txn *store.Txn, object *Object, arg []byte,
 
 func (c *Command) objectZRangeByScore(txn *store.Txn, object *Object, arg []byte, min, max float64,
 	includeMin, includeMax bool, opt *zRangeOption) ([]interface{}, error) {
-	prefix := object.GetKeyFieldBytes(nil)
+	prefix := object.GetValueBytes(nil)
 	ret := make([]interface{}, 0)
 	var count, cnt int64
 	callback := func(k, v []byte) bool {
@@ -1389,7 +1389,7 @@ func (c *Command) zrangeByLex(txn *store.Txn, arg []byte, min, max string, inclu
 
 func (c *Command) objectZrangeByLex(txn *store.Txn, object *Object, arg []byte, min, max string,
 	includeMin, includeMax bool, opt *zRangeOption) ([]interface{}, error) {
-	prefix := object.GetKeyFieldBytes(nil)
+	prefix := object.GetValueBytes(nil)
 	ret := make([]interface{}, 0)
 	var count, cnt int64
 	callback := func(k, v []byte) bool {

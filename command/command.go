@@ -106,130 +106,130 @@ func NewCommand(cfg *config.Config) *Command {
 			Func:     c.GetHandle,
 			ReadOnly: true,
 			ID:       0,
-			Type:     KeyType,
+			Type:     StringType,
 		},
 		SET_COMMAND: {
 			Func: c.SetHandle,
 			ID:   1,
-			Type: KeyType,
+			Type: StringType,
 		},
 		GETSET_COMMAND: {
 			Func: c.GetSetHandle,
 			ID:   2,
-			Type: KeyType,
+			Type: StringType,
 		},
 		SETNX_COMMAND: {
 			Func: c.SetNXHandle,
 			ID:   3,
-			Type: KeyType,
+			Type: StringType,
 		},
 		STRLEN_COMMAND: {
 			Func:     c.StrLenHandle,
 			ID:       4,
 			ReadOnly: true,
-			Type:     KeyType,
+			Type:     StringType,
 		},
 		APPEND_COMMAND: {
 			Func: c.AppendHandle,
 			ID:   5,
-			Type: KeyType,
+			Type: StringType,
 		},
 		DECR_COMMAND: {
 			Func: c.DecrHandle,
 			ID:   6,
-			Type: KeyType,
+			Type: StringType,
 		},
 		DECRBY_COMMAND: {
 			Func: c.DecrByHandle,
 			ID:   7,
-			Type: KeyType,
+			Type: StringType,
 		},
 		INCR_COMMAND: {
 			Func: c.IncrHandle,
 			ID:   8,
-			Type: KeyType,
+			Type: StringType,
 		},
 		INCRBY_COMMAND: {
 			Func: c.IncrByHandle,
 			ID:   9,
-			Type: KeyType,
+			Type: StringType,
 		},
 		GETDEL_COMMAND: {
 			Func: c.GetDelHandle,
 			ID:   10,
-			Type: KeyType,
+			Type: StringType,
 		},
 		GETEX_COMMAND: {
 			Func: c.GetExHandle,
 			ID:   11,
-			Type: KeyType,
+			Type: StringType,
 		},
 		GETRANGE_COMMAND: {
 			Func:     c.GetRangeHandle,
 			ID:       12,
 			ReadOnly: true,
-			Type:     KeyType,
+			Type:     StringType,
 		},
 		INCRBYFLOAT_COMMAND: {
 			Func: c.IncrByFloatHandle,
 			ID:   13,
-			Type: KeyType,
+			Type: StringType,
 		},
 		SETEX_COMMAND: {
 			Func: c.SetExHandle,
 			ID:   14,
-			Type: KeyType,
+			Type: StringType,
 		},
 		MGET_COMMAND: {
 			Func:     c.MGetHandle,
 			ID:       15,
-			Type:     KeyType,
+			Type:     StringType,
 			ReadOnly: true,
 		},
 		MSET_COMMAND: {
 			Func: c.MSetHandle,
 			ID:   16,
-			Type: KeyType,
+			Type: StringType,
 		},
 		MSETNX_COMMAND: {
 			Func: c.MSetNXHandle,
 			ID:   17,
-			Type: KeyType,
+			Type: StringType,
 		},
 		PSETEX_COMMAND: {
 			Func: c.PSetExHandle,
 			ID:   18,
-			Type: KeyType,
+			Type: StringType,
 		},
 		SETRANGE_COMMAND: {
 			Func: c.SetRangeHandle,
 			ID:   19,
-			Type: KeyType,
+			Type: StringType,
 		},
 		BITCOUNT_COMMAND: {
 			Func: c.BitCountHandle,
 			ID:   20,
-			Type: KeyType,
+			Type: StringType,
 		},
 		GETBIT_COMMAND: {
 			Func: c.GetBitHandle,
 			ID:   21,
-			Type: KeyType,
+			Type: StringType,
 		},
 		SETBIT_COMMAND: {
 			Func: c.SetBitHandle,
 			ID:   22,
-			Type: KeyType,
+			Type: StringType,
 		},
 		BITPOS_COMMAND: {
 			Func: c.BitPosHandle,
 			ID:   23,
-			Type: KeyType,
+			Type: StringType,
 		},
 		BITOP_COMMAND: {
 			Func: c.BitOpHandle,
 			ID:   24,
-			Type: KeyType,
+			Type: StringType,
 		},
 		SADD_COMMAND: {
 			Func: c.SAddHandle,
@@ -424,7 +424,7 @@ func NewCommand(cfg *config.Config) *Command {
 			Func:     c.ScanHandle,
 			ReadOnly: true,
 			ID:       66,
-			Type:     KeyType,
+			Type:     UnknownType,
 		},
 		ACL_COMMAND: {
 			Func: c.AclHandle,
@@ -748,29 +748,29 @@ func NewCommand(cfg *config.Config) *Command {
 			Func:     c.KeysHandle,
 			ReadOnly: true,
 			ID:       152,
-			Type:     KeyType,
+			Type:     UnknownType,
 		},
 		DEL_COMMAND: {
 			Func: c.DELHandle,
 			ID:   153,
-			Type: KeyType,
+			Type: UnknownType,
 		},
 		TTL_COMMAND: {
 			Func:     c.TTLHandle,
 			ReadOnly: true,
 			ID:       154,
-			Type:     KeyType,
+			Type:     UnknownType,
 		},
 		EXPIRE_COMMAND: {
 			Func: c.ExpireHandle,
 			ID:   103,
-			Type: KeyType,
+			Type: UnknownType,
 		},
 		EXISTS_COMMAND: {
 			Func:     c.ExistsHandle,
 			ReadOnly: true,
 			ID:       104,
-			Type:     KeyType,
+			Type:     UnknownType,
 		},
 		ALL_COMMAND: {
 			Func: c.AllHandle,
@@ -875,9 +875,15 @@ func (c *Command) Shutdown(ctx context.Context) {
 	}
 	c.luapool.Shutdown()
 	c.client.Close()
-	select {
-	case <-c.gcClosed:
-	case <-ctx.Done():
+	for {
+		select {
+		case _, ok := <-c.gcClosed:
+			if !ok {
+				return
+			}
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 

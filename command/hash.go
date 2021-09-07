@@ -246,7 +246,7 @@ func (c *Command) hgetall(txn *store.Txn, args [][]byte, getType int, limit int)
 	if limit <= 0 || limit > c.cfg.Key.ScanMaxCount {
 		limit = c.cfg.Key.ScanMaxCount
 	}
-	start := object.GetKeyFieldBytes(nil)
+	start := object.GetValueBytes(nil)
 	end := utils.PrefixNext(start)
 	err = txn.List(start, end, limit, func(key []byte, value []byte) bool {
 		if len(key) < len(start) {
@@ -284,7 +284,7 @@ func (c *Command) HMGetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 	for i := 1; i < len(args); i++ {
-		hkey := object.GetKeyFieldBytes(args[i])
+		hkey := object.GetValueBytes(args[i])
 		value, err := txn.Get(hkey)
 		if err == store.KeyNotFound {
 			continue
@@ -338,7 +338,7 @@ func (c *Command) hget(txn *store.Txn, args [][]byte) ([]byte, error) {
 	} else if err != nil {
 		return nil, err
 	}
-	hkey := object.GetKeyFieldBytes(field)
+	hkey := object.GetValueBytes(field)
 	value, err := txn.Get(hkey)
 	if err == store.KeyNotFound {
 		return nil, nil
@@ -369,7 +369,7 @@ func (c *Command) HDelHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	var ret int64
 	for start := 1; start < len(args); start++ {
-		hkey := object.GetKeyFieldBytes(args[start])
+		hkey := object.GetValueBytes(args[start])
 		_, err = txn.Get(hkey)
 		if err == store.KeyNotFound {
 			continue
@@ -399,7 +399,7 @@ func (c *Command) HIncrByFloatHandle(txn *store.Txn, args [][]byte) interface{} 
 	if err != nil {
 		return txn.SetError(err)
 	}
-	hkey := object.GetKeyFieldBytes(args[1])
+	hkey := object.GetValueBytes(args[1])
 	value, err := txn.Get(hkey)
 	var floatValue float64
 	var delta int64
@@ -445,7 +445,7 @@ func (c *Command) HIncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	hkey := object.GetKeyFieldBytes(args[1])
+	hkey := object.GetValueBytes(args[1])
 	value, err := txn.Get(hkey)
 	var delta int64
 	var intValue int64
@@ -573,7 +573,7 @@ func (c *Command) hset(txn *store.Txn, args [][]byte, checkExist bool) (int64, e
 
 	for start := 1; start < len(args); start += 2 {
 		var delta int64
-		hkey := object.GetKeyFieldBytes(args[start])
+		hkey := object.GetValueBytes(args[start])
 		_, err = txn.Get(hkey)
 		if err == store.KeyNotFound {
 			ret++

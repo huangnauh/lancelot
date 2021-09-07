@@ -115,13 +115,13 @@ func (c *Command) fpubSubChannels(txn *store.Txn, args [][]byte) interface{} {
 			return txn.SetError(xerror.ErrSyntax)
 		}
 	}
-	prefix := GetDataPrefix(txn.UserId, txn.DBId, KeyType, nil)
+	prefix := GetKeyBytes(DataPrefix, txn.UserId, txn.DBId, KeyPrefix, nil)
 	var start []byte
 	if cursor != nil {
-		start = GetDataPrefix(txn.UserId, txn.DBId, KeyType, cursor)
+		start = GetKeyBytes(DataPrefix, txn.UserId, txn.DBId, KeyPrefix, cursor)
 	} else if pattern != "" {
 		cur := glob.Prefix(pattern)
-		start = GetDataPrefix(txn.UserId, txn.DBId, KeyType, utils.S2B(cur))
+		start = GetKeyBytes(DataPrefix, txn.UserId, txn.DBId, KeyPrefix, utils.S2B(cur))
 	} else {
 		start = prefix
 	}
@@ -431,21 +431,21 @@ func (c *Command) XRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.InvalidPartition)
 	}
 
-	prefix := object.GetValueBytesPrefix(nil)
+	prefix := object.GetValueBytes(nil)
 	var start, end []byte
 	if partition < 0 {
 		start = prefix
 		end = utils.PrefixNext(prefix)
 	} else {
 		if startOffset < 0 {
-			start = object.GetValueBytesPrefix(encodeMessageKeyPrefix(uint16(partition)))
+			start = object.GetValueBytes(encodeMessageKeyPrefix(uint16(partition)))
 		} else {
-			start = object.GetValueBytesPrefix(encodeMessageKeyOffset(uint16(partition), startOffset))
+			start = object.GetValueBytes(encodeMessageKeyOffset(uint16(partition), startOffset))
 		}
 		if endOffset < 0 {
-			end = utils.PrefixNext(object.GetValueBytesPrefix(encodeMessageKeyPrefix(uint16(partition))))
+			end = utils.PrefixNext(object.GetValueBytes(encodeMessageKeyPrefix(uint16(partition))))
 		} else {
-			end = object.GetValueBytesPrefix(encodeMessageKeyOffset(uint16(partition), endOffset+1))
+			end = object.GetValueBytes(encodeMessageKeyOffset(uint16(partition), endOffset+1))
 		}
 	}
 	result := make([][]interface{}, 0)
@@ -589,9 +589,9 @@ LOOP:
 
 	var msgCount *Count
 	if partition == ALLPartition {
-		msgCount, err = c.GetCount(txn, txn.UserId, txn.DBId, MessageType, uint64(object.Hash), object.Value, objectValue)
+		msgCount, err = GetCount(txn, txn.UserId, txn.DBId, uint64(object.Hash), object.Value, objectValue)
 	} else {
-		msgCount, err = c.GetCount(txn, txn.UserId, txn.DBId, MessageType, uint64(partition), object.Value, nil)
+		msgCount, err = GetCount(txn, txn.UserId, txn.DBId, uint64(partition), object.Value, nil)
 	}
 	if err == store.KeyNotFound {
 		msgCount.UserValue = make([]byte, 8)
@@ -624,24 +624,24 @@ LOOP:
 		}
 		binary.BigEndian.PutUint64(msgCount.UserValue, uint64(offset))
 	}
-	err = c.SetCount(txn, msgCount)
+	err = SetCount(txn, msgCount)
 	if err != nil {
 		return txn.SetError(err)
 	}
 
 	id := fmt.Sprintf("%d-%d", msgCount.Shard, msgCount.Value)
-	mkey := object.GetKeyFieldBytes(encodeMessageKeyOffset(msgCount.Shard, msgCount.Value))
+	mkey := object.GetValueBytes(encodeMessageKeyOffset(msgCount.Shard, msgCount.Value))
 	err = txn.Put(mkey, encodeMessageValue(txn.Now, msgCount.Value, objectValue))
 	if err != nil {
 		return txn.SetError(err)
 	}
 
 	if minOffset >= 0 || maxLen >= 0 {
-		start := object.GetValueBytesPrefix(encodeMessageKeyPrefix(msgCount.Shard))
+		start := object.GetValueBytes(encodeMessageKeyPrefix(msgCount.Shard))
 		var end []byte
 		var max int64
 		if minOffset >= 0 {
-			end = object.GetValueBytesPrefix(encodeMessageKeyOffset(msgCount.Shard, minOffset))
+			end = object.GetValueBytes(encodeMessageKeyOffset(msgCount.Shard, minOffset))
 		} else {
 			if msgCount.Value <= maxLen {
 				return id
@@ -748,13 +748,13 @@ func (c *Command) FSubscribeHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.InvalidPartition)
 	}
 
-	p := object.GetValueBytesPrefix(nil)
-	prefix := object.GetValueBytesPrefix(encodeMessageKeyPrefix(partition))
+	p := object.GetValueBytes(nil)
+	prefix := object.GetValueBytes(encodeMessageKeyPrefix(partition))
 	var start []byte
 	if opt.offset == NoOffset {
 		start = prefix
 	} else {
-		start = object.GetValueBytesPrefix(encodeMessageKeyOffset(partition, opt.offset))
+		start = object.GetValueBytes(encodeMessageKeyOffset(partition, opt.offset))
 	}
 	end := utils.PrefixNext(prefix)
 	var lastKey []byte

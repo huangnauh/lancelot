@@ -131,11 +131,11 @@ func lTrim(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *lO
 	if err != nil {
 		return OK, nil
 	}
-	prefix := object.GetKeyFieldBytes(nil)
+	prefix := object.GetValueBytes(nil)
 	var delErr error
 	var count int64
-	start := object.GetKeyFieldBytes(utils.EncodeFloat(l.LIndex))
-	end := object.GetKeyFieldBytes(utils.EncodeFloat(l.RIndex + 1))
+	start := object.GetValueBytes(utils.EncodeFloat(l.LIndex))
+	end := object.GetValueBytes(utils.EncodeFloat(l.RIndex + 1))
 	if startIndex > 0 {
 		err = txn.List(start, end, opt.max, func(key, value []byte) bool {
 			if len(key) < len(prefix) || !bytes.Equal(key[:len(prefix)], prefix) {
@@ -165,7 +165,7 @@ func lTrim(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *lO
 	}
 
 	if !l.Complex {
-		start = object.GetKeyFieldBytes(utils.EncodeFloat(float64(endIndex) + 1))
+		start = object.GetValueBytes(utils.EncodeFloat(float64(endIndex) + 1))
 		err = txn.List(start, end, opt.max, func(key, value []byte) bool {
 			if len(key) < len(prefix) || !bytes.Equal(key[:len(prefix)], prefix) {
 				return false
@@ -222,9 +222,9 @@ func linfo(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *lO
 	if err != nil {
 		return nil, nil
 	}
-	prefix := object.GetKeyFieldBytes(nil)
-	start := object.GetKeyFieldBytes(utils.EncodeFloat(s))
-	end := object.GetKeyFieldBytes(utils.EncodeFloat(e))
+	prefix := object.GetValueBytes(nil)
+	start := object.GetValueBytes(utils.EncodeFloat(s))
+	end := object.GetValueBytes(utils.EncodeFloat(e))
 	ret := make([][]interface{}, 0)
 	err = txn.List(start, end, opt.max, func(key, value []byte) bool {
 		if len(key) < len(prefix) || !bytes.Equal(key[:len(prefix)], prefix) {
@@ -256,9 +256,9 @@ func lRange(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *l
 		e = l.RIndex + 1
 	}
 
-	prefix := object.GetKeyFieldBytes(nil)
-	start := object.GetKeyFieldBytes(utils.EncodeFloat(s))
-	end := object.GetKeyFieldBytes(utils.EncodeFloat(e))
+	prefix := object.GetValueBytes(nil)
+	start := object.GetValueBytes(utils.EncodeFloat(s))
+	end := object.GetValueBytes(utils.EncodeFloat(e))
 	var count int64
 	err = txn.List(start, end, opt.max, func(key, value []byte) bool {
 		if len(key) < len(prefix) || !bytes.Equal(key[:len(prefix)], prefix) {
@@ -310,9 +310,9 @@ func index(txn *store.Txn, object *Object, l *ListObject, opt *lOpt) (float64, e
 	}
 
 	idx := math.MaxFloat64
-	prefix := object.GetKeyFieldBytes(nil)
-	start := object.GetKeyFieldBytes(utils.EncodeFloat(l.LIndex))
-	end := object.GetKeyFieldBytes(utils.EncodeFloat(l.RIndex + 1))
+	prefix := object.GetValueBytes(nil)
+	start := object.GetValueBytes(utils.EncodeFloat(l.LIndex))
+	end := object.GetValueBytes(utils.EncodeFloat(l.RIndex + 1))
 	var count uint64
 	err := txn.List(start, end, opt.max, func(key, value []byte) bool {
 		if len(key) < len(prefix) || !bytes.Equal(key[:len(prefix)], prefix) {
@@ -339,8 +339,8 @@ func posValue(txn *store.Txn, object *Object, l *ListObject, v []byte,
 	}
 
 	idxs := make([]redcon.SimpleInt, 0)
-	start := object.GetKeyFieldBytes(utils.EncodeFloat(l.LIndex))
-	end := object.GetKeyFieldBytes(utils.EncodeFloat(l.RIndex + 1))
+	start := object.GetValueBytes(utils.EncodeFloat(l.LIndex))
+	end := object.GetValueBytes(utils.EncodeFloat(l.RIndex + 1))
 	uindex := index
 	if index >= 0 {
 
@@ -379,9 +379,9 @@ func posValue(txn *store.Txn, object *Object, l *ListObject, v []byte,
 
 func indexValue(txn *store.Txn, object *Object, l *ListObject, v []byte,
 	opt *lOpt) ([]float64, error) {
-	prefix := object.GetKeyFieldBytes(nil)
-	start := object.GetKeyFieldBytes(utils.EncodeFloat(l.LIndex))
-	end := object.GetKeyFieldBytes(utils.EncodeFloat(l.RIndex + 1))
+	prefix := object.GetValueBytes(nil)
+	start := object.GetValueBytes(utils.EncodeFloat(l.LIndex))
+	end := object.GetValueBytes(utils.EncodeFloat(l.RIndex + 1))
 	idxs := []float64{math.MaxFloat64, math.MaxFloat64, math.MaxFloat64}
 	found := false
 	err := txn.List(start, end, opt.max, func(key, value []byte) bool {
@@ -437,7 +437,7 @@ func lIndex(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *l
 	} else if err != nil {
 		return nil, err
 	}
-	lkey := object.GetKeyFieldBytes(utils.EncodeFloat(index))
+	lkey := object.GetValueBytes(utils.EncodeFloat(index))
 	v, err := txn.Get(lkey)
 	if err != nil {
 		return nil, err
@@ -452,9 +452,9 @@ func llen(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *lOp
 }
 
 func lrem(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *lOpt) (interface{}, error) {
-	prefix := object.GetKeyFieldBytes(nil)
-	start := object.GetKeyFieldBytes(utils.EncodeFloat(l.LIndex))
-	end := object.GetKeyFieldBytes(utils.EncodeFloat(l.RIndex + 1))
+	prefix := object.GetValueBytes(nil)
+	start := object.GetValueBytes(utils.EncodeFloat(l.LIndex))
+	end := object.GetValueBytes(utils.EncodeFloat(l.RIndex + 1))
 	var count int
 	if opt.count >= 0 {
 		if opt.count == 0 {
@@ -552,7 +552,7 @@ func lInsert(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *
 	if err != nil {
 		return nil, err
 	}
-	lkey := object.GetKeyFieldBytes(utils.EncodeFloat(index))
+	lkey := object.GetValueBytes(utils.EncodeFloat(index))
 	lvalue := &Value{
 		Value:     args[2],
 		Timestamp: txn.Timestamp,
@@ -571,7 +571,7 @@ func lSet(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *lOp
 	if err != nil {
 		return "", err
 	}
-	lkey := object.GetKeyFieldBytes(utils.EncodeFloat(index))
+	lkey := object.GetValueBytes(utils.EncodeFloat(index))
 	lvalue := &Value{
 		Value:     args[1],
 		Timestamp: txn.Timestamp,
@@ -589,7 +589,7 @@ func lPush(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *lO
 		if l.Length > 0 {
 			l.LIndex--
 		}
-		lkey := object.GetKeyFieldBytes(utils.EncodeFloat(l.LIndex))
+		lkey := object.GetValueBytes(utils.EncodeFloat(l.LIndex))
 		lvalue := &Value{
 			Value:     msg,
 			Timestamp: txn.Timestamp,
@@ -609,7 +609,7 @@ func rPush(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *lO
 		if l.Length > 0 {
 			l.RIndex++
 		}
-		lkey := object.GetKeyFieldBytes(utils.EncodeFloat(l.RIndex))
+		lkey := object.GetValueBytes(utils.EncodeFloat(l.RIndex))
 		lvalue := &Value{
 			Value:     msg,
 			Timestamp: txn.Timestamp,
@@ -636,9 +636,9 @@ func lPop(txn *store.Txn, object *Object, l *ListObject, _ [][]byte, opt *lOpt) 
 		count = int(l.Length)
 	}
 
-	prefix := object.GetKeyFieldBytes(nil)
-	start := object.GetKeyFieldBytes(utils.EncodeFloat(l.LIndex))
-	end := object.GetKeyFieldBytes(utils.EncodeFloat(l.RIndex + 1))
+	prefix := object.GetValueBytes(nil)
+	start := object.GetValueBytes(utils.EncodeFloat(l.LIndex))
+	end := object.GetValueBytes(utils.EncodeFloat(l.RIndex + 1))
 	var delErr error
 	ret := make([][]byte, 0)
 	err := txn.List(start, end, count+1, func(key, value []byte) bool {
@@ -689,9 +689,9 @@ func rPop(txn *store.Txn, object *Object, l *ListObject, _ [][]byte, opt *lOpt) 
 	if count > int(l.Length) {
 		count = int(l.Length)
 	}
-	start := object.GetKeyFieldBytes(utils.EncodeFloat(l.RIndex + 1))
-	prefix := object.GetKeyFieldBytes(nil)
-	end := object.GetKeyFieldBytes(utils.EncodeFloat(l.LIndex))
+	start := object.GetValueBytes(utils.EncodeFloat(l.RIndex + 1))
+	prefix := object.GetValueBytes(nil)
+	end := object.GetValueBytes(utils.EncodeFloat(l.LIndex))
 	var delErr error
 	ret := make([][]byte, 0)
 	err := txn.List(start, end, count+1, func(key, value []byte) bool {

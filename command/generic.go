@@ -35,12 +35,12 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
 
-	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		return SimpleInt(0)
-	} else if err != nil && err != xerror.WrongTypeError {
+	} else if err != nil {
 		return txn.SetError(err)
 	}
 
@@ -67,7 +67,11 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 	object.TTL = newTTL
 	object.Timestamp = txn.Timestamp
 	ttlKey := object.GetTTLKeyBytes()
-	err = txn.Put(ttlKey, []byte{1})
+	if object.IsSimple() {
+		err = txn.Put(ttlKey, []byte{1})
+	} else {
+		err = txn.Put(ttlKey, EncodeTTLValue(object.Type, object.Value))
+	}
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -83,12 +87,12 @@ func (c *Command) ExistsHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(EXISTS_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		return SimpleInt(0)
-	} else if err != nil && err != xerror.WrongTypeError {
+	} else if err != nil {
 		return txn.SetError(err)
 	}
 	return SimpleInt(1)
@@ -99,12 +103,12 @@ func (c *Command) TTLHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(TTL_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return SimpleInt(-2)
-	} else if err != nil && err != xerror.WrongTypeError {
+	} else if err != nil {
 		return txn.SetError(err)
 	} else if object.TTL > 0 {
 		expireSecond, isExpired := IsExpired(txn, object)
@@ -127,27 +131,40 @@ func DeleteKeyReturn(txn *store.Txn, key []byte, object *Object, now int64) inte
 }
 
 func DeleteKey(txn *store.Txn, key []byte, object *Object, now int64) error {
+	return CleanKey(txn, key, object.GetTTLKeyBytes(), object, now)
+}
+
+func CleanKey(txn *store.Txn, key, ttlKey []byte, object *Object, valueTTL int64) error {
 	var err error
-	if object.TTL > 0 {
-		ttlKey := object.GetTTLKeyBytes()
+	if len(key) > 0 {
+		err = txn.Del(key)
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(ttlKey) > 0 {
 		err = txn.Del(ttlKey)
 		if err != nil {
 			return err
 		}
 	}
 
-	if !object.IsSimple() && now > 0 {
-		object.TTL = now
-		ttlValue := object.GetTTLValueBytes()
-		err = txn.Put(ttlValue, []byte{1})
-		if err != nil {
-			return err
+	if !object.IsSimple() && len(object.Value) > 0 {
+		if valueTTL > 0 {
+			object.TTL = valueTTL
+			ttlValue := object.GetTTLValueBytes()
+			err = txn.Put(ttlValue, []byte{1})
+			if err != nil {
+				return err
+			}
+		} else {
+			// clean count
+			err = DeleteCount(txn, object.UserId, object.Db, object.Value, txn.NowTime())
+			if err != nil {
+				return err
+			}
 		}
-	}
-
-	err = txn.Del(key)
-	if err != nil {
-		return err
 	}
 	return nil
 }
@@ -160,12 +177,12 @@ func (c *Command) DELHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	var count int64
 	for i := range args {
-		object := NewObject(txn.UserId, txn.DBId, KeyType, args[i])
+		object := NewObject(txn.UserId, txn.DBId, UnknownType, args[i])
 		key := object.GetKeyBytes()
 		err := getTxnObject(txn, key, object, true)
 		if err == store.KeyNotFound {
 			continue
-		} else if err != nil && err != xerror.WrongTypeError {
+		} else if err != nil {
 			return txn.SetError(err)
 		}
 		count++
@@ -200,7 +217,7 @@ func (c *Command) getScanOptions(opts [][]byte) (*scanOptions, error) {
 	scanOptions := &scanOptions{
 		count:  10,
 		match:  "*",
-		typo:   NoType,
+		typo:   UnknownType,
 		cursor: ServerCursor,
 	}
 	for i := 0; i < len(opts); i += 2 {
@@ -292,7 +309,7 @@ func (c *Command) KeysHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	match := utils.B2S(args[0])
 	prefix := glob.Prefix(match)
-	start := GetDataPrefix(txn.UserId, txn.DBId, KeyType, utils.S2B(prefix))
+	start := GetKeyBytes(DataPrefix, txn.UserId, txn.DBId, KeyPrefix, utils.S2B(prefix))
 	end := utils.PrefixNext(start)
 	retKeys, _, err := c.scan(txn, start, end, &scanOptions{
 		match: match,
@@ -322,10 +339,10 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	prefix := glob.Prefix(scanOpt.match)
-	start := GetDataPrefix(txn.UserId, txn.DBId, KeyType, utils.S2B(prefix))
+	start := GetKeyBytes(DataPrefix, txn.UserId, txn.DBId, KeyPrefix, utils.S2B(prefix))
 	prefixLen := len(start)
 	end := utils.PrefixNext(start)
-	start, err = c.checkCursor(scanOpt, cursor, KeyType, start)
+	start, err = c.checkCursor(scanOpt, cursor, scanOpt.typo, start)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -374,7 +391,7 @@ func (c *Command) scan(txn *store.Txn, start, end []byte, scanOpt *scanOptions) 
 			return true
 		}
 
-		if scanOpt.typo != NoType && object.Type != scanOpt.typo {
+		if scanOpt.typo != UnknownType && object.Type != scanOpt.typo {
 			return true
 		}
 		if object.TTL > 0 {

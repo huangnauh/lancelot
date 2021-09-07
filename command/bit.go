@@ -144,7 +144,7 @@ func (c *Command) BitOpHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.ErrSyntax)
 	}
 
-	destObject := NewObject(txn.UserId, txn.DBId, KeyType, args[1])
+	destObject := NewObject(txn.UserId, txn.DBId, StringType, args[1])
 	destKey := destObject.GetKeyBytes()
 	err := getTxnObject(txn, destKey, destObject, true)
 	if err == store.KeyNotFound {
@@ -153,7 +153,7 @@ func (c *Command) BitOpHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	if str == "not" {
-		object := NewObject(txn.UserId, txn.DBId, KeyType, args[2])
+		object := NewObject(txn.UserId, txn.DBId, StringType, args[2])
 		key := object.GetKeyBytes()
 		err := getTxnObject(txn, key, object, false)
 		if err == store.KeyNotFound {
@@ -169,7 +169,7 @@ func (c *Command) BitOpHandle(txn *store.Txn, args [][]byte) interface{} {
 	} else {
 		var ret []byte
 		for i := 2; i < len(args); i++ {
-			object := NewObject(txn.UserId, txn.DBId, KeyType, args[i])
+			object := NewObject(txn.UserId, txn.DBId, StringType, args[i])
 			key := object.GetKeyBytes()
 			err := getTxnObject(txn, key, object, false)
 			if err == store.KeyNotFound {
@@ -217,7 +217,7 @@ func (c *Command) SetBitHandle(txn *store.Txn, args [][]byte) interface{} {
 	o := int(offset) >> 3
 	var value []byte
 	var v byte
-	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {

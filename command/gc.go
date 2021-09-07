@@ -2,7 +2,6 @@ package command
 
 import (
 	"bytes"
-	"encoding/binary"
 	"sync/atomic"
 	"time"
 
@@ -32,6 +31,28 @@ func (c *Command) startGC() {
 	}
 }
 
+func (c *Command) touchGC() {
+	touchTicker := time.NewTicker(c.cfg.GC.TickInterval / 10)
+	defer touchTicker.Stop()
+	for {
+		select {
+		case <-c.done:
+			return
+		case <-c.gcClosed:
+			return
+		case <-touchTicker.C:
+			ts, err := c.client.CurrentVersion()
+			if err != nil {
+				continue
+			}
+			err = c.client.SaveTS(GcSavedTs, ts)
+			if err != nil {
+				continue
+			}
+		}
+	}
+}
+
 func (c *Command) tickGC() {
 	ts, err := c.client.CurrentVersion()
 	if err != nil {
@@ -57,51 +78,40 @@ func (c *Command) tickGC() {
 		return
 	}
 
-	go c.gcPubSub(ms)
+	go c.touchGC()
 
-	cur := GetTTLPrefix(0)
-	endGC := GetTTLPrefix(ms)
-	touchTicker := time.NewTicker(c.cfg.GC.TickInterval / 10)
-	defer touchTicker.Stop()
+	// go c.gcPubSub(ms)
 
+	cur := []byte{byte(TTLPrefix)}
+	endGC := []byte{byte(TTLPrefix + 1)}
 LABLE:
 	for bytes.Compare(cur, endGC) < 0 {
-		var limit int
-		var wait bool
-		if atomic.LoadInt32(&c.gcWorkers) < int32(c.cfg.GC.TTLWorkers) {
-			cur, limit, wait, err = c.doGC(cur, endGC)
-			if err != nil {
-				break LABLE
-			}
-			if limit < c.cfg.Store.BatchLimit {
-				break LABLE
-			}
-
-			select {
-			case <-c.done:
-				break LABLE
-			default:
-				if !wait {
-					continue
-				}
-			}
-		}
-
 		select {
 		case <-c.done:
 			break LABLE
-		case <-touchTicker.C:
-			ts, err := c.client.CurrentVersion()
+		default:
+		}
+
+		if atomic.LoadInt32(&c.gcWorkers) < int32(c.cfg.GC.TTLWorkers) {
+			lastKey, o, err := c.doGC(cur, endGC, ms)
 			if err != nil {
 				break LABLE
 			}
-			err = c.client.SaveTS(GcSavedTs, ts)
-			if err != nil {
+			if lastKey == nil && o == nil {
 				break LABLE
 			}
+
+			if lastKey == nil {
+				cur = GetUserDBPrefix(TTLPrefix, o.UserId, o.Db+1)
+			} else {
+				cur = lastKey
+			}
+		} else {
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 	c.gcWait.Wait()
+	c.gcClosed <- true
 }
 
 func (c *Command) DelteRange(start, end []byte, callback func(*store.Client)) {
@@ -110,185 +120,96 @@ func (c *Command) DelteRange(start, end []byte, callback func(*store.Client)) {
 	atomic.AddInt32(&c.gcWorkers, -1)
 }
 
-func (c *Command) doGC(start, end []byte) ([]byte, int, bool, error) {
-	utils.ZapLog.Info("[gc] start gc", zap.Binary("start", start), zap.Binary("end", end))
+func (c *Command) doGC(start, end []byte, now int64) ([]byte, *Object, error) {
+	utils.ZapLog.Info("[gc] start gc", zap.ByteString("start", start), zap.ByteString("end", end))
 	txn := c.client.NewTxn()
 	err := txn.Begin()
 	if err != nil {
-		utils.ZapLog.Error("[gc] new txn", zap.Error(err))
-		return nil, 0, false, err
+		return nil, nil, err
 	}
 	defer txn.Rollback()
 	it, err := txn.Iter(start, end, false)
 	if err != nil {
-		utils.ZapLog.Error("[gc] iter", zap.Error(err))
-		return nil, 0, false, err
+		return nil, nil, err
 	}
 	defer it.Close()
 	count := 0
-	k := start
-	wait := false
-LABLE:
-	for it.Valid() && bytes.Compare(k, end) < 0 && bytes.Compare(k, start) >= 0 {
-		k = it.Key()
-		object, err := GetObjectFromTTL(k)
-		if err != nil {
-			utils.ZapLog.Error("[gc] get object from ttl", zap.Binary("key", k), zap.Error(err))
-			continue
-		}
-		if len(object.Key) > 0 {
-			key := object.GetKeyBytes()
-			utils.ZapLog.Debug("[gc] delete key", zap.ByteString("key", object.Key), zap.Binary("keybytes", key))
-			err = txn.Del(key)
-			if err != nil {
-				utils.ZapLog.Error("[gc] del key", zap.ByteString("key", object.Key), zap.Binary("keybytes", key), zap.Error(err))
-			}
-			count++
-			err = txn.Del(k)
-			if err != nil {
-				utils.ZapLog.Error("[gc] del key", zap.ByteString("key", object.Key), zap.Binary("keybytes", key), zap.Error(err))
-			}
-			count++
-			if count >= c.cfg.Store.BatchLimit {
-				break LABLE
-			}
+	var lastKey []byte
+	var o *Object
+	finish := false
+	for it.Valid() {
+		lastKey = it.Key()
+		if bytes.Compare(lastKey, end) >= 0 {
+			finish = true
+			break
 		}
 
-		if len(object.Value) > 0 && object.Type == HashType {
-			p := object.GetValueBytesPrefix(nil)
-			utils.ZapLog.Debug("[gc] delete hash", zap.ByteString("value", object.Value), zap.Binary("prefix", p))
+		object, err := GetObjectFromTTL(lastKey, it.Value())
+		if err != nil {
+			return lastKey, nil, err
+		}
+		if object.TTL >= now {
+			return nil, object, nil
+		}
+
+		o = object
+		if len(object.Value) > 0 {
+			p := object.GetValueBytes(nil)
+			utils.ZapLog.Debug("[gc] delete value", zap.ByteString("value", object.Value), zap.ByteString("key", object.Key))
 			c.gcWait.Add(1)
 			gcWorkers := atomic.AddInt32(&c.gcWorkers, 1)
-			ttlKey := k
-			go c.DelteRange(p, utils.PrefixNext(p), func(c *store.Client) {
-				_ = c.Delete(ttlKey)
+			ttlKey := lastKey
+			go c.DelteRange(p, utils.PrefixNext(p), func(_ *store.Client) {
+				txn := c.client.NewTxn()
+				err = txn.Begin()
+				if err != nil {
+					return
+				}
+				defer txn.Rollback()
+				if len(object.Key) == 0 {
+					err = CleanKey(txn, nil, ttlKey, object, 0)
+				} else {
+					err = CleanKey(txn, object.GetKeyBytes(), ttlKey, object, 0)
+				}
+				if err != nil {
+					return
+				}
+				txn.Commit()
 			})
 			if int(gcWorkers) >= c.cfg.GC.TTLWorkers {
 				// limit the number of goroutines
-				wait = true
-				count = c.cfg.Store.BatchLimit
-				break LABLE
+				break
+			}
+		} else if len(object.Key) > 0 {
+			count++
+			err = CleanKey(txn, object.GetKeyBytes(), lastKey, object, 0)
+			if err != nil {
+				utils.ZapLog.Error("[gc] del key", zap.ByteString("ttl key", lastKey), zap.Error(err))
+				return lastKey, nil, err
+			}
+			if count >= c.cfg.Store.BatchLimit {
+				break
 			}
 		}
 
 		err = it.Next()
 		if err != nil {
 			utils.ZapLog.Error("[gc] iter next", zap.Error(err))
-			return k, 0, false, err
+			return lastKey, nil, err
 		}
 	}
 	err = txn.Commit()
 	if err != nil {
 		utils.ZapLog.Error("[gc] commit", zap.Error(err))
-	}
-	return k, count, wait, err
-}
-
-type messgeGC struct {
-	start  []byte
-	end    []byte
-	expire int64
-	hash   uint16
-	key    []byte
-	delete bool
-}
-
-func (c *Command) TryDeleteChannel(userID uint16, dbID uint8, channel string, hash uint16, key []byte) {
-	txn := c.client.NewTxn()
-	err := txn.Begin()
-	if err != nil {
-		return
-	}
-	defer txn.Rollback()
-
-	var expire time.Time
-	now := txn.NowTime()
-	object := NewObject(userID, dbID, StreamType, utils.S2B(channel))
-	k := object.GetKeyBytes()
-	err = txn.Del(k)
-	if err != nil {
-		return
+		return lastKey, nil, err
 	}
 
-	expire = now.Add(-c.cfg.GC.PubChannelExpire)
-	err = c.DeleteCount(txn, userID, dbID, MessageType, hash, key, expire)
-	if err != nil {
-		return
+	if finish {
+		return nil, nil, nil
 	}
 
-	utils.ZapLog.Info("[gc] delete channel count", zap.String("channel", channel), zap.Uint16("hash", hash), zap.Binary("key", key))
-	_ = txn.Commit()
-}
-
-func (c *Command) DeleteChannelMessage(userID uint16, dbID uint8, name string, channel messgeGC) {
-	count := 0
-	_ = c.client.DeleteRangeUntil(channel.start, channel.end, func(k, v []byte) bool {
-		count++
-		if len(v) < 8 {
-			return true
-		}
-		t := binary.BigEndian.Uint64(v[:8])
-		return t < uint64(channel.expire)
-	})
-	if channel.delete {
-		c.TryDeleteChannel(userID, dbID, name, channel.hash, channel.key)
+	if lastKey == nil {
+		return nil, nil, nil
 	}
-	utils.ZapLog.Info("[gc] delete channel", zap.String("channel", name), zap.Int("count", count), zap.Int64("expire", channel.expire))
-}
-
-func (c *Command) DeleteUserStream(userID uint16, dbID uint8, now int64, limit chan struct{}) {
-	utils.ZapLog.Debug("[gc] delete user stream", zap.Uint16("user", userID), zap.Uint8("db", dbID), zap.Int64("now", now))
-	userStart := GetDataPrefix(userID, dbID, KeyType, nil)
-	userEnd := GetDataPrefix(userID, dbID, KeyType, []byte{0xff})
-	for {
-		channels := make(map[string]messgeGC)
-		var lastKey []byte
-		err := c.client.List(userStart, userEnd, 100, func(k, v []byte) bool {
-			lastKey = k
-			object, err := GetObjectFromKV(k, v)
-			if err != nil {
-				return true
-			}
-			if object.Type != StreamType {
-				return true
-			}
-			channel := string(object.Key)
-			//TODO: check expire
-			expire := now //- object.ValueTTL
-			start := object.GetValueBytesPrefix(nil)
-			end := utils.PrefixNext(start)
-			channels[channel] = messgeGC{start, end, expire, object.Hash, object.Value, true}
-			return true
-		})
-
-		for name, channel := range channels {
-			limit <- struct{}{}
-			c.gcWait.Add(1)
-			utils.ZapLog.Debug("[gc] delete user pubsub", zap.Uint16("user", userID), zap.Int64("now", now),
-				zap.String("channel", name), zap.Int64("expire", channel.expire))
-			go func(name string, messge messgeGC) {
-				c.DeleteChannelMessage(userID, dbID, name, messge)
-				<-limit
-				c.gcWait.Done()
-			}(name, channel)
-		}
-
-		if err == store.ReachLimit {
-			userStart = utils.NextKey(lastKey)
-			continue
-		}
-		break
-	}
-}
-
-func (c *Command) gcPubSub(now int64) {
-	c.gcWait.Add(1)
-	defer c.gcWait.Done()
-
-	limit := make(chan struct{}, c.cfg.GC.PubSubWorkers)
-	for _, user := range c.users {
-		userID := user.ID
-		//TODO: dbID
-		c.DeleteUserStream(userID, 0, now, limit)
-	}
+	return utils.NextKey(lastKey), o, nil
 }

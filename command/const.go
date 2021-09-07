@@ -219,13 +219,18 @@ const (
 	PONG        = redcon.SimpleString("PONG")
 	EmptyString = redcon.SimpleString("")
 
-	DataPrefix  = 'd'
-	UserPrefix  = 'u'
-	CountPrefix = 'c'
-	TTLPrefix   = 't'
+	DataPrefix   PrefixType = 'd'
+	UserPrefix   PrefixType = 'u'
+	CountPrefix  PrefixType = 'c'
+	CountGeneral PrefixType = 'C'
+	TTLPrefix    PrefixType = 't'
+	KeyPrefix    PrefixType = 'k'
+	ValuePrefix  PrefixType = 'v'
 
 	GenericCursor = "g"
 )
+
+type PrefixType byte
 
 var (
 	EmptySlice     = []struct{}{}

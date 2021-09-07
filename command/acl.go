@@ -276,7 +276,7 @@ func (c *Command) ListUsers() (map[string]*User, error) {
 }
 
 func (c *Command) GetDataUserPrefix() []byte {
-	return []byte{UserPrefix}
+	return []byte{byte(UserPrefix)}
 }
 
 func (c *Command) GetUserBytes(username []byte) []byte {
@@ -301,14 +301,14 @@ func (c *Command) GetUser(txn *store.Txn, username string) (*User, error) {
 }
 
 func (c *Command) SetUserCount(txn *store.Txn, count uint16) error {
-	key := c.GetCountBytes(UserType)
+	key := GetGeneralBytes(CountGeneral, UserPrefix)
 	b := make([]byte, 2)
 	binary.BigEndian.PutUint16(b, count)
 	return txn.Put(key, b)
 }
 
 func (c *Command) GetUserCount(txn *store.Txn) (uint16, error) {
-	key := c.GetCountBytes(UserType)
+	key := GetGeneralBytes(CountGeneral, UserPrefix)
 	b, err := txn.Get(key)
 	if err == store.KeyNotFound {
 		return 0, nil

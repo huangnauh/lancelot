@@ -50,10 +50,9 @@ type Rpc struct {
 }
 
 type GC struct {
-	TickInterval     time.Duration `yaml:"tick-interval"`
-	TTLWorkers       int           `yaml:"ttl-workers"`
-	PubSubWorkers    int           `yaml:"pub-sub-workers"`
-	PubChannelExpire time.Duration `yaml:"pub-channel-expire"`
+	TickInterval  time.Duration `yaml:"tick-interval"`
+	TTLWorkers    int           `yaml:"ttl-workers"`
+	TTLBatchLimit int           `yaml:"ttl-batch-limit"`
 }
 
 type PubSub struct {
@@ -99,10 +98,9 @@ var cfg = &Config{
 		BatchLimit:         200,
 	},
 	GC: GC{
-		TickInterval:     time.Minute,
-		PubChannelExpire: time.Hour * 24 * 7,
-		TTLWorkers:       5,
-		PubSubWorkers:    5,
+		TickInterval:  time.Minute,
+		TTLWorkers:    5,
+		TTLBatchLimit: 100,
 	},
 	Lua: Lua{
 		InitPoolSize: 10,

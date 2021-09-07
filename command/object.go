@@ -17,25 +17,20 @@ type ObjectType byte
 type TTL byte
 
 const (
-	NoType      ObjectType = 0
-	KeyType     ObjectType = 'k'
-	StringType  ObjectType = 's'
-	JsonType    ObjectType = 'j'
-	ListType    ObjectType = 'l'
-	SetType     ObjectType = 's'
-	ZsetType    ObjectType = 'z'
+	UnknownType ObjectType = '?'
+	CountType   ObjectType = 'c'
+	GroupType   ObjectType = 'g'
 	HashType    ObjectType = 'h'
+	JsonType    ObjectType = 'j'
+	StringType  ObjectType = 'k'
+	ListType    ObjectType = 'l'
+	MessageType ObjectType = 'm'
+	StreamType  ObjectType = 'p'
+	SetType     ObjectType = 's'
 	TTLType     ObjectType = 't'
 	UserType    ObjectType = 'u'
-	CountType   ObjectType = 'c'
-	UnknownType ObjectType = '?'
+	ZsetType    ObjectType = 'z'
 	GeneralType ObjectType = '*'
-	StreamType  ObjectType = 'p'
-	GroupType   ObjectType = 'g'
-	MessageType ObjectType = 'm'
-
-	KeyTTL   TTL = 'k'
-	ValueTTL TTL = 'v'
 
 	EncodingRaw = ObjectEncoding(iota)
 	EncodingInt
@@ -54,7 +49,7 @@ const (
 )
 
 var ObjectNameMap = map[string]ObjectType{
-	"string": KeyType,
+	"string": StringType,
 	"json":   JsonType,
 	"list":   ListType,
 	"hash":   HashType,
@@ -64,7 +59,7 @@ var ObjectNameMap = map[string]ObjectType{
 
 func (o ObjectType) Type() string {
 	switch o {
-	case KeyType:
+	case StringType:
 		return "string"
 	case JsonType:
 		return "json"
@@ -133,11 +128,11 @@ var (
 type GetKeyFunc func(o *Object, field []byte) []byte
 
 func GetHashKey(o *Object, field []byte) []byte {
-	return o.GetKeyFieldBytes(field)
+	return o.GetValueBytes(field)
 }
 
 func GetZsetKey(o *Object, field []byte) []byte {
-	return o.GetKeyFieldBytes(EncodeMemberKey(field))
+	return o.GetValueBytes(EncodeMemberKey(field))
 }
 
 var (
@@ -170,47 +165,38 @@ func NewObject(user uint16, db uint8, typo ObjectType, key []byte) *Object {
 	}
 }
 
-func GetDataUserPrefix(user uint16) []byte {
+func GetUserPrefix(typo PrefixType, user uint16) []byte {
 	k := make([]byte, 1+2)
-	k[0] = DataPrefix
+	k[0] = byte(typo)
 	binary.BigEndian.PutUint16(k[1:], user)
 	return k
 }
 
-func GetUserDBPrefix(user uint16, db uint8) []byte {
+func GetUserDBPrefix(typo PrefixType, user uint16, db uint8) []byte {
 	k := make([]byte, 1+2+1)
-	k[0] = DataPrefix
+	k[0] = byte(typo)
 	binary.BigEndian.PutUint16(k[1:], user)
 	k[3] = byte(db)
 	return k
 }
 
-func GetDataPrefix(user uint16, db uint8, typo ObjectType, data []byte) []byte {
-	k := make([]byte, 1+2+1+1+len(data))
-	k[0] = DataPrefix
-	binary.BigEndian.PutUint16(k[1:], user)
-	k[3] = byte(db)
-	k[4] = byte(typo)
-	if data != nil {
-		copy(k[5:], data)
-	}
+func GetGeneralBytes(typo, keyPrefix PrefixType) []byte {
+	k := make([]byte, 2)
+	k[0] = byte(typo)
+	k[1] = byte(keyPrefix)
 	return k
 }
 
-func (o *Object) IsSimple() bool {
-	return o.Type == KeyType || o.Type == JsonType
-}
-
-func (o *Object) getKeyBytes(typo ObjectType, data ...[]byte) []byte {
+func GetKeyBytes(typo PrefixType, user uint16, db uint8, keyPrefix PrefixType, data ...[]byte) []byte {
 	count := 0
 	for _, v := range data {
 		count += len(v)
 	}
 	k := make([]byte, 1+2+1+1+count)
-	k[0] = DataPrefix
-	binary.BigEndian.PutUint16(k[1:], o.UserId)
-	k[3] = byte(o.Db)
-	k[4] = byte(typo)
+	k[0] = byte(typo)
+	binary.BigEndian.PutUint16(k[1:], user)
+	k[3] = byte(db)
+	k[4] = byte(keyPrefix)
 	start := 5
 	for _, v := range data {
 		if v == nil {
@@ -220,6 +206,10 @@ func (o *Object) getKeyBytes(typo ObjectType, data ...[]byte) []byte {
 		start += len(v)
 	}
 	return k
+}
+
+func (o *Object) IsSimple() bool {
+	return o.Type == StringType || o.Type == JsonType
 }
 
 func GetObjectFromKV(key, value []byte) (*Object, error) {
@@ -238,19 +228,11 @@ func GetObjectFromKV(key, value []byte) (*Object, error) {
 }
 
 func (o *Object) GetKeyBytes() []byte {
-	return o.getKeyBytes(KeyType, o.Key)
+	return GetKeyBytes(DataPrefix, o.UserId, o.Db, KeyPrefix, o.Key)
 }
 
-// func (o *Object) GetObjectKeyBytes() []byte {
-// 	return o.getKeyBytes(o.Type, o.Key)
-// }
-
-func (o *Object) GetKeyFieldBytes(field []byte) []byte {
-	return o.getKeyBytes(o.Type, o.Value, field)
-}
-
-func (o *Object) GetValueBytesPrefix(data []byte) []byte {
-	return o.getKeyBytes(o.Type, o.Value, data)
+func (o *Object) GetValueBytes(data []byte) []byte {
+	return GetKeyBytes(DataPrefix, o.UserId, o.Db, ValuePrefix, o.Value, data)
 }
 
 func GetTTLPrefix(expire int64) []byte {
@@ -260,42 +242,51 @@ func GetTTLPrefix(expire int64) []byte {
 	return k
 }
 
-func (o *Object) getTTLBytes(ttlType TTL, data []byte) []byte {
-	k := make([]byte, 1+8+2+1+1+len(data))
-	k[0] = TTLPrefix
-	binary.BigEndian.PutUint64(k[1:], uint64(o.TTL))
-	binary.BigEndian.PutUint16(k[9:], o.UserId)
-	k[11] = byte(o.Db)
-	k[12] = byte(ttlType)
-	copy(k[13:], data)
-	return k
+func (o *Object) getTTLBytes(typo PrefixType, data []byte) []byte {
+	ttl := make([]byte, 8)
+	binary.BigEndian.PutUint64(ttl, uint64(o.TTL))
+	return GetKeyBytes(TTLPrefix, o.UserId, o.Db, typo, ttl, data)
 }
 
 func (o *Object) GetTTLKeyBytes() []byte {
-	return o.getTTLBytes(KeyTTL, o.Key)
+	return o.getTTLBytes(KeyPrefix, o.Key)
 }
 
 func (o *Object) GetTTLValueBytes() []byte {
-	return o.getTTLBytes(ValueTTL, o.Value)
+	return o.getTTLBytes(ValuePrefix, o.Value)
 }
 
-func GetObjectFromTTL(ttl []byte) (*Object, error) {
-	if len(ttl) <= 9 {
+func EncodeTTLValue(typo ObjectType, value []byte) []byte {
+	k := make([]byte, 1+len(value))
+	k[0] = byte(typo)
+	copy(k[1:], value)
+	return k
+}
+
+func DecodeTTLValue(value []byte) (ObjectType, []byte) {
+	return ObjectType(value[0]), value[1:]
+}
+
+func GetObjectFromTTL(k, v []byte) (*Object, error) {
+	if len(k) < 13 {
 		return nil, xerror.ErrValueTooShort
 	}
-	if ttl[0] != byte(TTLPrefix) {
+	if k[0] != byte(TTLPrefix) {
 		return nil, xerror.ErrNotTTL
 	}
 
 	o := &Object{
-		TTL:    int64(binary.BigEndian.Uint64(ttl[1:9])),
-		UserId: binary.BigEndian.Uint16(ttl[9:11]),
-		Db:     ttl[11],
+		UserId: binary.BigEndian.Uint16(k[1:3]),
+		Db:     k[3],
+		TTL:    int64(binary.BigEndian.Uint64(k[5:13])),
 	}
-	if ttl[12] == byte(KeyTTL) {
-		o.Key = ttl[13:]
-	} else if ttl[12] == byte(ValueTTL) {
-		o.Value = ttl[13:]
+	if k[4] == byte(KeyPrefix) {
+		o.Key = k[13:]
+		if len(v) >= 17 {
+			o.Type, o.Value = DecodeTTLValue(v)
+		}
+	} else if k[4] == byte(ValuePrefix) {
+		o.Value = k[13:]
 	} else {
 		return nil, xerror.ErrNotTTL
 	}
@@ -304,7 +295,7 @@ func GetObjectFromTTL(ttl []byte) (*Object, error) {
 
 func (o *Object) ObjectEncoding() ObjectEncoding {
 	switch o.Type {
-	case KeyType:
+	case StringType:
 		return EncodingEmbstr
 	default:
 		return EncodingRaw
@@ -375,7 +366,7 @@ func getTxnObject(txn *store.Txn, key []byte, object *Object, clear bool) error 
 		return store.KeyNotFound
 	}
 
-	if getType != object.Type {
+	if getType != UnknownType && getType != object.Type {
 		return xerror.WrongTypeError
 	}
 	return nil
@@ -395,7 +386,7 @@ func ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongSubArgs(subcommand, ObjectHelpCommand)
 	}
 
-	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
 	key := object.GetKeyBytes()
 	switch subcommand {
 	case ENCODING_COMMAND:
@@ -434,13 +425,13 @@ func (c *Command) PutOrDeleteKV(txn *store.Txn, object *Object, k, v []byte, del
 		return 0, nil
 	}
 
-	count, err := c.GetCount(txn, txn.UserId, txn.DBId, object.Type, uint64(object.Hash), object.Value, v)
+	count, err := GetCount(txn, txn.UserId, txn.DBId, uint64(object.Hash), object.Value, v)
 	if err == store.KeyNotFound {
 	} else if err != nil {
 		return 0, err
 	}
 	count.Value += delta
-	err = c.SetCount(txn, count)
+	err = SetCount(txn, count)
 	return count.Value, err
 }
 
@@ -457,7 +448,7 @@ func (c *Command) GetCountByKey(txn *store.Txn, arg []byte, typo ObjectType) (in
 }
 
 func (c *Command) GetCountByObject(txn *store.Txn, object *Object) (int64, error) {
-	counts, err := c.ListCount(txn, txn.UserId, txn.DBId, object.Type, uint16(object.Hash), object.Value)
+	counts, err := ListCount(txn, txn.UserId, txn.DBId, object.Value)
 	if err != nil {
 		return 0, err
 	}

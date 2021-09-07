@@ -51,7 +51,7 @@ const (
 )
 
 func getString(txn *store.Txn, arg []byte) ([]byte, error) {
-	object := NewObject(txn.UserId, txn.DBId, KeyType, arg)
+	object := NewObject(txn.UserId, txn.DBId, StringType, arg)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -104,7 +104,7 @@ func (c *Command) GetDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(GETDEL_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -138,7 +138,7 @@ func (c *Command) AppendHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 {
 		return txn.SetWrongArgs(APPEND_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
@@ -311,7 +311,7 @@ func (c *Command) GetSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 {
 		return txn.SetWrongArgs(GETSET_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	var ret interface{}
@@ -372,7 +372,7 @@ func (c *Command) IncrByFloatHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(xerror.ErrNotFloat)
 	}
-	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, true)
 	var value float64
@@ -410,7 +410,7 @@ func (c *Command) IncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) intHandle(txn *store.Txn, arg []byte, delta int64) interface{} {
-	object := NewObject(txn.UserId, txn.DBId, KeyType, arg)
+	object := NewObject(txn.UserId, txn.DBId, StringType, arg)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	var value int64
@@ -436,7 +436,7 @@ func (c *Command) intHandle(txn *store.Txn, arg []byte, delta int64) interface{}
 }
 
 func setString(txn *store.Txn, argKey, argValue []byte, expire int64, check CheckType) error {
-	object := NewObject(txn.UserId, txn.DBId, KeyType, argKey)
+	object := NewObject(txn.UserId, txn.DBId, StringType, argKey)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
@@ -550,7 +550,7 @@ func (c *Command) SetRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.ErrOffset)
 	}
 
-	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, true)
 	var value []byte
@@ -628,7 +628,7 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 
-	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	object.Value = args[1]
 	object.TTL = setOption.Expire
 	object.Timestamp = txn.Timestamp
@@ -661,7 +661,7 @@ func (c *Command) GetExHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 1 {
 		return txn.SetWrongArgs(GETEX_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
@@ -746,7 +746,7 @@ func (c *Command) checkAndGetRange(txn *store.Txn, k []byte, args [][]byte) ([]b
 }
 
 func (c *Command) getRange(txn *store.Txn, k []byte, start, end int) ([]byte, int, int, error) {
-	object := NewObject(txn.UserId, txn.DBId, KeyType, k)
+	object := NewObject(txn.UserId, txn.DBId, StringType, k)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {

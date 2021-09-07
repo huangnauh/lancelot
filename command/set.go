@@ -30,7 +30,7 @@ func (c *Command) SMIsMemberHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 	for i := 1; i < len(args); i++ {
-		skey := object.GetKeyFieldBytes(args[i])
+		skey := object.GetValueBytes(args[i])
 		_, err := txn.Get(skey)
 		if err == store.KeyNotFound {
 			continue
@@ -57,7 +57,7 @@ func (c *Command) SIsMemberHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	skey := object.GetKeyFieldBytes(args[1])
+	skey := object.GetValueBytes(args[1])
 	_, err = txn.Get(skey)
 	if err == store.KeyNotFound {
 		return redcon.SimpleInt(0)
@@ -88,7 +88,7 @@ func (c *Command) sadd(txn *store.Txn, arg []byte, args [][]byte) (int64, error)
 
 	var count int64
 	for i := 0; i < len(args); i++ {
-		skey := object.GetKeyFieldBytes(args[i])
+		skey := object.GetValueBytes(args[i])
 		_, err := txn.Get(skey)
 		if err == store.KeyNotFound {
 			count++
@@ -128,7 +128,7 @@ func (c *Command) srem(txn *store.Txn, arg []byte, args [][]byte) (int64, error)
 	}
 	var count int64
 	for i := 0; i < len(args); i++ {
-		skey := object.GetKeyFieldBytes(args[i])
+		skey := object.GetValueBytes(args[i])
 		_, err := txn.Get(skey)
 		if err == store.KeyNotFound {
 			continue
@@ -237,7 +237,7 @@ func (c *Command) sstore(txn *store.Txn, args [][]byte, sfunc SFunc) interface{}
 	}
 	for _, k := range ret {
 		svalue := &Value{Timestamp: txn.Timestamp}
-		skey := object.GetKeyFieldBytes(k.([]byte))
+		skey := object.GetValueBytes(k.([]byte))
 		_, err = c.PutOrDeleteKV(txn, object, skey, EncodeValue(svalue), 1)
 		if err != nil {
 			return txn.SetError(err)
@@ -655,7 +655,7 @@ func (c *Command) SPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	start := object.GetKeyFieldBytes(nil)
+	start := object.GetValueBytes(nil)
 	end := utils.PrefixNext(start)
 	var cbErr error
 	ret := make([][]byte, 0, count)
@@ -745,7 +745,7 @@ func (c *Command) smembers(txn *store.Txn, args [][]byte, limit int) ([][]byte, 
 	if err != nil {
 		return nil, err
 	}
-	start := object.GetKeyFieldBytes(nil)
+	start := object.GetValueBytes(nil)
 	end := utils.PrefixNext(start)
 	var cbErr error
 	ret := make([][]byte, 0)

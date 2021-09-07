@@ -14,7 +14,7 @@ import (
 )
 
 func (c *Command) FlushAllHandle(txn *store.Txn, args [][]byte) interface{} {
-	start := GetDataUserPrefix(txn.UserId)
+	start := GetUserPrefix(DataPrefix, txn.UserId)
 	end := utils.PrefixNext(start)
 	ctx := context.Background()
 	err := c.client.UnsafeDeleteRange(ctx, start, end, 2)
@@ -22,7 +22,15 @@ func (c *Command) FlushAllHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 
-	start = GetCountUserPrefix(txn.UserId)
+	start = GetUserPrefix(CountPrefix, txn.UserId)
+	end = utils.PrefixNext(start)
+	ctx = context.Background()
+	err = c.client.UnsafeDeleteRange(ctx, start, end, 2)
+	if err != nil {
+		return txn.SetError(err)
+	}
+
+	start = GetUserPrefix(TTLPrefix, txn.UserId)
 	end = utils.PrefixNext(start)
 	err = c.client.UnsafeDeleteRange(ctx, start, end, 2)
 	if err != nil {
@@ -32,10 +40,25 @@ func (c *Command) FlushAllHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) FlushDBHandle(txn *store.Txn, args [][]byte) interface{} {
-	start := GetUserDBPrefix(txn.UserId, txn.DBId)
+	start := GetUserDBPrefix(DataPrefix, txn.UserId, txn.DBId)
 	end := utils.PrefixNext(start)
 	ctx := context.Background()
 	err := c.client.UnsafeDeleteRange(ctx, start, end, 2)
+	if err != nil {
+		return txn.SetError(err)
+	}
+
+	start = GetUserDBPrefix(CountPrefix, txn.UserId, txn.DBId)
+	end = utils.PrefixNext(start)
+	ctx = context.Background()
+	err = c.client.UnsafeDeleteRange(ctx, start, end, 2)
+	if err != nil {
+		return txn.SetError(err)
+	}
+
+	start = GetUserDBPrefix(TTLPrefix, txn.UserId, txn.DBId)
+	end = utils.PrefixNext(start)
+	err = c.client.UnsafeDeleteRange(ctx, start, end, 2)
 	if err != nil {
 		return txn.SetError(err)
 	}
