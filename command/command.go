@@ -743,7 +743,12 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:       136,
 			Type:     UnknownType,
 		},
-
+		TYPE_COMMAND: {
+			Func:     c.TypeHandle,
+			ReadOnly: true,
+			ID:       151,
+			Type:     UnknownType,
+		},
 		KEYS_COMMAND: {
 			Func:     c.KeysHandle,
 			ReadOnly: true,
@@ -763,7 +768,12 @@ func NewCommand(cfg *config.Config) *Command {
 		},
 		EXPIRE_COMMAND: {
 			Func: c.ExpireHandle,
-			ID:   103,
+			ID:   155,
+			Type: UnknownType,
+		},
+		EXPIREAT_COMMAND: {
+			Func: c.ExpireAtHandle,
+			ID:   156,
 			Type: UnknownType,
 		},
 		EXISTS_COMMAND: {

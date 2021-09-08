@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/utils/glob"
@@ -24,15 +25,59 @@ func IsExpired(txn *store.Txn, o *Object) (int64, bool) {
 	return 0, true
 }
 
+func getCheckType(arg []byte) (CheckType, error) {
+	if len(arg) == 0 {
+		return NoCheck, nil
+	}
+	switch strings.ToLower(utils.B2S(arg)) {
+	case NX:
+		return CheckNotExist, nil
+	case XX:
+		return CheckExist, nil
+	case GT:
+		return CheckGT, nil
+	case LT:
+		return CheckLT, nil
+	default:
+		return NoCheck, xerror.ErrSyntax
+	}
+}
+
+// (generic) EXPIREAT key timestamp [NX|XX|GT|LT]
+func (c *Command) ExpireAtHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 2 && len(args) != 3 {
+		return txn.SetWrongArgs(EXPIREAT_COMMAND)
+	}
+	timestamp, err := strconv.ParseInt(string(args[1]), 10, 64)
+	if err != nil {
+		return txn.SetError(xerror.ErrNotInteger)
+	}
+	newTTL := timestamp
+	return c.expire(txn, args, newTTL)
+}
+
 // (generic) EXPIRE key seconds [NX|XX|GT|LT]
 func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 2 {
+	if len(args) != 2 && len(args) != 3 {
 		return txn.SetWrongArgs(EXPIRE_COMMAND)
 	}
 
 	expire, err := strconv.ParseInt(string(args[1]), 10, 64)
 	if err != nil {
 		return txn.SetError(xerror.ErrNotInteger)
+	}
+	newTTL := txn.Now + expire*1000
+	return c.expire(txn, args, newTTL)
+}
+
+func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64) interface{} {
+	var ct CheckType
+	var err error
+	if len(args) == 3 {
+		ct, err = getCheckType(args[2])
+		if err != nil {
+			return txn.SetError(err)
+		}
 	}
 
 	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
@@ -44,23 +89,39 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 
-	if expire <= 0 {
+	if newTTL <= txn.Now {
 		err = DeleteKey(txn, key, object, txn.Now)
 		if err != nil {
 			return txn.SetError(err)
 		}
 		return SimpleInt(1)
 	}
-	newTTL := txn.Now + expire*1000
-	if object.TTL == newTTL {
-		return SimpleInt(1)
-	}
 
 	if object.TTL > 0 {
+		if ct == CheckNotExist {
+			return SimpleInt(0)
+		}
+
+		if newTTL >= object.TTL && ct == CheckLT {
+			return SimpleInt(0)
+		}
+
+		if newTTL <= object.TTL && ct == CheckGT {
+			return SimpleInt(0)
+		}
+
+		if object.TTL == newTTL {
+			return SimpleInt(1)
+		}
+
 		ttlKey := object.GetTTLKeyBytes()
 		err = txn.Del(ttlKey)
 		if err != nil {
 			return err
+		}
+	} else {
+		if ct == CheckExist {
+			return SimpleInt(0)
 		}
 	}
 
@@ -321,6 +382,19 @@ func (c *Command) KeysHandle(txn *store.Txn, args [][]byte) interface{} {
 	return retKeys
 }
 
+// (generic) TYPE key
+func (c *Command) TypeHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongArgs(TYPE_COMMAND)
+	}
+	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
+	err := getTxnObject(txn, object.GetKeyBytes(), object, false)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return redcon.SimpleString(object.Type.Type())
+}
+
 // (generic) SCAN cursor [MATCH pattern] [COUNT count] [TYPE type] [CURSOR cursor]
 func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 1 {
@@ -415,14 +489,22 @@ func (c *Command) scan(txn *store.Txn, start, end []byte, scanOpt *scanOptions) 
 	return retKeys, lastKey, nil
 }
 
-// all
+// all [start]
 func (c *Command) AllHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) > 1 {
+		return txn.SetWrongArgs(ALL_COMMAND)
+	}
 	retKeys := make([][][]byte, 0)
 	callback := func(key, value []byte) bool {
 		retKeys = append(retKeys, [][]byte{key, value})
 		return true
 	}
-	err := txn.List([]byte{0x00}, []byte{0xff}, 10000, callback)
+	start := []byte{0x00}
+	end := []byte{0xff}
+	if len(args) == 1 {
+		start = args[0]
+	}
+	err := txn.List(start, end, 10000, callback)
 	if err != nil {
 		return txn.SetError(err)
 	}
