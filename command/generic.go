@@ -43,6 +43,52 @@ func getCheckType(arg []byte) (CheckType, error) {
 	}
 }
 
+// PERSIST key
+func (c *Command) PersistHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongArgs(PERSIST_COMMAND)
+	}
+	return c.expire(txn, args, 0, true)
+}
+
+// EXPIRETIME key
+func (c *Command) ExpireTimeHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongArgs(EXPIRETIME_COMMAND)
+	}
+	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return SimpleInt(-2)
+	} else if err != nil {
+		return txn.SetError(err)
+	}
+	if object.TTL == 0 {
+		return SimpleInt(-1)
+	}
+	return SimpleInt(object.TTL / 1000)
+}
+
+// PEXPIRETIME key
+func (c *Command) PExpireTimeHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongArgs(PEXPIRETIME_COMMAND)
+	}
+	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return SimpleInt(-2)
+	} else if err != nil {
+		return txn.SetError(err)
+	}
+	if object.TTL == 0 {
+		return SimpleInt(-1)
+	}
+	return SimpleInt(object.TTL)
+}
+
 // (generic) EXPIREAT key timestamp [NX|XX|GT|LT]
 func (c *Command) ExpireAtHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 && len(args) != 3 {
@@ -52,8 +98,34 @@ func (c *Command) ExpireAtHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
+	newTTL := timestamp * 1000
+	return c.expire(txn, args, newTTL, false)
+}
+
+// PEXPIREAT key milliseconds-timestamp [NX|XX|GT|LT]
+func (c *Command) PExpireAtHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 2 && len(args) != 3 {
+		return txn.SetWrongArgs(PEXPIREAT_COMMAND)
+	}
+	timestamp, err := strconv.ParseInt(string(args[1]), 10, 64)
+	if err != nil {
+		return txn.SetError(xerror.ErrNotInteger)
+	}
 	newTTL := timestamp
-	return c.expire(txn, args, newTTL)
+	return c.expire(txn, args, newTTL, true)
+}
+
+// PEXPIRE key milliseconds [NX|XX|GT|LT]
+func (c *Command) PExpireHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 2 && len(args) != 3 {
+		return txn.SetWrongArgs(PEXPIRE_COMMAND)
+	}
+	milliseconds, err := strconv.ParseInt(string(args[1]), 10, 64)
+	if err != nil {
+		return txn.SetError(xerror.ErrNotInteger)
+	}
+	newTTL := txn.Now + milliseconds
+	return c.expire(txn, args, newTTL, false)
 }
 
 // (generic) EXPIRE key seconds [NX|XX|GT|LT]
@@ -67,10 +139,10 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
 	newTTL := txn.Now + expire*1000
-	return c.expire(txn, args, newTTL)
+	return c.expire(txn, args, newTTL, false)
 }
 
-func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64) interface{} {
+func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL bool) interface{} {
 	var ct CheckType
 	var err error
 	if len(args) == 3 {
@@ -87,6 +159,25 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64) interface{
 		return SimpleInt(0)
 	} else if err != nil {
 		return txn.SetError(err)
+	}
+
+	if clearTTL {
+		if object.TTL == 0 {
+			return SimpleInt(0)
+		}
+		// clean ttl key
+		ttlKey := object.GetTTLKeyBytes()
+		err = txn.Del(ttlKey)
+		if err != nil {
+			return txn.SetError(err)
+		}
+		object.TTL = 0
+		object.Timestamp = txn.Timestamp
+		err = txn.Put(key, ObjectEncode(object))
+		if err != nil {
+			return txn.SetError(err)
+		}
+		return SimpleInt(1)
 	}
 
 	if newTTL <= txn.Now {
@@ -159,28 +250,49 @@ func (c *Command) ExistsHandle(txn *store.Txn, args [][]byte) interface{} {
 	return SimpleInt(1)
 }
 
+func (c *Command) ttl(txn *store.Txn, args [][]byte) (int64, error) {
+	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return -2, nil
+	} else if err != nil {
+		return 0, err
+	}
+	if object.TTL == 0 {
+		return -1, nil
+	}
+	return object.TTL, nil
+}
+
 // (generic) TTL key
 func (c *Command) TTLHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(TTL_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
-	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
-	if err == store.KeyNotFound {
-		return SimpleInt(-2)
-	} else if err != nil {
+	ttl, err := c.ttl(txn, args)
+	if err != nil {
 		return txn.SetError(err)
-	} else if object.TTL > 0 {
-		expireSecond, isExpired := IsExpired(txn, object)
-		if isExpired {
-			return SimpleInt(-2)
-		} else {
-			return SimpleInt(expireSecond)
-		}
-	} else {
-		return SimpleInt(-1)
 	}
+	if ttl < 0 {
+		return redcon.SimpleInt(ttl)
+	}
+	return redcon.SimpleInt(ttl-txn.Now) / 1000
+}
+
+// (generic) PTTL key
+func (c *Command) PTTLHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongArgs(PTTL_COMMAND)
+	}
+	ttl, err := c.ttl(txn, args)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	if ttl < 0 {
+		return SimpleInt(ttl)
+	}
+	return redcon.SimpleInt(ttl - txn.Now)
 }
 
 func DeleteKeyReturn(txn *store.Txn, key []byte, object *Object, now int64) interface{} {
@@ -230,26 +342,39 @@ func CleanKey(txn *store.Txn, key, ttlKey []byte, object *Object, valueTTL int64
 	return nil
 }
 
+// (generic) TOUCH key [key ...]
+func (c *Command) TouchHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) == 0 {
+		return txn.SetWrongArgs(TOUCH_COMMAND)
+	}
+	return c.touchORDelete(txn, args, false)
+}
+
 // (generic) DEL key [key ...]
 func (c *Command) DELHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) == 0 {
 		return txn.SetWrongArgs(DEL_COMMAND)
 	}
+	return c.touchORDelete(txn, args, true)
+}
 
+func (c *Command) touchORDelete(txn *store.Txn, args [][]byte, delete bool) interface{} {
 	var count int64
 	for i := range args {
 		object := NewObject(txn.UserId, txn.DBId, UnknownType, args[i])
 		key := object.GetKeyBytes()
-		err := getTxnObject(txn, key, object, true)
+		err := getTxnObject(txn, key, object, delete)
 		if err == store.KeyNotFound {
 			continue
 		} else if err != nil {
 			return txn.SetError(err)
 		}
 		count++
-		err = DeleteKey(txn, key, object, txn.Now)
-		if err != nil {
-			return txn.SetError(err)
+		if delete {
+			err = DeleteKey(txn, key, object, txn.Now)
+			if err != nil {
+				return txn.SetError(err)
+			}
 		}
 	}
 	return SimpleInt(count)

@@ -355,7 +355,7 @@ func getTxnObject(txn *store.Txn, key []byte, object *Object, clear bool) error 
 		return store.KeyNotFound
 	}
 
-	if object.TTL > 0 && object.TTL < txn.Now {
+	if object.TTL > 0 && object.TTL <= txn.Now {
 		if clear {
 			err = DeleteKey(txn, key, object, object.TTL)
 			if err != nil {

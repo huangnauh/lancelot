@@ -11,16 +11,23 @@ import (
 	"go.uber.org/zap"
 )
 
-func (c *Command) checkSingle(conn *redcon.Conn) (*store.Txn, bool) {
+func (c *Command) checkSingle(conn *redcon.Conn, unwatch bool) (*store.Txn, bool) {
 	connTxn := conn.Transaction()
 	var txn *store.Txn
 	if connTxn != nil {
 		var ok bool
 		txn, ok = connTxn.(*store.Txn)
-		if ok && txn.Multi {
-			return txn, false
+		if ok {
+			if txn.Multi {
+				return txn, false
+			} else {
+				// after WATCH command but before MULTI command
+				if unwatch {
+					txn.Reset()
+				}
+			}
 		}
-		// after WATCH command but before MULTI command
+
 	}
 	newTxn := c.client.NewTxn()
 	newTxn.Conn = conn
@@ -46,9 +53,9 @@ func (c *Command) SingleHandler(conn *redcon.Conn, txn *store.Txn, txnHandle Txn
 	return nil
 }
 
-func (c *Command) TxnHandler(conn *redcon.Conn, cmd redcon.Command, txnHandle TxnHandle) {
+func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command, txnHandle TxnHandle) {
 	args := cmd.Args[1:]
-	txn, single := c.checkSingle(conn)
+	txn, single := c.checkSingle(conn, comma == UNWATCH_COMMAND)
 	utils.ZapLog.Debug("TxnHandler", zap.String("remote", conn.RemoteAddr()),
 		zap.ByteStrings("args", cmd.Args), zap.Bool("single", single))
 	if single {
@@ -82,6 +89,28 @@ func (c *Command) TxnHandler(conn *redcon.Conn, cmd redcon.Command, txnHandle Tx
 	// }
 }
 
+func (c *Command) discard(conn *redcon.Conn, cmd redcon.Command) {
+	utils.ZapLog.Debug("discard", zap.String("remote", conn.RemoteAddr()),
+		zap.ByteStrings("args", cmd.Args))
+	args := cmd.Args[1:]
+	if len(args) != 0 {
+		conn.WriteError(xerror.WrongArgsString(string(cmd.Args[0])))
+		return
+	}
+	txn, _ := c.getTransaction(conn)
+	if txn == nil {
+		conn.WriteError(xerror.ErrDISCARDErr)
+		return
+	}
+	defer conn.SetTransaction(nil)
+	if !txn.Multi {
+		conn.WriteError(xerror.ErrDISCARDErr)
+		return
+	}
+	txn.Rollback()
+	conn.WriteAny(OK)
+}
+
 func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) {
 	utils.ZapLog.Debug("Exec", zap.String("remote", conn.RemoteAddr()),
 		zap.ByteStrings("args", cmd.Args))
@@ -91,7 +120,7 @@ func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) {
 		return
 	}
 
-	txn, alreadyExist := c.getTransaction(conn)
+	txn, alreadyExist := c.getOrCreateTransaction(conn)
 	defer conn.SetTransaction(nil)
 
 	if !txn.Multi || !alreadyExist {
@@ -178,6 +207,14 @@ func (c *Command) getTransaction(conn *redcon.Conn) (*store.Txn, bool) {
 			return txn, true
 		}
 	}
+	return nil, false
+}
+
+func (c *Command) getOrCreateTransaction(conn *redcon.Conn) (*store.Txn, bool) {
+	txn, exist := c.getTransaction(conn)
+	if exist {
+		return txn, true
+	}
 	txn = c.client.NewTxn()
 	txn.Conn = conn
 	return txn, false
@@ -191,7 +228,7 @@ func (c *Command) multi(conn *redcon.Conn, cmd redcon.Command) {
 		conn.WriteError(xerror.WrongArgsString(string(cmd.Args[0])))
 		return
 	}
-	txn, alreadyExist := c.getTransaction(conn)
+	txn, alreadyExist := c.getOrCreateTransaction(conn)
 	if txn.Multi {
 		conn.WriteError(xerror.ErrMultiNested)
 		return
@@ -213,7 +250,7 @@ func (c *Command) watch(conn *redcon.Conn, cmd redcon.Command) {
 		return
 	}
 
-	txn, alreadyExist := c.getTransaction(conn)
+	txn, alreadyExist := c.getOrCreateTransaction(conn)
 	if txn.Multi {
 		conn.WriteError(xerror.ErrWatchInsideMulti)
 		return
@@ -242,6 +279,14 @@ func (c *Command) watch(conn *redcon.Conn, cmd redcon.Command) {
 		conn.SetTransaction(txn)
 	}
 	conn.WriteAny(OK)
+}
+
+// UNWATCH
+func (c *Command) UnWatchHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 0 {
+		return txn.SetWrongArgs(UNWATCH_COMMAND)
+	}
+	return OK
 }
 
 func writerConnError(conn *redcon.Conn, err error) {

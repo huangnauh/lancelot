@@ -175,6 +175,12 @@ func (t *Txn) LockKeys(keys [][]byte) error {
 	return err
 }
 
+func (t *Txn) Reset() {
+	if t.txn != nil {
+		t.txn.Reset()
+	}
+}
+
 type Iterator struct {
 	kv.Iterator
 	start []byte

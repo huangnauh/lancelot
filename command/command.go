@@ -83,21 +83,25 @@ func NewCommand(cfg *config.Config) *Command {
 			Func: c.exec,
 			ID:   510,
 		},
+		DISCARD_COMMAND: {
+			Func: c.discard,
+			ID:   509,
+		},
 		SUBSCRIBE_COMMAND: {
 			Func: c.SubscribeHandle,
-			ID:   509,
+			ID:   503,
 		},
 		PSUBSCRIBE_COMMAND: {
 			Func: c.PSubscribeHandle,
-			ID:   508,
+			ID:   502,
 		},
 		UNSUBSCRIBE_COMMAND: {
 			Func: c.UnsubscribeHandle,
-			ID:   507,
+			ID:   501,
 		},
 		PUNSUBSCRIBE_COMMAND: {
 			Func: c.PUnsubscribeHandle,
-			ID:   506,
+			ID:   500,
 		},
 	}
 
@@ -776,6 +780,43 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:   156,
 			Type: UnknownType,
 		},
+		PERSIST_COMMAND: {
+			Func: c.PersistHandle,
+			ID:   157,
+			Type: UnknownType,
+		},
+		PEXPIRE_COMMAND: {
+			Func: c.PExpireHandle,
+			ID:   158,
+			Type: UnknownType,
+		},
+		PEXPIREAT_COMMAND: {
+			Func: c.PExpireAtHandle,
+			ID:   159,
+			Type: UnknownType,
+		},
+		PEXPIRETIME_COMMAND: {
+			Func: c.PExpireTimeHandle,
+			ID:   160,
+			Type: UnknownType,
+		},
+		TOUCH_COMMAND: {
+			Func:     c.TouchHandle,
+			ID:       161,
+			Type:     UnknownType,
+			ReadOnly: true,
+		},
+		PTTL_COMMAND: {
+			Func:     c.PTTLHandle,
+			ReadOnly: true,
+			ID:       162,
+			Type:     UnknownType,
+		},
+		UNLINK_COMMAND: {
+			Func: c.UnlinkHandle,
+			ID:   163,
+			Type: UnknownType,
+		},
 		EXISTS_COMMAND: {
 			Func:     c.ExistsHandle,
 			ReadOnly: true,
@@ -818,6 +859,11 @@ func NewCommand(cfg *config.Config) *Command {
 			Func: c.PublishHandle,
 			ID:   500,
 			Type: StreamType,
+		},
+		UNWATCH_COMMAND: {
+			Func: c.UnWatchHandle,
+			ID:   501,
+			Type: UnknownType,
 		},
 		EVAL_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
