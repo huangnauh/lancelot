@@ -58,7 +58,7 @@ func (c *Command) ExpireTimeHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
+	err := c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return SimpleInt(-2)
 	} else if err != nil {
@@ -77,7 +77,7 @@ func (c *Command) PExpireTimeHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
+	err := c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return SimpleInt(-2)
 	} else if err != nil {
@@ -154,7 +154,7 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 
 	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
 	key := object.GetKeyBytes()
-	err = getTxnObject(txn, key, object, true)
+	err = c.getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		return SimpleInt(0)
 	} else if err != nil {
@@ -173,7 +173,7 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 		}
 		object.TTL = 0
 		object.Timestamp = txn.Timestamp
-		err = txn.Put(key, ObjectEncode(object))
+		err = c.setTxnObject(txn, key, object, 0)
 		if err != nil {
 			return txn.SetError(err)
 		}
@@ -181,7 +181,7 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 	}
 
 	if newTTL <= txn.Now {
-		err = DeleteKey(txn, key, object, txn.Now)
+		err = c.DeleteKey(txn, key, object, txn.Now, MinusCount)
 		if err != nil {
 			return txn.SetError(err)
 		}
@@ -227,7 +227,7 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 	if err != nil {
 		return txn.SetError(err)
 	}
-	err = txn.Put(key, ObjectEncode(object))
+	err = c.setTxnObject(txn, key, object, 0)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -241,7 +241,7 @@ func (c *Command) ExistsHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, true)
+	err := c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return SimpleInt(0)
 	} else if err != nil {
@@ -253,7 +253,7 @@ func (c *Command) ExistsHandle(txn *store.Txn, args [][]byte) interface{} {
 func (c *Command) ttl(txn *store.Txn, args [][]byte) (int64, error) {
 	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
+	err := c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return -2, nil
 	} else if err != nil {
@@ -295,22 +295,22 @@ func (c *Command) PTTLHandle(txn *store.Txn, args [][]byte) interface{} {
 	return redcon.SimpleInt(ttl - txn.Now)
 }
 
-func DeleteKeyReturn(txn *store.Txn, key []byte, object *Object, now int64) interface{} {
-	err := DeleteKey(txn, key, object, now)
+func (c *Command) DeleteKeyReturn(txn *store.Txn, key []byte, object *Object, now int64, change ChangeType) interface{} {
+	err := c.DeleteKey(txn, key, object, now, change)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	return 1
 }
 
-func DeleteKey(txn *store.Txn, key []byte, object *Object, now int64) error {
-	return CleanKey(txn, key, object.GetTTLKeyBytes(), object, now)
+func (c *Command) DeleteKey(txn *store.Txn, key []byte, object *Object, now int64, change ChangeType) error {
+	return c.CleanKey(txn, key, object.GetTTLKeyBytes(), object, now, change)
 }
 
-func CleanKey(txn *store.Txn, key, ttlKey []byte, object *Object, valueTTL int64) error {
+func (c *Command) CleanKey(txn *store.Txn, key, ttlKey []byte, object *Object, valueTTL int64, change ChangeType) error {
 	var err error
 	if len(key) > 0 {
-		err = txn.Del(key)
+		err = c.setTxnObject(txn, key, object, change|DeleteKey)
 		if err != nil {
 			return err
 		}
@@ -331,9 +331,9 @@ func CleanKey(txn *store.Txn, key, ttlKey []byte, object *Object, valueTTL int64
 			if err != nil {
 				return err
 			}
-		} else {
+		} else if object.IsCountable() {
 			// clean count
-			err = DeleteCount(txn, object.UserId, object.Db, object.Value, txn.NowTime())
+			err = DeleteCount(txn, object.UserId, object.Db, KeyPrefix, object.Value, txn.NowTime())
 			if err != nil {
 				return err
 			}
@@ -358,12 +358,20 @@ func (c *Command) DELHandle(txn *store.Txn, args [][]byte) interface{} {
 	return c.touchORDelete(txn, args, true)
 }
 
+// (generic) UNLINK key [key ...]
+func (c *Command) UnlinkHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) == 0 {
+		return txn.SetWrongArgs(UNLINK_COMMAND)
+	}
+	return c.touchORDelete(txn, args, true)
+}
+
 func (c *Command) touchORDelete(txn *store.Txn, args [][]byte, delete bool) interface{} {
 	var count int64
 	for i := range args {
 		object := NewObject(txn.UserId, txn.DBId, UnknownType, args[i])
 		key := object.GetKeyBytes()
-		err := getTxnObject(txn, key, object, delete)
+		err := c.getTxnObject(txn, key, object, false)
 		if err == store.KeyNotFound {
 			continue
 		} else if err != nil {
@@ -371,7 +379,7 @@ func (c *Command) touchORDelete(txn *store.Txn, args [][]byte, delete bool) inte
 		}
 		count++
 		if delete {
-			err = DeleteKey(txn, key, object, txn.Now)
+			err = c.DeleteKey(txn, key, object, txn.Now, MinusCount)
 			if err != nil {
 				return txn.SetError(err)
 			}
@@ -513,7 +521,7 @@ func (c *Command) TypeHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(TYPE_COMMAND)
 	}
 	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
-	err := getTxnObject(txn, object.GetKeyBytes(), object, false)
+	err := c.getTxnObject(txn, object.GetKeyBytes(), object, false)
 	if err != nil {
 		return txn.SetError(err)
 	}

@@ -38,8 +38,9 @@ type Auth struct {
 }
 
 type Key struct {
-	ScanMaxCount       int `yaml:"scan-max-count"`
-	CursorExpireSecond int `yaml:"cursor-expirate-second"`
+	ScanMaxCount       int    `yaml:"scan-max-count"`
+	CursorExpireSecond int    `yaml:"cursor-expirate-second"`
+	DbSizeHash         uint64 `yaml:"db-size-hash"`
 }
 
 type Rpc struct {

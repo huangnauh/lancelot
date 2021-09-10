@@ -57,3 +57,13 @@ func MiddleFloat(left, right float64) (float64, error) {
 	}
 	return m, nil
 }
+
+func ValidIncrementFloat(v, i float64) bool {
+	if v >= 0 && math.MaxFloat64-v < i {
+		return false
+	}
+	if v < 0 && -math.MaxFloat64-v > i {
+		return false
+	}
+	return true
+}

@@ -50,7 +50,7 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 			zap.ByteStrings("args", cmd.Args))
 		handler.Func(conn, cmd)
 	} else if handler, ok := s.Command.TxnHandle[comma]; ok {
-		s.Command.TxnHandler(conn, cmd, handler.Func)
+		s.Command.TxnHandler(conn, comma, cmd, handler.Func)
 	} else {
 		conn.WriteError("ERR unknown command '" + comma + "'")
 	}

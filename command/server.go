@@ -8,12 +8,17 @@ import (
 	"strings"
 	"time"
 
+	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/version"
 )
 
+// FLUSHALL [ASYNC|SYNC]
 func (c *Command) FlushAllHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) > 1 {
+		return txn.SetWrongArgs(FLUSHALL_COMMAND)
+	}
 	start := GetUserPrefix(DataPrefix, txn.UserId)
 	end := utils.PrefixNext(start)
 	ctx := context.Background()
@@ -39,7 +44,11 @@ func (c *Command) FlushAllHandle(txn *store.Txn, args [][]byte) interface{} {
 	return OK
 }
 
+// FLUSHDB [ASYNC|SYNC]
 func (c *Command) FlushDBHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) > 1 {
+		return txn.SetWrongArgs(FLUSHDB_COMMAND)
+	}
 	start := GetUserDBPrefix(DataPrefix, txn.UserId, txn.DBId)
 	end := utils.PrefixNext(start)
 	ctx := context.Background()
@@ -64,6 +73,28 @@ func (c *Command) FlushDBHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	return OK
 }
+
+func (c *Command) TimeHandle(txn *store.Txn, args [][]byte) interface{} {
+	return nil
+}
+
+// DBSIZE
+func (c *Command) DBSizeHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) > 0 {
+		return txn.SetWrongArgs(DBSIZE_COMMAND)
+	}
+	counts, err := ListCount(txn, txn.UserId, txn.DBId, CountGeneral, KEYSIZE)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	count := int64(0)
+	for _, v := range counts {
+		count += v.Value
+	}
+	return redcon.SimpleInt(count)
+}
+
+// DEBUG OBJECT key
 
 func (c *Command) InfoHandle(txn *store.Txn, args [][]byte) interface{} {
 	exe, err := os.Executable()

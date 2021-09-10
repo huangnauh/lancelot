@@ -144,10 +144,12 @@ func (c *Command) BitOpHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.ErrSyntax)
 	}
 
+	var create ChangeType
 	destObject := NewObject(txn.UserId, txn.DBId, StringType, args[1])
 	destKey := destObject.GetKeyBytes()
-	err := getTxnObject(txn, destKey, destObject, true)
+	err := c.getTxnObject(txn, destKey, destObject, true)
 	if err == store.KeyNotFound {
+		create = PlusCount
 	} else if err != nil {
 		return txn.SetError(err)
 	}
@@ -155,7 +157,7 @@ func (c *Command) BitOpHandle(txn *store.Txn, args [][]byte) interface{} {
 	if str == "not" {
 		object := NewObject(txn.UserId, txn.DBId, StringType, args[2])
 		key := object.GetKeyBytes()
-		err := getTxnObject(txn, key, object, false)
+		err := c.getTxnObject(txn, key, object, false)
 		if err == store.KeyNotFound {
 			return SimpleInt(0)
 		} else if err != nil {
@@ -171,7 +173,7 @@ func (c *Command) BitOpHandle(txn *store.Txn, args [][]byte) interface{} {
 		for i := 2; i < len(args); i++ {
 			object := NewObject(txn.UserId, txn.DBId, StringType, args[i])
 			key := object.GetKeyBytes()
-			err := getTxnObject(txn, key, object, false)
+			err := c.getTxnObject(txn, key, object, false)
 			if err == store.KeyNotFound {
 			} else if err != nil {
 				return txn.SetError(err)
@@ -187,7 +189,7 @@ func (c *Command) BitOpHandle(txn *store.Txn, args [][]byte) interface{} {
 		destObject.Value = ret
 	}
 
-	err = txn.Put(destKey, ObjectEncode(destObject))
+	err = c.setTxnObject(txn, destKey, destObject, create)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -205,6 +207,9 @@ func (c *Command) SetBitHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
+	if offset >= utils.MAX_VALUE_SIZE {
+		return txn.SetError(xerror.ErrNotInteger)
+	}
 
 	bitChange, err := utils.GetNonnegativeInt64(args[2])
 	if err != nil {
@@ -215,30 +220,35 @@ func (c *Command) SetBitHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	o := int(offset) >> 3
+	bit := 7 - offset&0x7
 	var value []byte
 	var v byte
+	var origin int64
+	var create ChangeType
 	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
-	err = getTxnObject(txn, key, object, true)
+	err = c.getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		value = make([]byte, o+1)
+		create = PlusCount
 	} else if err != nil {
 		return txn.SetError(err)
 	} else {
 		value = object.Value
 		if o >= len(value) {
 			value = append(value, make([]byte, o-len(value)+1)...)
+		} else {
+			v = value[o]
+			origin = int64(v>>bit) & 1
+			if origin == bitChange {
+				return SimpleInt(origin)
+			}
 		}
 	}
-	v = value[o]
-	bit := 7 - offset&0x7
-	origin := int64(v>>bit) & 1
-	if origin == bitChange {
-		return SimpleInt(origin)
-	}
+
 	value[o] = v & ^(1<<bit) | (uint8(bitChange) << bit)
 	object.Value = value
-	err = txn.Put(key, ObjectEncode(object))
+	err = c.setTxnObject(txn, key, object, create)
 	if err != nil {
 		return txn.SetError(err)
 	}

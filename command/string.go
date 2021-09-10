@@ -6,12 +6,14 @@ import (
 	"strings"
 	"time"
 
+	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
 
 type CheckType int
+type StringFunc func(o *Object, args [][]byte) (interface{}, bool, error)
 
 const (
 	//EX seconds
@@ -50,11 +52,11 @@ const (
 	CheckGT    CheckType = 0x08
 )
 
-func getString(txn *store.Txn, arg []byte) ([]byte, error) {
+func (c *Command) getString(txn *store.Txn, arg []byte) ([]byte, error) {
 	object := NewObject(txn.UserId, txn.DBId, StringType, arg)
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
-	if err == store.KeyNotFound {
+	err := c.getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound || err == xerror.WrongTypeError {
 		return nil, nil
 	} else if err != nil {
 		return nil, err
@@ -68,7 +70,7 @@ func (c *Command) GetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(GET_COMMAND)
 	}
-	value, err := getString(txn, args[0])
+	value, err := c.getString(txn, args[0])
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -86,7 +88,7 @@ func (c *Command) MGetHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	ret := make([]interface{}, len(args))
 	for i := 0; i < len(args); i++ {
-		value, err := getString(txn, args[i])
+		value, err := c.getString(txn, args[i])
 		if err != nil {
 			return txn.SetError(err)
 		}
@@ -106,14 +108,14 @@ func (c *Command) GetDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
+	err := c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {
 		return txn.SetError(err)
 	} else {
 		value := object.Value
-		err = DeleteKey(txn, key, object, txn.Now)
+		err = c.DeleteKey(txn, key, object, txn.Now, MinusCount)
 		if err != nil {
 			return txn.SetError(err)
 		}
@@ -126,7 +128,7 @@ func (c *Command) StrLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(STRLEN_COMMAND)
 	}
-	value, err := getString(txn, args[0])
+	value, err := c.getString(txn, args[0])
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -140,8 +142,10 @@ func (c *Command) AppendHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, true)
+	var create ChangeType
+	err := c.getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
+		create = PlusCount
 		object.Value = args[1]
 	} else if err != nil {
 		return txn.SetError(err)
@@ -149,7 +153,7 @@ func (c *Command) AppendHandle(txn *store.Txn, args [][]byte) interface{} {
 		object.Value = append(object.Value, args[1]...)
 	}
 	object.Timestamp = txn.Timestamp
-	err = txn.Put(key, ObjectEncode(object))
+	err = c.setTxnObject(txn, key, object, create)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -207,7 +211,7 @@ func checkExpireOption(cmd string, args [][]byte, isSet bool, nowTime time.Time)
 			}
 			opt.Persist = true
 		case NX:
-			if !isSet || opt.Get {
+			if !isSet {
 				return nil, xerror.ErrSyntax
 			}
 			opt.Check = CheckNotExist
@@ -217,7 +221,7 @@ func checkExpireOption(cmd string, args [][]byte, isSet bool, nowTime time.Time)
 			}
 			opt.Check = CheckExist
 		case GET:
-			if !isSet || opt.Check == CheckNotExist {
+			if !isSet {
 				return nil, xerror.ErrSyntax
 			}
 			opt.Get = true
@@ -257,15 +261,13 @@ func (c *Command) checkSetOption(txn *store.Txn, cmd string, key []byte, args []
 	}
 
 	oldObject, err := c.checkExist(txn, cmd, key, opt.Check)
-	if err != store.KeyNotFound && err != nil {
-		return nil, nil, err
+	if err == store.KeyNotFound {
+		return nil, opt, nil
+	} else if err != nil {
+		return oldObject, opt, err
 	}
 
-	var oldExpire int64
-	if oldObject != nil && oldObject.TTL > 0 {
-		oldExpire = oldObject.TTL
-	}
-
+	oldExpire := oldObject.TTL
 	if opt.KeepTTL && oldExpire > 0 {
 		opt.Expire = oldExpire
 	}
@@ -276,7 +278,7 @@ func (c *Command) checkSetOption(txn *store.Txn, cmd string, key []byte, args []
 			ttlKey := oldObject.GetTTLKeyBytes()
 			err := txn.Del(ttlKey)
 			if err != nil {
-				return nil, nil, err
+				return oldObject, opt, err
 			}
 		}
 	}
@@ -291,16 +293,16 @@ func (c *Command) checkExist(txn *store.Txn, cmd string, key []byte, check Check
 	}
 	oldObject := NewObject(txn.UserId, txn.DBId, cmdHandler.Type, key)
 	objectKey := oldObject.GetKeyBytes()
-	err := getTxnObject(txn, objectKey, oldObject, true)
+	err := c.getTxnObject(txn, objectKey, oldObject, false)
 	if err == store.KeyNotFound {
 		if CheckExist == check {
-			return nil, xerror.ErrCheckFailed
+			return oldObject, xerror.ErrCheckFailed
 		}
 	} else if err != nil {
-		return nil, err
+		return oldObject, err
 	} else {
 		if CheckNotExist == check {
-			return nil, xerror.ErrCheckFailed
+			return oldObject, xerror.ErrCheckFailed
 		}
 	}
 	return oldObject, err
@@ -313,83 +315,128 @@ func (c *Command) GetSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, true)
+	var create ChangeType
+	err := c.getTxnObject(txn, key, object, true)
 	var ret interface{}
 	if err == store.KeyNotFound {
 		ret = nil
+		create = PlusCount
 	} else if err != nil {
 		return txn.SetError(err)
 	} else {
 		ret = object.Value
-		err = DeleteKey(txn, key, object, txn.Now)
-		if err != nil {
-			return txn.SetError(err)
+		if object.TTL > 0 {
+			err = txn.Del(object.GetTTLKeyBytes())
+			if err != nil {
+				return txn.SetError(err)
+			}
 		}
 	}
 	object.Value = args[1]
 	object.Timestamp = txn.Timestamp
-	err = txn.Put(key, ObjectEncode(object))
+	err = c.setTxnObject(txn, key, object, create)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	return ret
 }
 
-// (string) DECRBY key decrement
-func (c *Command) DecrByHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 2 {
-		return txn.SetWrongArgs(DECRBY_COMMAND)
-	}
-	intValue, err := strconv.ParseInt(utils.B2S(args[1]), 10, 64)
-	if err != nil {
-		return txn.SetError(xerror.ErrNotInteger)
-	}
-	return c.intHandle(txn, args[0], -intValue)
-}
-
-// (string) DECR key
-func (c *Command) DecrHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 1 {
-		return txn.SetWrongArgs(DECR_COMMAND)
-	}
-	return c.intHandle(txn, args[0], -1)
-}
-
-// (string) INCR key
-func (c *Command) IncrHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 1 {
-		return txn.SetWrongArgs(INCR_COMMAND)
-	}
-	return c.intHandle(txn, args[0], 1)
-}
-
-// (string) INCRBYFLOAT key increment
-func (c *Command) IncrByFloatHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 2 {
-		return txn.SetWrongArgs(INCRBYFLOAT_COMMAND)
-	}
-	delta, err := strconv.ParseFloat(utils.B2S(args[1]), 64)
-	if err != nil {
-		return txn.SetError(xerror.ErrNotFloat)
-	}
-	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
-	key := object.GetKeyBytes()
-	err = getTxnObject(txn, key, object, true)
-	var value float64
-	if err == store.KeyNotFound {
+func intFunc(o *Object, args [][]byte, delta int64) (interface{}, bool, error) {
+	var value int64
+	if o.Value == nil {
 		value = delta
-	} else if err != nil {
-		return txn.SetError(err)
 	} else {
-		floatValue, err := strconv.ParseFloat(utils.B2S(object.Value), 64)
+		intValue, err := strconv.ParseInt(utils.B2S(o.Value), 10, 64)
 		if err != nil {
-			return txn.SetError(xerror.ErrNotFloat)
+			return nil, false, xerror.ErrNotInteger
+		}
+		if delta == 0 {
+			return intValue, false, nil
+		}
+		ok := utils.ValidIncrementInt(intValue, delta)
+		if !ok {
+			return nil, false, xerror.ErrOverflow
+		}
+		value = intValue + delta
+	}
+	o.Value = utils.S2B(strconv.FormatInt(value, 10))
+	return redcon.SimpleInt(value), true, nil
+}
+
+func incrByFloat(o *Object, args [][]byte) (interface{}, bool, error) {
+	str := strings.ToLower(utils.B2S(args[1]))
+	if str == "+inf" || str == "-inf" {
+		return nil, false, xerror.ErrFloatInfinity
+	}
+	delta, err := strconv.ParseFloat(str, 64)
+	if err != nil {
+		return nil, false, xerror.ErrNotFloat
+	}
+	var value float64
+	if o.Value == nil {
+		value = delta
+	} else {
+		floatValue, err := strconv.ParseFloat(utils.B2S(o.Value), 64)
+		if err != nil {
+			return nil, false, xerror.ErrNotFloat
+		}
+		if delta == 0 {
+			return floatValue, false, nil
+		}
+		ok := utils.ValidIncrementFloat(floatValue, delta)
+		if !ok {
+			return nil, false, xerror.ErrOverflow
 		}
 		value = floatValue + delta
 	}
-	object.Value = utils.S2B(strconv.FormatFloat(value, 'f', -1, 64))
+	o.Value = utils.S2B(strconv.FormatFloat(value, 'f', -1, 64))
+	return value, true, nil
+}
+
+func decr(o *Object, args [][]byte) (interface{}, bool, error) {
+	return intFunc(o, args, -1)
+}
+
+func incr(o *Object, args [][]byte) (interface{}, bool, error) {
+	return intFunc(o, args, 1)
+}
+
+func decrBy(o *Object, args [][]byte) (interface{}, bool, error) {
+	intValue, err := strconv.ParseInt(utils.B2S(args[1]), 10, 64)
+	if err != nil {
+		return nil, false, xerror.ErrNotInteger
+	}
+	return intFunc(o, args, -intValue)
+}
+
+func incrBy(o *Object, args [][]byte) (interface{}, bool, error) {
+	intValue, err := strconv.ParseInt(utils.B2S(args[1]), 10, 64)
+	if err != nil {
+		return nil, false, xerror.ErrNotInteger
+	}
+	return intFunc(o, args, intValue)
+}
+
+func (c *Command) stringHandle(txn *store.Txn, args [][]byte, stringFunc StringFunc) interface{} {
+	var create ChangeType
+	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
+	key := object.GetKeyBytes()
+	err := c.getTxnObject(txn, key, object, true)
+	if err == store.KeyNotFound {
+		create = PlusCount
+	} else if err != nil {
+		return txn.SetError(err)
+	}
+
+	value, changed, err := stringFunc(object, args)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	if !changed {
+		return value
+	}
 	object.Timestamp = txn.Timestamp
-	err = txn.Put(key, ObjectEncode(object))
+	err = c.setTxnObject(txn, key, object, create)
 	if err != nil {
 		return txn.SetError(err)
 	} else {
@@ -397,52 +444,56 @@ func (c *Command) IncrByFloatHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 }
 
+// (string) DECRBY key decrement
+func (c *Command) DecrByHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 2 {
+		return txn.SetWrongArgs(DECRBY_COMMAND)
+	}
+	return c.stringHandle(txn, args, decrBy)
+}
+
+// (string) DECR key
+func (c *Command) DecrHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongArgs(DECR_COMMAND)
+	}
+	return c.stringHandle(txn, args, decr)
+}
+
+// (string) INCR key
+func (c *Command) IncrHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongArgs(INCR_COMMAND)
+	}
+	return c.stringHandle(txn, args, incr)
+}
+
+// (string) INCRBYFLOAT key increment
+func (c *Command) IncrByFloatHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 2 {
+		return txn.SetWrongArgs(INCRBYFLOAT_COMMAND)
+	}
+	return c.stringHandle(txn, args, incrByFloat)
+}
+
 // (string) INCRBY key increment
 func (c *Command) IncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 {
 		return txn.SetWrongArgs(INCRBY_COMMAND)
 	}
-	intValue, err := strconv.ParseInt(utils.B2S(args[1]), 10, 64)
-	if err != nil {
-		return txn.SetError(xerror.ErrNotInteger)
-	}
-	return c.intHandle(txn, args[0], intValue)
+	return c.stringHandle(txn, args, incrBy)
 }
 
-func (c *Command) intHandle(txn *store.Txn, arg []byte, delta int64) interface{} {
-	object := NewObject(txn.UserId, txn.DBId, StringType, arg)
-	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, true)
-	var value int64
-	if err == store.KeyNotFound {
-		value = delta
-	} else if err != nil {
-		return txn.SetError(err)
-	} else {
-		intValue, err := strconv.ParseInt(utils.B2S(object.Value), 10, 64)
-		if err != nil {
-			return txn.SetError(xerror.ErrNotInteger)
-		}
-		value = intValue + delta
-	}
-	object.Value = utils.S2B(strconv.FormatInt(value, 10))
-	object.Timestamp = txn.Timestamp
-	err = txn.Put(key, ObjectEncode(object))
-	if err != nil {
-		return txn.SetError(err)
-	} else {
-		return SimpleInt(value)
-	}
-}
-
-func setString(txn *store.Txn, argKey, argValue []byte, expire int64, check CheckType) error {
+func (c *Command) setString(txn *store.Txn, argKey, argValue []byte, expire int64, check CheckType) error {
+	var create ChangeType
 	object := NewObject(txn.UserId, txn.DBId, StringType, argKey)
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, true)
+	err := c.getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		if check == CheckExist {
 			return xerror.ErrCheckFailed
 		}
+		create = PlusCount
 	} else if err != nil {
 		return err
 	} else {
@@ -457,10 +508,18 @@ func setString(txn *store.Txn, argKey, argValue []byte, expire int64, check Chec
 			}
 		}
 	}
+
 	object.Value = argValue
-	object.TTL = expire
 	object.Timestamp = txn.Timestamp
-	err = txn.Put(key, ObjectEncode(object))
+	if expire > 0 && object.TTL != expire {
+		object.TTL = expire
+		ttlKey := object.GetTTLKeyBytes()
+		err := txn.Put(ttlKey, []byte{1})
+		if err != nil {
+			return err
+		}
+	}
+	err = c.setTxnObject(txn, key, object, create)
 	if err != nil {
 		return err
 	}
@@ -472,7 +531,7 @@ func (c *Command) SetNXHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 {
 		return txn.SetWrongArgs(SETNX_COMMAND)
 	}
-	err := setString(txn, args[0], args[1], 0, CheckNotExist)
+	err := c.setString(txn, args[0], args[1], 0, CheckNotExist)
 	if err == xerror.ErrCheckFailed {
 		return SimpleInt(0)
 	} else if err != nil {
@@ -480,23 +539,6 @@ func (c *Command) SetNXHandle(txn *store.Txn, args [][]byte) interface{} {
 	} else {
 		return SimpleInt(1)
 	}
-	// _, err := c.checkExist(txn, SETNX_COMMAND, args[0], CheckNotExist)
-	// if err == xerror.ErrCheckFailed {
-	// 	return SimpleInt(0)
-	// } else if err != nil && err != store.KeyNotFound {
-	// 	return txn.SetError(err)
-	// }
-
-	// object := NewObject(txn.UserId, txn.DBId, KeyType, args[0])
-	// object.Value = args[1]
-	// object.Timestamp = txn.Timestamp
-	// key := object.GetKeyBytes()
-	// err = txn.Put(key, ObjectEncode(object))
-	// if err != nil {
-	// 	return txn.SetError(err)
-	// } else {
-	// 	return SimpleInt(1)
-	// }
 }
 
 // (string) MSETNX key value [key value ...]
@@ -511,7 +553,7 @@ func (c *Command) MSetNXHandle(txn *store.Txn, args [][]byte) interface{} {
 			continue
 		}
 		exists[str] = true
-		err := setString(txn, args[i], args[i+1], 0, CheckNotExist)
+		err := c.setString(txn, args[i], args[i+1], 0, CheckNotExist)
 		if err == xerror.ErrCheckFailed {
 			txn.Err = err
 			return SimpleInt(0)
@@ -528,7 +570,7 @@ func (c *Command) MSetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(MSET_COMMAND)
 	}
 	for i := 0; i < len(args); i += 2 {
-		err := setString(txn, args[i], args[i+1], 0, NoCheck)
+		err := c.setString(txn, args[i], args[i+1], 0, NoCheck)
 		if err != nil {
 			return txn.SetError(err)
 		}
@@ -550,16 +592,24 @@ func (c *Command) SetRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.ErrOffset)
 	}
 
+	var create ChangeType
 	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
-	err = getTxnObject(txn, key, object, true)
+	err = c.getTxnObject(txn, key, object, true)
 	var value []byte
 	if err == store.KeyNotFound {
+		if offset+len(args[2]) == 0 {
+			return SimpleInt(0)
+		}
 		value = make([]byte, offset+len(args[2]))
 		copy(value[offset:], args[2])
+		create = PlusCount
 	} else if err != nil {
 		return txn.SetError(err)
 	} else {
+		if offset+len(args[2]) == 0 {
+			return SimpleInt(int64(len(object.Value)))
+		}
 		if offset+len(args[2]) > len(object.Value) {
 			value = make([]byte, offset+len(args[2]))
 			if offset > len(object.Value) {
@@ -575,7 +625,7 @@ func (c *Command) SetRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object.Value = value
 	object.Timestamp = txn.Timestamp
-	err = txn.Put(key, ObjectEncode(object))
+	err = c.setTxnObject(txn, key, object, create)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -608,7 +658,7 @@ func (c *Command) setExpireHandle(txn *store.Txn, args [][]byte, unit int64) int
 	}
 
 	expire := txn.Now + intArg*unit
-	err = setString(txn, args[0], args[2], expire, NoCheck)
+	err = c.setString(txn, args[0], args[2], expire, NoCheck)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -621,11 +671,22 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(SET_COMMAND)
 	}
 
+	var create ChangeType
 	oldObject, setOption, err := c.checkSetOption(txn, SET_COMMAND, args[0], args[2:])
 	if err == xerror.ErrCheckFailed {
+		if setOption.Get {
+			if oldObject != nil && oldObject.Value != nil {
+				return oldObject.Value
+			} else {
+				return nil
+			}
+		}
 		return nil
 	} else if err != nil {
 		return txn.SetError(err)
+	}
+	if oldObject == nil {
+		create = PlusCount
 	}
 
 	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
@@ -642,7 +703,7 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	key := object.GetKeyBytes()
-	err = txn.Put(key, ObjectEncode(object))
+	err = c.setTxnObject(txn, key, object, create)
 	if err != nil {
 		return txn.SetError(err)
 	} else if setOption.Get {
@@ -663,7 +724,7 @@ func (c *Command) GetExHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, true)
+	err := c.getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {
@@ -690,7 +751,7 @@ func (c *Command) GetExHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	object.Timestamp = txn.Timestamp
-	err = txn.Put(key, ObjectEncode(object))
+	err = c.setTxnObject(txn, key, object, 0)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -748,7 +809,7 @@ func (c *Command) checkAndGetRange(txn *store.Txn, k []byte, args [][]byte) ([]b
 func (c *Command) getRange(txn *store.Txn, k []byte, start, end int) ([]byte, int, int, error) {
 	object := NewObject(txn.UserId, txn.DBId, StringType, k)
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
+	err := c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return nil, start, end, nil
 	} else if err != nil {

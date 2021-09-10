@@ -323,7 +323,7 @@ func (c *Command) XCreateHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	object := NewObject(txn.UserId, txn.DBId, StreamType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, create)
+	err := c.getTxnObject(txn, key, object, create)
 	if err == store.KeyNotFound {
 		if !create {
 			return txn.SetError(xerror.XgroupRequireExist)
@@ -337,7 +337,7 @@ func (c *Command) XCreateHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	gobject := NewObject(txn.UserId, txn.DBId, GroupType, args[1])
 	key = object.GetKeyBytes()
-	err = getTxnObject(txn, key, gobject, true)
+	err = c.getTxnObject(txn, key, gobject, true)
 	if err == nil {
 		return txn.SetError(xerror.XgroupAlreadyExist)
 	}
@@ -418,7 +418,7 @@ func (c *Command) XRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	object := NewObject(txn.UserId, txn.DBId, StreamType, args[0])
 	key := object.GetKeyBytes()
-	err = getTxnObject(txn, key, object, false)
+	err = c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return EmptySlice
 	}
@@ -571,7 +571,7 @@ LOOP:
 
 	object := NewObject(txn.UserId, txn.DBId, StreamType, channel)
 	key := object.GetKeyBytes()
-	err = getTxnObject(txn, key, object, true)
+	err = c.getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		if checkExist {
 			return nil
@@ -589,9 +589,9 @@ LOOP:
 
 	var msgCount *Count
 	if partition == ALLPartition {
-		msgCount, err = GetCount(txn, txn.UserId, txn.DBId, uint64(object.Hash), object.Value, objectValue)
+		msgCount, err = GetCount(txn, txn.UserId, txn.DBId, uint64(object.Hash), KeyPrefix, object.Value, objectValue)
 	} else {
-		msgCount, err = GetCount(txn, txn.UserId, txn.DBId, uint64(partition), object.Value, nil)
+		msgCount, err = GetCount(txn, txn.UserId, txn.DBId, uint64(partition), KeyPrefix, object.Value, nil)
 	}
 	if err == store.KeyNotFound {
 		msgCount.UserValue = make([]byte, 8)
@@ -738,7 +738,7 @@ func (c *Command) FSubscribeHandle(txn *store.Txn, args [][]byte) interface{} {
 	channel := args[0]
 	object := NewObject(txn.UserId, txn.DBId, StreamType, channel)
 	key := object.GetKeyBytes()
-	err = getTxnObject(txn, key, object, true)
+	err = c.getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {

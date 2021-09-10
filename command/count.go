@@ -54,8 +54,8 @@ func SetCount(txn *store.Txn, count *Count) error {
 	return err
 }
 
-func ListCount(txn *store.Txn, userID uint16, dbID uint8, key []byte) ([]*Count, error) {
-	start := GetKeyBytes(CountPrefix, userID, dbID, KeyPrefix, key)
+func ListCount(txn *store.Txn, userID uint16, dbID uint8, prefix PrefixType, key []byte) ([]*Count, error) {
+	start := GetKeyBytes(CountPrefix, userID, dbID, prefix, key)
 	end := utils.PrefixNext(start)
 	counts := make([]*Count, 0)
 	err := txn.List(start, end, math.MaxInt16, func(k []byte, v []byte) bool {
@@ -73,8 +73,8 @@ func ListCount(txn *store.Txn, userID uint16, dbID uint8, key []byte) ([]*Count,
 	return counts, nil
 }
 
-func DeleteCount(txn *store.Txn, userID uint16, dbID uint8, key []byte, expire time.Time) error {
-	start := GetKeyBytes(CountPrefix, userID, dbID, KeyPrefix, key)
+func DeleteCount(txn *store.Txn, userID uint16, dbID uint8, prefix PrefixType, key []byte, expire time.Time) error {
+	start := GetKeyBytes(CountPrefix, userID, dbID, prefix, key)
 	end := utils.PrefixNext(start)
 	it, err := txn.Iter(start, end, false)
 	if err != nil {
@@ -115,7 +115,7 @@ func DeleteCount(txn *store.Txn, userID uint16, dbID uint8, key []byte, expire t
 	return err
 }
 
-func GetCount(txn *store.Txn, userID uint16, dbID uint8, hash uint64, key []byte, hashValue []byte) (*Count, error) {
+func GetCount(txn *store.Txn, userID uint16, dbID uint8, hash uint64, prefix PrefixType, key []byte, hashValue []byte) (*Count, error) {
 	var k []byte
 	var shard uint16
 	if hash > 0 {
@@ -126,9 +126,9 @@ func GetCount(txn *store.Txn, userID uint16, dbID uint8, hash uint64, key []byte
 		}
 		shardBytes := make([]byte, 2)
 		binary.BigEndian.PutUint16(shardBytes, shard)
-		k = GetKeyBytes(CountPrefix, userID, dbID, KeyPrefix, key, shardBytes)
+		k = GetKeyBytes(CountPrefix, userID, dbID, prefix, key, shardBytes)
 	} else {
-		k = GetKeyBytes(CountPrefix, userID, dbID, KeyPrefix, key)
+		k = GetKeyBytes(CountPrefix, userID, dbID, prefix, key)
 	}
 	count := &Count{Timestamp: txn.Timestamp, Key: k, Shard: shard}
 	b, err := txn.Get(k)

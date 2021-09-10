@@ -142,6 +142,7 @@ const (
 	SETBIT_COMMAND           = "setbit"
 	BITFIELD_COMMAND         = "bitfield"
 	DEL_COMMAND              = "del"
+	UNLINK_COMMAND           = "unlink"
 	TYPE_COMMAND             = "type"
 	SCAN_COMMAND             = "scan"
 	KEYS_COMMAND             = "keys"
@@ -198,6 +199,7 @@ const (
 	GETNAME_COMMAND          = "getname"
 	FLUSHALL_COMMAND         = "flushall"
 	FLUSHDB_COMMAND          = "flushdb"
+	DBSIZE_COMMAND           = "dbsize"
 	ACL_COMMAND              = "acl"
 	CAT_COMMAND              = "cat"
 	DELUSER_COMMAND          = "deluser"
@@ -211,13 +213,12 @@ const (
 	ECHO_COMMAND             = "echo"
 	SHUTDONW_COMMAND         = "shutdown"
 	WATCH_COMMAND            = "watch"
+	UNWATCH_COMMAND          = "unwatch"
 	EXEC_COMMAND             = "exec"
 	MULTI_COMMAND            = "multi"
 	DISCARD_COMMAND          = "discard"
 
 	MAX_COMMANDS   = 1024
-	MAX_KEY_SIZE   = 4 * 1024
-	MAX_VALUE_SIZE = 5 * 1024 * 1024
 	MINI_SCAN_SIZE = 256
 
 	ASYNC_OPTION = "async"
@@ -246,6 +247,8 @@ var (
 	EmptyCursor    = []interface{}{0, [][]byte{}}
 	EmptyBytes     = [][]byte{}
 	EmptyInterface = []interface{}{}
+
+	KEYSIZE = []byte("size")
 )
 
 func SimpleInt(n int64) redcon.SimpleInt {

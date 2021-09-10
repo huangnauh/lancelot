@@ -167,9 +167,9 @@ func (c *Command) doGC(start, end []byte, now int64) ([]byte, *Object, error) {
 				}
 				defer txn.Rollback()
 				if len(object.Key) == 0 {
-					err = CleanKey(txn, nil, ttlKey, object, 0)
+					err = c.CleanKey(txn, nil, ttlKey, object, 0, MinusCount|GCChange)
 				} else {
-					err = CleanKey(txn, object.GetKeyBytes(), ttlKey, object, 0)
+					err = c.CleanKey(txn, object.GetKeyBytes(), ttlKey, object, 0, MinusCount|GCChange)
 				}
 				if err != nil {
 					return
@@ -182,7 +182,7 @@ func (c *Command) doGC(start, end []byte, now int64) ([]byte, *Object, error) {
 			}
 		} else if len(object.Key) > 0 {
 			count++
-			err = CleanKey(txn, object.GetKeyBytes(), lastKey, object, 0)
+			err = c.CleanKey(txn, object.GetKeyBytes(), lastKey, object, 0, MinusCount|GCChange)
 			if err != nil {
 				utils.ZapLog.Error("[gc] del key", zap.ByteString("ttl key", lastKey), zap.Error(err))
 				return lastKey, nil, err

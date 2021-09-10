@@ -23,7 +23,7 @@ func (c *Command) SMIsMemberHandle(txn *store.Txn, args [][]byte) interface{} {
 	object := NewObject(txn.UserId, txn.DBId, SetType, args[0])
 	key := object.GetKeyBytes()
 	ret := make([]redcon.SimpleInt, len(args)-1)
-	err := getTxnObject(txn, key, object, false)
+	err := c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return ret
 	} else if err != nil {
@@ -50,7 +50,7 @@ func (c *Command) SIsMemberHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, SetType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, true)
+	err := c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return redcon.SimpleInt(0)
 	}
@@ -119,7 +119,7 @@ func (c *Command) SRemHandle(txn *store.Txn, args [][]byte) interface{} {
 func (c *Command) srem(txn *store.Txn, arg []byte, args [][]byte) (int64, error) {
 	object := NewObject(txn.UserId, txn.DBId, SetType, arg)
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, true)
+	err := c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return 0, nil
 	}
@@ -275,7 +275,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 	for i := 0; i < len(args); i++ {
 		o := NewObject(txn.UserId, txn.DBId, typo, args[i])
 		k := o.GetKeyBytes()
-		err = getTxnObject(txn, k, o, false)
+		err = c.getTxnObject(txn, k, o, false)
 		if err == store.KeyNotFound {
 			return EmptyInterface, nil
 		}
@@ -421,7 +421,7 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 	for i := 0; i < len(args); i++ {
 		object := NewObject(txn.UserId, txn.DBId, typo, args[i])
 		k := object.GetKeyBytes()
-		err = getTxnObject(txn, k, object, false)
+		err = c.getTxnObject(txn, k, object, false)
 		if err == store.KeyNotFound {
 			continue
 		} else if err != nil {
@@ -488,7 +488,7 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []int) ([]interface{}, error) {
 	object := NewObject(txn.UserId, txn.DBId, typo, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
+	err := c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return EmptyInterface, nil
 	}
@@ -531,7 +531,7 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 		o := NewObject(txn.UserId, txn.DBId, typo, args[i])
 		k := o.GetKeyBytes()
 		utils.ZapLog.Debug("diff", zap.String("key", string(args[i])), zap.ByteString("k", k))
-		err = getTxnObject(txn, k, o, false)
+		err = c.getTxnObject(txn, k, o, false)
 		if err == store.KeyNotFound {
 			continue
 		}
@@ -648,7 +648,7 @@ func (c *Command) SPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, SetType, args[0])
 	key := object.GetKeyBytes()
-	err = getTxnObject(txn, key, object, true)
+	err = c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return EmptyBytes
 	}
@@ -738,7 +738,7 @@ func (c *Command) SMembersHandle(txn *store.Txn, args [][]byte) interface{} {
 func (c *Command) smembers(txn *store.Txn, args [][]byte, limit int) ([][]byte, error) {
 	object := NewObject(txn.UserId, txn.DBId, SetType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, true)
+	err := c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return EmptyBytes, nil
 	}

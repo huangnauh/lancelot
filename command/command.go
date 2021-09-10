@@ -865,6 +865,18 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:   501,
 			Type: UnknownType,
 		},
+		DBSIZE_COMMAND: {
+			Func:     c.DBSizeHandle,
+			ReadOnly: true,
+			ID:       502,
+			Type:     UnknownType,
+		},
+		OBJECT_COMMAND: {
+			Func:     c.ObjectHandle,
+			ReadOnly: true,
+			ID:       503,
+			Type:     UnknownType,
+		},
 		EVAL_COMMAND: {
 			Func: func(txn *store.Txn, args [][]byte) interface{} {
 				return c.evalHandle(txn, args, EVAL_COMMAND)

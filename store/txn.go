@@ -14,6 +14,7 @@ import (
 	"github.com/pingcap/tidb/util/execdetails"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"gitlab.s.upyun.com/platform/lancelot/xerror"
 	"go.uber.org/zap"
 )
 
@@ -109,6 +110,9 @@ func (t *Txn) Commit() error {
 }
 
 func (t *Txn) Get(key []byte) ([]byte, error) {
+	if len(key) >= utils.MAX_KEY_SIZE {
+		return nil, xerror.ErrExceedMaxSize
+	}
 	start := time.Now()
 	snapshot := t.txn.GetSnapshot()
 	snapshotStats := &tikv.SnapshotRuntimeStats{}
@@ -139,6 +143,12 @@ func (t *Txn) Get(key []byte) ([]byte, error) {
 }
 
 func (t *Txn) Put(key, val []byte) error {
+	if len(key) >= utils.MAX_KEY_SIZE {
+		return xerror.ErrExceedMaxSize
+	}
+	if len(val) >= utils.MAX_VALUE_SIZE {
+		return xerror.ErrExceedMaxSize
+	}
 	err := t.txn.Set(key, val)
 	if err != nil {
 		utils.ZapLog.Error("[txn] set", zap.String("remote", t.RemoteAddr()),
@@ -151,6 +161,9 @@ func (t *Txn) Put(key, val []byte) error {
 }
 
 func (t *Txn) Del(key []byte) error {
+	if len(key) >= utils.MAX_KEY_SIZE {
+		return xerror.ErrExceedMaxSize
+	}
 	err := t.txn.Delete(key)
 	if err != nil {
 		utils.ZapLog.Error("[txn] del", zap.String("remote", t.RemoteAddr()),
@@ -165,6 +178,9 @@ func (t *Txn) Del(key []byte) error {
 func (t *Txn) LockKeys(keys [][]byte) error {
 	kvKeys := make([]kv.Key, len(keys))
 	for i := range keys {
+		if len(keys[i]) >= utils.MAX_KEY_SIZE {
+			return xerror.ErrExceedMaxSize
+		}
 		kvKeys[i] = kv.Key(keys[i])
 	}
 	err := t.txn.LockKeys(context.Background(), new(kv.LockCtx), kvKeys...)

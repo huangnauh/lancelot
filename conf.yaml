@@ -1,4 +1,4 @@
-log-level: debug
+log-level: info
 pid-file: redis.pid
 host: 0.0.0.0
 redis-port: 6379
@@ -7,7 +7,7 @@ rpc-port: 6381
 cache-size: 10485760
 store:
   path: mocktikv://
-  level: debug
+  level: info
   gc-enable: false
   slow-request: 100ms
   read-timeout: 1s
@@ -34,6 +34,7 @@ auth:
 key:
   scan-max-count: 10000
   cursor-expirate-second: 600
+  db-size-hash: 128
 rpc:
   timeout: 10s
   max_stream: 1000

@@ -1253,7 +1253,7 @@ func (c *Command) RPopLPopHandle(txn *store.Txn, args [][]byte) interface{} {
 func (c *Command) ListHandle(txn *store.Txn, args [][]byte, lFunc ListFunc, opt *lOpt) (interface{}, error) {
 	object := NewObject(txn.UserId, txn.DBId, ListType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, true)
+	err := c.getTxnObject(txn, key, object, true)
 	var l *ListObject
 	if err == store.KeyNotFound {
 		if opt.exist {
@@ -1273,7 +1273,7 @@ func (c *Command) ListHandle(txn *store.Txn, args [][]byte, lFunc ListFunc, opt 
 			return nil, err
 		}
 		if l.Length == 0 && opt.exist {
-			err = DeleteKey(txn, key, object, 0)
+			err = c.DeleteKey(txn, key, object, 0, MinusCount)
 			if err != nil {
 				return nil, err
 			}
@@ -1294,7 +1294,7 @@ func (c *Command) ListHandle(txn *store.Txn, args [][]byte, lFunc ListFunc, opt 
 		return ret, nil
 	}
 	if l.Length == 0 {
-		err = DeleteKey(txn, key, object, 0)
+		err = c.DeleteKey(txn, key, object, 0, MinusCount)
 		if err != nil {
 			return nil, err
 		}

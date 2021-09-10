@@ -30,7 +30,7 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, JsonType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, true)
+	err := c.getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		return 0
 	} else if err != nil {
@@ -38,7 +38,7 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	if object.Value == nil {
-		return DeleteKeyReturn(txn, key, object, txn.Now)
+		return c.DeleteKeyReturn(txn, key, object, 0, MinusCount)
 	}
 
 	value := object.Value
@@ -46,7 +46,7 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	for i := 1; i < len(args); i++ {
 		path := trimPath(utils.B2S(args[i]))
 		if path == "" {
-			return DeleteKeyReturn(txn, key, object, 0)
+			return c.DeleteKeyReturn(txn, key, object, 0, MinusCount)
 		}
 		origin := len(value)
 		value, err = sjson.DeleteBytes(value, path)
@@ -149,7 +149,7 @@ func (c *Command) JsonGetHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	object := NewObject(txn.UserId, txn.DBId, JsonType, args[0])
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
+	err := c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {

@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"math"
 	"strconv"
 )
 
@@ -29,4 +30,14 @@ func GetPositiveInt(arg []byte) (int, error) {
 		return offset, ErrInvalidInt
 	}
 	return offset, nil
+}
+
+func ValidIncrementInt(v, i int64) bool {
+	if v >= 0 && math.MaxInt64-v < i {
+		return false
+	}
+	if v < 0 && math.MinInt64-v > i {
+		return false
+	}
+	return true
 }
