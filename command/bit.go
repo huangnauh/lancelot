@@ -12,8 +12,11 @@ import (
 
 // (string) BITCOUNT key [start end]
 func (c *Command) BitCountHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 1 && len(args) != 3 {
+	if len(args) < 1 && len(args) > 3 {
 		return txn.SetError(xerror.WrongArgsError(BITCOUNT_COMMAND))
+	}
+	if len(args) == 2 {
+		return txn.SetError(xerror.ErrSyntax)
 	}
 
 	v, _, _, err := c.checkAndGetRange(txn, args[0], args[1:])
@@ -49,7 +52,7 @@ func (c *Command) BitPosHandle(txn *store.Txn, args [][]byte) interface{} {
 		skipValue = 0xFF
 	}
 
-	v, start, _, err := c.checkAndGetRange(txn, args[0], args[2:])
+	v, start, end, err := c.checkAndGetRange(txn, args[0], args[2:])
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -72,6 +75,9 @@ func (c *Command) BitPosHandle(txn *store.Txn, args [][]byte) interface{} {
 				return SimpleInt(int64((start+ik)*8 + i))
 			}
 		}
+	}
+	if bit == 0 && len(args) < 4 {
+		return SimpleInt(int64(end + 1))
 	}
 	return SimpleInt(-1)
 }

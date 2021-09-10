@@ -1,7 +1,7 @@
 log-level: info
 pid-file: redis.pid
 host: 0.0.0.0
-redis-port: 6379
+redis-port: 16379
 http-port: 6380
 rpc-port: 6381
 cache-size: 10485760

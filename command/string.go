@@ -761,28 +761,30 @@ func (c *Command) GetExHandle(txn *store.Txn, args [][]byte) interface{} {
 func getRange(value []byte, start, end int) ([]byte, int, int) {
 	if start < 0 {
 		start = len(value) + start
-		if start < 0 {
-			start = 0
-		}
-	}
-
-	if start > len(value) {
-		return value[0:0], start, end
 	}
 
 	if end < 0 {
 		end = len(value) + end
-		if end < 0 {
-			end = 0
-		}
 	}
 
 	if end > len(value)-1 {
 		end = len(value) - 1
 	}
 
+	if start > len(value) {
+		return value[0:0], start, end
+	}
+
 	if end < start {
 		return value[0:0], start, end
+	}
+
+	if start < 0 {
+		start = 0
+	}
+
+	if end < 0 {
+		end = 0
 	}
 
 	return value[start : end+1], start, end

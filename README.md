@@ -4,6 +4,8 @@
 
 `go build ./cmd/redis-server`
 
+### test
+
 
 ### run
 
