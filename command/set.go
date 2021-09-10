@@ -277,6 +277,12 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 		k := o.GetKeyBytes()
 		err = c.getTxnObject(txn, k, o, false)
 		if err == store.KeyNotFound {
+			if i < len(args)-1 {
+				err = c.checkValidObjectArgs(txn, args[i+1:], typo)
+				if err != nil {
+					return nil, err
+				}
+			}
 			return EmptyInterface, nil
 		}
 		if err != nil {
@@ -485,11 +491,29 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 	return ret, nil
 }
 
+func (c *Command) checkValidObjectArgs(txn *store.Txn, args [][]byte, typo ObjectType) error {
+	var err error
+	for i := 0; i < len(args); i++ {
+		o := NewObject(txn.UserId, txn.DBId, typo, args[i])
+		k := o.GetKeyBytes()
+		utils.ZapLog.Debug("diff", zap.String("key", string(args[i])), zap.ByteString("k", k))
+		err = c.getTxnObject(txn, k, o, false)
+		if err != store.KeyNotFound && err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []int) ([]interface{}, error) {
 	object := NewObject(txn.UserId, txn.DBId, typo, args[0])
 	key := object.GetKeyBytes()
 	err := c.getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
+		err = c.checkValidObjectArgs(txn, args[1:], typo)
+		if err != nil {
+			return nil, err
+		}
 		return EmptyInterface, nil
 	}
 	if err != nil {

@@ -502,7 +502,7 @@ func (c *Command) DeleteThenCreateUUIDObject(txn *store.Txn, typo ObjectType, ar
 	key := object.GetKeyBytes()
 	err := c.getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
-	} else if err != nil && err != xerror.WrongTypeError {
+	} else if err != nil {
 		return object, err
 	} else {
 		err = c.DeleteKey(txn, key, object, txn.Now, MinusCount)

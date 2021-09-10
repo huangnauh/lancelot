@@ -337,6 +337,9 @@ func posValue(txn *store.Txn, object *Object, l *ListObject, v []byte,
 	if index >= int64(l.Length) || index <= -int64(l.Length) {
 		return nil, nil
 	}
+	if opt.count > int(l.Length) {
+		opt.count = int(l.Length)
+	}
 
 	idxs := make([]redcon.SimpleInt, 0)
 	start := object.GetValueBytes(utils.EncodeFloat(l.LIndex))
@@ -371,7 +374,7 @@ func posValue(txn *store.Txn, object *Object, l *ListObject, v []byte,
 		}
 		return len(idxs) < opt.count
 	})
-	if err != nil {
+	if err != nil && err != store.ReachLimit {
 		return nil, err
 	}
 	return idxs, nil
@@ -1079,7 +1082,7 @@ func (c *Command) LPosHandle(txn *store.Txn, args [][]byte) interface{} {
 				return txn.SetError(xerror.ErrCountNegative)
 			}
 			if opt.count == 0 {
-				return []redcon.SimpleInt{}
+				opt.count = math.MaxInt64
 			}
 		case "maxlen":
 			opt.max, err = utils.GetPositiveInt(args[i+1])
