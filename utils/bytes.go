@@ -13,6 +13,23 @@ func NextKey(key []byte) []byte {
 	return buf
 }
 
+func PrevKey(key []byte) []byte {
+	if len(key) == 0 {
+		return nil
+	}
+	buf := make([]byte, len(key))
+	copy(buf, key)
+	var i int
+	for i = len(buf) - 1; i >= 0; i-- {
+		if buf[i] != 0 {
+			buf[i]--
+			buf = append(buf[0:i+1], 0xff)
+			return buf
+		}
+	}
+	return nil
+}
+
 func PrefixNext(prefix []byte) []byte {
 	buf := make([]byte, len(prefix))
 	copy(buf, prefix)

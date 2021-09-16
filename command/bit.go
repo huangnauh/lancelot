@@ -8,6 +8,7 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"go.uber.org/zap"
 )
 
 // (string) BITCOUNT key [start end]
@@ -56,6 +57,7 @@ func (c *Command) BitPosHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
+	utils.ZapLog.Debug("bitpos", zap.ByteString("value", v), zap.Int("start", start), zap.Int("end", end))
 	if v == nil {
 		if bit == 1 {
 			return SimpleInt(-1)
@@ -77,7 +79,7 @@ func (c *Command) BitPosHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 	}
 	if bit == 0 && len(args) < 4 {
-		return SimpleInt(int64(end + 1))
+		return SimpleInt(int64(end+1) * 8)
 	}
 	return SimpleInt(-1)
 }
