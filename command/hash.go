@@ -234,7 +234,7 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 	} else if err != store.ReachLimit {
 		return txn.SetError(err)
 	}
-	cur := lastKey[len(prefix):]
+	cur := utils.NextKey(lastKey[len(prefix):])
 	if scanOpt.cursor == ServerCursor {
 		c.SetCursor(fmt.Sprintf("%s%d", string(typo), txn.Timestamp), cur)
 		return []interface{}{txn.Timestamp, ret}

@@ -411,7 +411,7 @@ func (c *Command) getScanOptions(opts [][]byte) (*scanOptions, error) {
 	scanOptions := &scanOptions{
 		count:  10,
 		match:  "*",
-		typo:   UnknownType,
+		typo:   GeneralType,
 		cursor: ServerCursor,
 	}
 	for i := 0; i < len(opts); i += 2 {
@@ -564,7 +564,7 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	cur := lastKey[prefixLen:]
 	if scanOpt.cursor == ServerCursor {
-		c.SetCursor(fmt.Sprintf("%s%d", GenericCursor, txn.Timestamp), cur)
+		c.SetCursor(fmt.Sprintf("%s%d", string(scanOpt.typo), txn.Timestamp), cur)
 		return []interface{}{txn.Timestamp, retKeys}
 	} else {
 		cur := base64.StdEncoding.EncodeToString(cur)
@@ -598,7 +598,7 @@ func (c *Command) scan(txn *store.Txn, start, end []byte, scanOpt *scanOptions) 
 			return true
 		}
 
-		if scanOpt.typo != UnknownType && object.Type != scanOpt.typo {
+		if scanOpt.typo != GeneralType && object.Type != scanOpt.typo {
 			return true
 		}
 		if object.TTL > 0 {

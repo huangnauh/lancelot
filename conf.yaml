@@ -1,4 +1,4 @@
-log-level: info
+log-level: debug
 pid-file: redis.pid
 host: 0.0.0.0
 redis-port: 16379

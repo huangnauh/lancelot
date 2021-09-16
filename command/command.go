@@ -1048,6 +1048,7 @@ func (c *Command) watchLuaStatePool() {
 }
 
 func (c *Command) GetCursor(key string) ([]byte, bool) {
+	utils.ZapLog.Debug("GetCursor", zap.String("key", key))
 	v, err := c.cache.Get(utils.S2B(key))
 	if err != nil {
 		return nil, false
@@ -1056,5 +1057,6 @@ func (c *Command) GetCursor(key string) ([]byte, bool) {
 }
 
 func (c *Command) SetCursor(key string, data []byte) {
+	utils.ZapLog.Debug("SetCursor", zap.String("key", key), zap.ByteString("value", data))
 	_ = c.cache.Set(utils.S2B(key), data, c.cfg.Key.CursorExpireSecond)
 }
