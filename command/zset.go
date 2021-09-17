@@ -904,11 +904,11 @@ func (c *Command) ZRandMemberHandle(txn *store.Txn, args [][]byte) interface{} {
 		if cur < ucount {
 			rand.Seed(int64(txn.Timestamp))
 			for i := cur; i < ucount; i++ {
+				r := rand.Intn(cur)
 				if !withScores {
-					ret = append(ret, ret[rand.Intn(cur)])
+					ret = append(ret, ret[r])
 				} else {
-					c := rand.Intn(cur * 2)
-					ret = append(ret, ret[c], ret[c+1])
+					ret = append(ret, ret[2*r], ret[2*r+1])
 				}
 			}
 		}

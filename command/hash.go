@@ -106,11 +106,11 @@ func (c *Command) HRandFieldHandle(txn *store.Txn, args [][]byte) interface{} {
 		if cur < ucount {
 			rand.Seed(int64(txn.Timestamp))
 			for i := cur; i < ucount; i++ {
+				c := rand.Intn(cur)
 				if getType == BothKV {
-					c := rand.Intn(cur * 2)
-					ret = append(ret, ret[c], ret[c+1])
+					ret = append(ret, ret[2*c], ret[2*c+1])
 				} else {
-					ret = append(ret, ret[rand.Intn(cur)])
+					ret = append(ret, ret[c])
 				}
 			}
 		}
@@ -174,6 +174,7 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 	if err != nil {
 		return txn.SetError(err)
 	}
+	scanOpt.typo = typo
 	object := NewObject(txn.UserId, txn.DBId, typo, args[0])
 	key := object.GetKeyBytes()
 	err = c.getTxnObject(txn, key, object, false)
@@ -183,10 +184,11 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 		return txn.SetError(err)
 	}
 	cursorPrefix := glob.Prefix(scanOpt.match)
-	prefix := getKeyFunc(object, nil)
-	start := getKeyFunc(object, utils.S2B(cursorPrefix))
+	originPrefix := getKeyFunc(object, nil)
+	prefix := getKeyFunc(object, utils.S2B(cursorPrefix))
 	end := utils.PrefixNext(prefix)
-	start, err = c.checkCursor(scanOpt, cursor, typo, start)
+	start, err := c.checkCursor(scanOpt, cursor, fmt.Sprintf("%s:%s:%s",
+		string(typo), args[0], scanOpt.match), prefix)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -196,10 +198,10 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 	count := 0
 	err = txn.List(start, end, c.cfg.Key.ScanMaxCount, func(key, value []byte) bool {
 		lastKey = key
-		if len(key) < len(start) {
+		if len(key) < len(prefix) {
 			return true
 		}
-		hkey := key[len(start):]
+		hkey := key[len(originPrefix):]
 		var matched bool
 		matched, callbackErr = glob.Match(scanOpt.match, utils.B2S(hkey))
 		if err != nil {
@@ -229,14 +231,17 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 	if callbackErr != nil {
 		return txn.SetError(callbackErr)
 	}
-	if err == nil || len(lastKey) <= len(prefix) {
-		return []interface{}{0, ret}
-	} else if err != store.ReachLimit {
+
+	if err != nil && err != store.ReachLimit {
 		return txn.SetError(err)
+	} else if len(lastKey) <= len(prefix) {
+		return []interface{}{0, ret}
 	}
-	cur := utils.NextKey(lastKey[len(prefix):])
+
+	cur := lastKey[len(prefix):]
 	if scanOpt.cursor == ServerCursor {
-		c.SetCursor(fmt.Sprintf("%s%d", string(typo), txn.Timestamp), cur)
+		c.SetCursor(fmt.Sprintf("%s:%s:%s:%d", string(typo),
+			args[0], scanOpt.match, txn.Timestamp), cur)
 		return []interface{}{txn.Timestamp, ret}
 	} else {
 		cur := base64.StdEncoding.EncodeToString(cur)

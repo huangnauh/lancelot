@@ -7,12 +7,12 @@ import (
 )
 
 var (
-	ErrWatchInsideMulti = "WATCH inside MULTI is not allowed"
-	ErrMultiNested      = "MULTI calls can not be nested"
-	ErrEXECErr          = "EXEC without MULTI"
-	ErrDISCARDErr       = "DISCARD without MULTI"
-	ErrMultiErr         = "without MULTI"
-	ErrTransactionErr   = "Transaction discarded because of previous errors."
+	ErrWatchInsideMulti     = "ERR WATCH inside MULTI is not allowed"
+	ErrMultiNested          = "ERR MULTI calls can not be nested"
+	ErrEXECErr              = "ERR EXEC without MULTI"
+	ErrDISCARDErr           = "ERR DISCARD without MULTI"
+	ErrMultiErr             = "ERR without MULTI"
+	ErrTransactionDiscarded = "EXECABORT Transaction discarded because of previous errors."
 
 	ErrNotInteger          = errors.New("value is not an integer or out of range")
 	ErrXXNXCompat          = errors.New("XX and NX options at the same time are not compatible")

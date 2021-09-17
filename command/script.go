@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
@@ -232,6 +231,10 @@ func (c *Command) ScriptLoad(txn *store.Txn, args [][]byte) interface{} {
 	}
 	defer c.luapool.Put(luaState)
 
+	ctx, cancel := context.WithTimeout(context.Background(), c.cfg.Lua.Timeout)
+	defer cancel()
+	luaState.SetContext(ctx)
+	defer luaState.RemoveContext()
 	script := args[0]
 	shaSum := utils.Sha1Sum(script)
 	_, ok := c.scriptMap.Get(shaSum)
@@ -278,6 +281,11 @@ func (c *Command) ScriptFlush(txn *store.Txn, args [][]byte) interface{} {
 	return OK
 }
 
+// SCRIPT KILL
+func (c *Command) ScriptKill(txn *store.Txn, args [][]byte) interface{} {
+	return OK
+}
+
 func (c *Command) ScriptHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 1 {
 		return txn.SetWrongArgs(SCRIPT_COMMAND)
@@ -289,6 +297,8 @@ func (c *Command) ScriptHandle(txn *store.Txn, args [][]byte) interface{} {
 		return c.ScriptLoad(txn, args[1:])
 	case EXISTS_COMMAND:
 		return c.ScriptExists(txn, args[1:])
+	case KILL_COMMAND:
+		return c.ScriptKill(txn, args[1:])
 	case FLUSH_COMMAND:
 		return c.ScriptFlush(txn, args[1:])
 	default:
@@ -324,7 +334,7 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 		return txn.SetError(err)
 	}
 	defer c.luapool.Put(luaState)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), c.cfg.Lua.Timeout)
 	defer cancel()
 	luaState.SetContext(ctx)
 	defer luaState.RemoveContext()

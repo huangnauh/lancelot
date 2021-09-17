@@ -132,11 +132,11 @@ start_server {tags {"scan network"}} {
         }
     }
 
-    foreach enc {ziplist hashtable} {
+    foreach enc {listpack hashtable} {
         test "HSCAN with encoding $enc" {
             # Create the Hash
             r del hash
-            if {$enc eq {ziplist}} {
+            if {$enc eq {listpack}} {
                 set count 30
             } else {
                 set count 1000
@@ -172,11 +172,11 @@ start_server {tags {"scan network"}} {
         }
     }
 
-    foreach enc {ziplist skiplist} {
+    foreach enc {listpack skiplist} {
         test "ZSCAN with encoding $enc" {
             # Create the Sorted Set
             r del zset
-            if {$enc eq {ziplist}} {
+            if {$enc eq {listpack}} {
                 set count 30
             } else {
                 set count 1000
@@ -291,7 +291,7 @@ start_server {tags {"scan network"}} {
             array set found {}
 
             # Populate the set
-            set numele [expr {101+[randomInt 1000]}]
+            set numele [expr {101+[randomInt 100]}]
             for {set j 0} {$j < $numele} {incr j} {
                 r sadd set $j
                 if {$j >= 100} {

@@ -463,7 +463,7 @@ type ScanResult struct {
 }
 
 func (c *Command) checkCursor(scanOpt *scanOptions, cursor []byte,
-	cursorPrefix ObjectType, start []byte) ([]byte, error) {
+	cursorPrefix string, start []byte) ([]byte, error) {
 	if scanOpt.cursor == ServerCursor {
 		cursorInt, err := strconv.ParseInt(utils.B2S(cursor), 10, 64)
 		if err != nil {
@@ -474,7 +474,7 @@ func (c *Command) checkCursor(scanOpt *scanOptions, cursor []byte,
 		}
 
 		if cursorInt > 0 {
-			cur, ok := c.GetCursor(fmt.Sprintf("%s%d", string(cursorPrefix), cursorInt))
+			cur, ok := c.GetCursor(fmt.Sprintf("%s:%d", cursorPrefix, cursorInt))
 			if ok {
 				cur := utils.NextKey(cur)
 				start = append(start, cur...)
@@ -549,7 +549,8 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	start := GetKeyBytes(DataPrefix, txn.UserId, txn.DBId, KeyPrefix, utils.S2B(prefix))
 	prefixLen := len(start)
 	end := utils.PrefixNext(start)
-	start, err = c.checkCursor(scanOpt, cursor, scanOpt.typo, start)
+	start, err = c.checkCursor(scanOpt, cursor, fmt.Sprintf("%s:%s:%s", string(GeneralType),
+		string(scanOpt.typo), scanOpt.match), start)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -564,7 +565,8 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	cur := lastKey[prefixLen:]
 	if scanOpt.cursor == ServerCursor {
-		c.SetCursor(fmt.Sprintf("%s%d", string(scanOpt.typo), txn.Timestamp), cur)
+		c.SetCursor(fmt.Sprintf("%s:%s:%s:%d", string(GeneralType),
+			string(scanOpt.typo), scanOpt.match, txn.Timestamp), cur)
 		return []interface{}{txn.Timestamp, retKeys}
 	} else {
 		cur := base64.StdEncoding.EncodeToString(cur)

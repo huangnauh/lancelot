@@ -25,8 +25,10 @@ type Txn struct {
 	client     *Client
 	txn        kv.Transaction
 	Multi      bool
+	Watch      bool
 	Exec       bool
 	Err        error
+	PendingErr bool
 	Timestamp  uint64
 	Now        int64
 	CurrentID  uint32
@@ -176,6 +178,8 @@ func (t *Txn) Del(key []byte) error {
 }
 
 func (t *Txn) LockKeys(keys [][]byte) error {
+	ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.WriteTimeout)
+	defer cancel()
 	kvKeys := make([]kv.Key, len(keys))
 	for i := range keys {
 		if len(keys[i]) >= utils.MAX_KEY_SIZE {
@@ -183,7 +187,7 @@ func (t *Txn) LockKeys(keys [][]byte) error {
 		}
 		kvKeys[i] = kv.Key(keys[i])
 	}
-	err := t.txn.LockKeys(context.Background(), new(kv.LockCtx), kvKeys...)
+	err := t.txn.LockKeys(ctx, new(kv.LockCtx), kvKeys...)
 	if err != nil {
 		utils.ZapLog.Error("[txn] lock", zap.String("remote", t.RemoteAddr()),
 			zap.Uint64("timestamp", t.Timestamp), zap.Error(err))

@@ -1,6 +1,7 @@
 package command
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ func (c *Command) checkSingle(conn *redcon.Conn, unwatch bool) (*store.Txn, bool
 			} else {
 				// after WATCH command but before MULTI command
 				if unwatch {
+					txn.Watch = false
 					txn.Reset()
 				}
 			}
@@ -53,7 +55,17 @@ func (c *Command) SingleHandler(conn *redcon.Conn, txn *store.Txn, txnHandle Txn
 	return nil
 }
 
-func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command, txnHandle TxnHandle) {
+func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command) {
+	handler, ok := c.TxnHandle[comma]
+	if !ok {
+		txn, exist := c.getTransaction(conn)
+		if exist && txn != nil && txn.Multi {
+			txn.PendingErr = true
+		}
+		conn.WriteError(fmt.Sprintf("ERR unknown command '%s'", comma))
+		return
+	}
+	txnHandle := handler.Func
 	args := cmd.Args[1:]
 	txn, single := c.checkSingle(conn, comma == UNWATCH_COMMAND)
 	utils.ZapLog.Debug("TxnHandler", zap.String("remote", conn.RemoteAddr()),
@@ -120,11 +132,14 @@ func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) {
 		return
 	}
 
-	txn, alreadyExist := c.getOrCreateTransaction(conn)
 	defer conn.SetTransaction(nil)
-
-	if !txn.Multi || !alreadyExist {
+	txn, exist := c.getTransaction(conn)
+	if !exist || !txn.Multi {
 		conn.WriteError(xerror.ErrEXECErr)
+		return
+	}
+	if txn.PendingErr {
+		conn.WriteError(xerror.ErrTransactionDiscarded)
 		return
 	}
 
@@ -147,7 +162,7 @@ func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) {
 		txnHandler, ok := c.TxnHandle[command]
 		if !ok {
 			txn.Rollback()
-			conn.WriteError("ERR unknown command '" + command + "'")
+			conn.WriteError(fmt.Sprintf("ERR unknown command '%s'", command))
 			return
 		}
 		resp := txnHandler.Func(txn, cmd.Args[1:])
@@ -181,6 +196,11 @@ func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) {
 	// commit
 	err := txn.Commit()
 	if err != nil {
+		if txn.Watch {
+			conn.WriteNull()
+			return
+		}
+
 		txn.Rollback()
 		writerConnError(conn, err)
 		return
@@ -210,13 +230,18 @@ func (c *Command) getTransaction(conn *redcon.Conn) (*store.Txn, bool) {
 	return nil, false
 }
 
+func (c *Command) createTransaction(conn *redcon.Conn) *store.Txn {
+	txn := c.client.NewTxn()
+	txn.Conn = conn
+	return txn
+}
+
 func (c *Command) getOrCreateTransaction(conn *redcon.Conn) (*store.Txn, bool) {
 	txn, exist := c.getTransaction(conn)
 	if exist {
 		return txn, true
 	}
-	txn = c.client.NewTxn()
-	txn.Conn = conn
+	txn = c.createTransaction(conn)
 	return txn, false
 }
 
@@ -266,7 +291,7 @@ func (c *Command) watch(conn *redcon.Conn, cmd redcon.Command) {
 
 	keys := make([][]byte, len(args))
 	for i := range args {
-		keys[i] = []byte(args[i])
+		keys[i] = GetKeyBytes(DataPrefix, txn.UserId, txn.DBId, KeyPrefix, args[i])
 	}
 	err := txn.LockKeys(keys)
 	if err != nil {
@@ -274,7 +299,7 @@ func (c *Command) watch(conn *redcon.Conn, cmd redcon.Command) {
 		writerConnError(conn, err)
 		return
 	}
-
+	txn.Watch = true
 	if !alreadyExist {
 		conn.SetTransaction(txn)
 	}
@@ -286,6 +311,7 @@ func (c *Command) UnWatchHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 0 {
 		return txn.SetWrongArgs(UNWATCH_COMMAND)
 	}
+	txn.Watch = false
 	return OK
 }
 

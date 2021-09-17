@@ -25,8 +25,9 @@ type Store struct {
 }
 
 type Lua struct {
-	InitPoolSize int `yaml:"init-pool-size"`
-	MaxPoolSize  int `yaml:"max-pool-size"`
+	InitPoolSize int           `yaml:"init-pool-size"`
+	MaxPoolSize  int           `yaml:"max-pool-size"`
+	Timeout      time.Duration `yaml:"timeout"`
 }
 
 type Auth struct {
@@ -106,6 +107,7 @@ var cfg = &Config{
 	Lua: Lua{
 		InitPoolSize: 10,
 		MaxPoolSize:  100,
+		Timeout:      time.Minute,
 	},
 	Auth: Auth{
 		Root:                "root",

@@ -1,4 +1,4 @@
-log-level: debug
+log-level: info
 pid-file: redis.pid
 host: 0.0.0.0
 redis-port: 16379
@@ -19,12 +19,13 @@ store:
   disable-lock-back-off: false
   batch-limit: 200
 gc:
-  tick-interval: 4s
+  tick-interval: 2s
   ttl-workers: 2
   ttl-batch-limit: 1
 lua:
   init-pool-size: 10
   max-pool-size: 100
+  timeout: 1s
 auth:
   root: root
   pass: root

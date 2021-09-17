@@ -4,12 +4,12 @@
 
 `go build ./cmd/redis-server`
 
-### test
-
-
 ### run
 
 `./redis-server`
+
+### test
+`make test`
 
 ### support
 
