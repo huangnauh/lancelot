@@ -74,8 +74,13 @@ func (c *Command) FlushDBHandle(txn *store.Txn, args [][]byte) interface{} {
 	return OK
 }
 
+// TIME
 func (c *Command) TimeHandle(txn *store.Txn, args [][]byte) interface{} {
-	return nil
+	if len(args) > 0 {
+		return txn.SetWrongArgs(TIME_COMMAND)
+	}
+	now := txn.Now
+	return []string{strconv.Itoa(int(now / 1000)), strconv.Itoa(int(now % 1000))}
 }
 
 // DBSIZE

@@ -200,6 +200,7 @@ const (
 	FLUSHALL_COMMAND         = "flushall"
 	FLUSHDB_COMMAND          = "flushdb"
 	DBSIZE_COMMAND           = "dbsize"
+	TIME_COMMAND             = "time"
 	ACL_COMMAND              = "acl"
 	CAT_COMMAND              = "cat"
 	DELUSER_COMMAND          = "deluser"

@@ -14,9 +14,9 @@ start_server {tags {"hash"}} {
         list [r hlen smallhash]
     } {8}
 
-    # test {Is the small hash encoded with a ziplist?} {
-    #     assert_encoding ziplist smallhash
-    # }
+    test {Is the small hash encoded with a listpack?} {
+        assert_encoding listpack smallhash
+    } {} {need:encoding}
 
     proc create_hash {key entries} {
         r del $key
@@ -34,11 +34,14 @@ start_server {tags {"hash"}} {
         return $res
     }
 
-    foreach {type contents} "ziplist {{a 1} {b 2} {c 3}} hashtable {{a 1} {b 2} {c 3}}" {
+    foreach {type contents} "listpack {{a 1} {b 2} {c 3}} hashtable {{a 1} {b 2} {c 3}}" {
         # set original_max_value [lindex [r config get hash-max-ziplist-value] 1]
         # r config set hash-max-ziplist-value 10
         create_hash myhash $contents
         # assert_encoding $type myhash
+
+        # coverage for objectComputeSize
+        # assert_morethan [r memory usage myhash] 0
 
         test "HRANDFIELD - $type" {
             unset -nocomplain myhash
@@ -53,17 +56,17 @@ start_server {tags {"hash"}} {
         # r config set hash-max-ziplist-value $original_max_value
     }
 
-    # test "HRANDFIELD with RESP3" {
-    #     r hello 3
-    #     set res [r hrandfield myhash 3 withvalues]
-    #     assert_equal [llength $res] 3
-    #     assert_equal [llength [lindex $res 1]] 2
+    test "HRANDFIELD with RESP3" {
+        r hello 3
+        set res [r hrandfield myhash 3 withvalues]
+        assert_equal [llength $res] 3
+        assert_equal [llength [lindex $res 1]] 2
 
-    #     set res [r hrandfield myhash 3]
-    #     assert_equal [llength $res] 3
-    #     assert_equal [llength [lindex $res 1]] 1
-    #     r hello 2
-    # }
+        set res [r hrandfield myhash 3]
+        assert_equal [llength $res] 3
+        assert_equal [llength [lindex $res 1]] 1
+        r hello 2
+    } {} {needs:resp3}
 
     test "HRANDFIELD count of 0 is handled correctly" {
         r hrandfield myhash 0
@@ -88,7 +91,7 @@ start_server {tags {"hash"}} {
 
     foreach {type contents} "
         hashtable {{a 1} {b 2} {c 3} {d 4} {e 5} {6 f} {7 g} {8 h} {9 i} {[randstring 70 90 alpha] 10}}
-        ziplist {{a 1} {b 2} {c 3} {d 4} {e 5} {6 f} {7 g} {8 h} {9 i} {10 j}} " {
+        listpack {{a 1} {b 2} {c 3} {d 4} {e 5} {6 f} {7 g} {8 h} {9 i} {10 j}} " {
         test "HRANDFIELD with <count> - $type" {
             # set original_max_value [lindex [r config get hash-max-ziplist-value] 1]
             # r config set hash-max-ziplist-value 10
@@ -746,54 +749,54 @@ start_server {tags {"hash"}} {
         }
     }
 
-    # test {Hash ziplist of various encodings} {
-    #     r del k
-    #     # config_set hash-max-ziplist-entries 1000000000
-    #     # config_set hash-max-ziplist-value 1000000000
-    #     r hset k ZIP_INT_8B 127
-    #     r hset k ZIP_INT_16B 32767
-    #     r hset k ZIP_INT_32B 2147483647
-    #     r hset k ZIP_INT_64B 9223372036854775808
-    #     r hset k ZIP_INT_IMM_MIN 0
-    #     r hset k ZIP_INT_IMM_MAX 12
-    #     r hset k ZIP_STR_06B [string repeat x 31]
-    #     r hset k ZIP_STR_14B [string repeat x 8191]
-    #     r hset k ZIP_STR_32B [string repeat x 65535]
-    #     set k [r hgetall k]
-    #     set dump [r dump k]
+    test {Hash ziplist of various encodings} {
+        r del k
+        # config_set hash-max-ziplist-entries 1000000000
+        # config_set hash-max-ziplist-value 1000000000
+        r hset k ZIP_INT_8B 127
+        r hset k ZIP_INT_16B 32767
+        r hset k ZIP_INT_32B 2147483647
+        r hset k ZIP_INT_64B 9223372036854775808
+        r hset k ZIP_INT_IMM_MIN 0
+        r hset k ZIP_INT_IMM_MAX 12
+        r hset k ZIP_STR_06B [string repeat x 31]
+        r hset k ZIP_STR_14B [string repeat x 8191]
+        r hset k ZIP_STR_32B [string repeat x 65535]
+        set k [r hgetall k]
+        set dump [r dump k]
 
-    #     # will be converted to dict at RESTORE
-    #     # config_set hash-max-ziplist-entries 2
-    #     # config_set sanitize-dump-payload no mayfail
-    #     r restore kk 0 $dump
-    #     set kk [r hgetall kk]
+        # will be converted to dict at RESTORE
+        # config_set hash-max-ziplist-entries 2
+        # config_set sanitize-dump-payload no mayfail
+        r restore kk 0 $dump
+        set kk [r hgetall kk]
 
-    #     # make sure the values are right
-    #     assert_equal [lsort $k] [lsort $kk]
-    #     assert_equal [dict get $k ZIP_STR_06B] [string repeat x 31]
-    #     set k [dict remove $k ZIP_STR_06B]
-    #     assert_equal [dict get $k ZIP_STR_14B] [string repeat x 8191]
-    #     set k [dict remove $k ZIP_STR_14B]
-    #     assert_equal [dict get $k ZIP_STR_32B] [string repeat x 65535]
-    #     set k [dict remove $k ZIP_STR_32B]
-    #     set _ $k
-    # } {ZIP_INT_8B 127 ZIP_INT_16B 32767 ZIP_INT_32B 2147483647 ZIP_INT_64B 9223372036854775808 ZIP_INT_IMM_MIN 0 ZIP_INT_IMM_MAX 12}
+        # make sure the values are right
+        assert_equal [lsort $k] [lsort $kk]
+        assert_equal [dict get $k ZIP_STR_06B] [string repeat x 31]
+        set k [dict remove $k ZIP_STR_06B]
+        assert_equal [dict get $k ZIP_STR_14B] [string repeat x 8191]
+        set k [dict remove $k ZIP_STR_14B]
+        assert_equal [dict get $k ZIP_STR_32B] [string repeat x 65535]
+        set k [dict remove $k ZIP_STR_32B]
+        set _ $k
+    } {ZIP_INT_8B 127 ZIP_INT_16B 32767 ZIP_INT_32B 2147483647 ZIP_INT_64B 9223372036854775808 ZIP_INT_IMM_MIN 0 ZIP_INT_IMM_MAX 12} {needs:encoding}
 
-    # test {Hash ziplist of various encodings - sanitize dump} {
-    #     # config_set sanitize-dump-payload yes mayfail
-    #     r restore kk 0 $dump replace
-    #     set k [r hgetall k]
-    #     set kk [r hgetall kk]
+    test {Hash ziplist of various encodings - sanitize dump} {
+        # config_set sanitize-dump-payload yes mayfail
+        r restore kk 0 $dump replace
+        set k [r hgetall k]
+        set kk [r hgetall kk]
 
-    #     # make sure the values are right
-    #     assert_equal [lsort $k] [lsort $kk]
-    #     assert_equal [dict get $k ZIP_STR_06B] [string repeat x 31]
-    #     set k [dict remove $k ZIP_STR_06B]
-    #     assert_equal [dict get $k ZIP_STR_14B] [string repeat x 8191]
-    #     set k [dict remove $k ZIP_STR_14B]
-    #     assert_equal [dict get $k ZIP_STR_32B] [string repeat x 65535]
-    #     set k [dict remove $k ZIP_STR_32B]
-    #     set _ $k
-    # } {ZIP_INT_8B 127 ZIP_INT_16B 32767 ZIP_INT_32B 2147483647 ZIP_INT_64B 9223372036854775808 ZIP_INT_IMM_MIN 0 ZIP_INT_IMM_MAX 12}
+        # make sure the values are right
+        assert_equal [lsort $k] [lsort $kk]
+        assert_equal [dict get $k ZIP_STR_06B] [string repeat x 31]
+        set k [dict remove $k ZIP_STR_06B]
+        assert_equal [dict get $k ZIP_STR_14B] [string repeat x 8191]
+        set k [dict remove $k ZIP_STR_14B]
+        assert_equal [dict get $k ZIP_STR_32B] [string repeat x 65535]
+        set k [dict remove $k ZIP_STR_32B]
+        set _ $k
+    } {ZIP_INT_8B 127 ZIP_INT_16B 32767 ZIP_INT_32B 2147483647 ZIP_INT_64B 9223372036854775808 ZIP_INT_IMM_MIN 0 ZIP_INT_IMM_MAX 12} {needs:encoding}
 
 }

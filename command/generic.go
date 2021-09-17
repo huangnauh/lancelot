@@ -25,24 +25,6 @@ func IsExpired(txn *store.Txn, o *Object) (int64, bool) {
 	return 0, true
 }
 
-func getCheckType(arg []byte) (CheckType, error) {
-	if len(arg) == 0 {
-		return NoCheck, nil
-	}
-	switch strings.ToLower(utils.B2S(arg)) {
-	case NX:
-		return CheckNotExist, nil
-	case XX:
-		return CheckExist, nil
-	case GT:
-		return CheckGT, nil
-	case LT:
-		return CheckLT, nil
-	default:
-		return NoCheck, xerror.ErrSyntax
-	}
-}
-
 // PERSIST key
 func (c *Command) PersistHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
@@ -91,7 +73,7 @@ func (c *Command) PExpireTimeHandle(txn *store.Txn, args [][]byte) interface{} {
 
 // (generic) EXPIREAT key timestamp [NX|XX|GT|LT]
 func (c *Command) ExpireAtHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 2 && len(args) != 3 {
+	if len(args) < 2 {
 		return txn.SetWrongArgs(EXPIREAT_COMMAND)
 	}
 	timestamp, err := strconv.ParseInt(string(args[1]), 10, 64)
@@ -104,7 +86,7 @@ func (c *Command) ExpireAtHandle(txn *store.Txn, args [][]byte) interface{} {
 
 // PEXPIREAT key milliseconds-timestamp [NX|XX|GT|LT]
 func (c *Command) PExpireAtHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 2 && len(args) != 3 {
+	if len(args) < 2 {
 		return txn.SetWrongArgs(PEXPIREAT_COMMAND)
 	}
 	timestamp, err := strconv.ParseInt(string(args[1]), 10, 64)
@@ -117,7 +99,7 @@ func (c *Command) PExpireAtHandle(txn *store.Txn, args [][]byte) interface{} {
 
 // PEXPIRE key milliseconds [NX|XX|GT|LT]
 func (c *Command) PExpireHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 2 && len(args) != 3 {
+	if len(args) < 2 {
 		return txn.SetWrongArgs(PEXPIRE_COMMAND)
 	}
 	milliseconds, err := strconv.ParseInt(string(args[1]), 10, 64)
@@ -130,7 +112,7 @@ func (c *Command) PExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 
 // (generic) EXPIRE key seconds [NX|XX|GT|LT]
 func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 2 && len(args) != 3 {
+	if len(args) < 2 {
 		return txn.SetWrongArgs(EXPIRE_COMMAND)
 	}
 
@@ -143,12 +125,16 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL bool) interface{} {
-	var ct CheckType
 	var err error
-	if len(args) == 3 {
-		ct, err = getCheckType(args[2])
+	var i int
+	opt := &checkOption{}
+	if len(args) > 2 {
+		opt, i, err = getCheckOption(args[2:])
 		if err != nil {
 			return txn.SetError(err)
+		}
+		if len(args[2:]) != i {
+			return txn.SetError(xerror.ErrSyntax)
 		}
 	}
 
@@ -189,15 +175,15 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 	}
 
 	if object.TTL > 0 {
-		if ct == CheckNotExist {
+		if opt.Check&CheckNotExist == CheckNotExist {
 			return SimpleInt(0)
 		}
 
-		if newTTL >= object.TTL && ct == CheckLT {
+		if newTTL >= object.TTL && opt.Check&CheckLT == CheckLT {
 			return SimpleInt(0)
 		}
 
-		if newTTL <= object.TTL && ct == CheckGT {
+		if newTTL <= object.TTL && opt.Check&CheckGT == CheckGT {
 			return SimpleInt(0)
 		}
 
@@ -211,7 +197,7 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 			return err
 		}
 	} else {
-		if ct == CheckExist {
+		if opt.Check & ^CheckNotExist > 0 {
 			return SimpleInt(0)
 		}
 	}
@@ -506,8 +492,10 @@ func (c *Command) KeysHandle(txn *store.Txn, args [][]byte) interface{} {
 	start := GetKeyBytes(DataPrefix, txn.UserId, txn.DBId, KeyPrefix, utils.S2B(prefix))
 	end := utils.PrefixNext(start)
 	retKeys, _, err := c.scan(txn, start, end, &scanOptions{
-		match: match,
-		count: c.cfg.Key.ScanMaxCount,
+		match:  match,
+		count:  c.cfg.Key.ScanMaxCount,
+		typo:   GeneralType,
+		cursor: ServerCursor,
 	})
 	if err != nil {
 		return txn.SetError(err)

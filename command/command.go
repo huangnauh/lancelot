@@ -747,6 +747,12 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:       136,
 			Type:     UnknownType,
 		},
+		TIME_COMMAND: {
+			Func:     c.TimeHandle,
+			ReadOnly: true,
+			ID:       137,
+			Type:     UnknownType,
+		},
 		TYPE_COMMAND: {
 			Func:     c.TypeHandle,
 			ReadOnly: true,
@@ -800,21 +806,26 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:   160,
 			Type: UnknownType,
 		},
+		EXPIRETIME_COMMAND: {
+			Func: c.ExpireTimeHandle,
+			ID:   161,
+			Type: UnknownType,
+		},
 		TOUCH_COMMAND: {
 			Func:     c.TouchHandle,
-			ID:       161,
+			ID:       162,
 			Type:     UnknownType,
 			ReadOnly: true,
 		},
 		PTTL_COMMAND: {
 			Func:     c.PTTLHandle,
 			ReadOnly: true,
-			ID:       162,
+			ID:       163,
 			Type:     UnknownType,
 		},
 		UNLINK_COMMAND: {
 			Func: c.UnlinkHandle,
-			ID:   163,
+			ID:   164,
 			Type: UnknownType,
 		},
 		EXISTS_COMMAND: {

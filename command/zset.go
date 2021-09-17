@@ -25,15 +25,16 @@ var (
 	EndMemberKey   = []byte{'n'}
 )
 
-type ZAddOption struct {
+type checkOption struct {
 	Check   CheckType
 	Changed bool
 	Incr    bool
 }
 
-func checkZaddOption(args [][]byte) (*ZAddOption, int, error) {
-	opt := &ZAddOption{}
-	for i := 1; i < len(args); i++ {
+func getCheckOption(args [][]byte) (*checkOption, int, error) {
+	opt := &checkOption{}
+	var i int
+	for i = 0; i < len(args); i++ {
 		str := strings.ToLower(utils.B2S(args[i]))
 		switch str {
 		case NX:
@@ -64,7 +65,7 @@ func checkZaddOption(args [][]byte) (*ZAddOption, int, error) {
 			return opt, i, nil
 		}
 	}
-	return opt, 0, xerror.ErrSyntax
+	return opt, i, nil
 }
 
 // ZINCRBY key increment member
@@ -80,14 +81,14 @@ func (c *Command) ZIncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	score, _, err = c.zadd(txn, object, args[2], score, &ZAddOption{Incr: true})
+	score, _, err = c.zadd(txn, object, args[2], score, &checkOption{Incr: true})
 	if err != nil {
 		return txn.SetError(err)
 	}
 	return score
 }
 
-func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score float64, opt *ZAddOption) (float64, int, error) {
+func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score float64, opt *checkOption) (float64, int, error) {
 	var delta int64
 	var oldScore float64
 	var count int
@@ -197,10 +198,11 @@ func (c *Command) ZAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 3 {
 		return txn.SetWrongArgs(ZADD_COMMAND)
 	}
-	opt, i, err := checkZaddOption(args)
+	opt, i, err := getCheckOption(args[1:])
 	if err != nil {
 		return err
 	}
+	i = i + 1
 	if len(args) < i+2 || (len(args)-i-2)%2 != 0 {
 		return txn.SetWrongArgs(ZADD_COMMAND)
 	}
@@ -741,7 +743,7 @@ func (c *Command) ZremValues(txn *store.Txn, object *Object, ret []interface{}) 
 func (c *Command) ZaddValues(txn *store.Txn, object *Object, ret []interface{}) (int, error) {
 	count := 0
 	for i := 0; i < len(ret); i += 2 {
-		_, c, err := c.zadd(txn, object, ret[i].([]byte), ret[i+1].(float64), &ZAddOption{})
+		_, c, err := c.zadd(txn, object, ret[i].([]byte), ret[i+1].(float64), &checkOption{})
 		if err != nil {
 			return count, err
 		}
