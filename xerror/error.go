@@ -14,9 +14,10 @@ var (
 	ErrMultiErr             = "ERR without MULTI"
 	ErrTransactionDiscarded = "EXECABORT Transaction discarded because of previous errors."
 
-	ErrNotInteger          = errors.New("value is not an integer or out of range")
-	ErrXXNXCompat          = errors.New("XX and NX options at the same time are not compatible")
-	ErrGTLTNXCompat        = errors.New("GT, LT, and/or NX options at the same time are not compatible")
+	ErrNotInteger = errors.New("value is not an integer or out of range")
+	// ErrXXNXCompat          = errors.New("XX and NX options at the same time are not compatible")
+	ErrGTLTCompat          = errors.New("GT and LT options at the same time are not compatible")
+	ErrGTLTNXCompat        = errors.New("NX and XX, GT or LT options at the same time are not compatible")
 	ErrInvalidFloat        = errors.New("value is not a valid float")
 	ErrNotPositiveInteger  = errors.New("value is out of range, must be positive")
 	ErrRankZero            = errors.New("RANK can't be zero: use 1 to start from the first match, 2 from the second, ...")
@@ -87,6 +88,10 @@ func NotExistKey(key string) string {
 	return fmt.Sprintf("key '%s' does not exist in path", key)
 }
 
+func UnsupportedOption(opt []byte) string {
+	return fmt.Sprintf("Unsupported option %s", opt)
+}
+
 func UnknownCommand(command string) string {
 	return fmt.Sprintf("unknown command `%s`, with args beginning with:", command)
 
@@ -108,6 +113,10 @@ func WrongModifier(command, modifier string, err error) error {
 
 func NotExistKeyError(key string) error {
 	return errors.New(NotExistKey(key))
+}
+
+func UnsupportedOptionError(opt []byte) error {
+	return errors.New(UnsupportedOption(opt))
 }
 
 func WrongArgsError(command string) error {

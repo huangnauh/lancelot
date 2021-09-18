@@ -2,12 +2,14 @@ start_server {tags {"expire"}} {
     test {EXPIRE - set timeouts multiple times} {
         r set x foobar
         set v1 [r expire x 5]
+        after 200
         set v2 [r ttl x]
         set v3 [r expire x 10]
+        after 200
         set v4 [r ttl x]
         r expire x 2
         list $v1 $v2 $v3 $v4
-    } {1 [45] 1 10}
+    } {1 [4] 1 9}
 
     test {EXPIRE - It should be still possible to read 'x'} {
         r get x
@@ -64,8 +66,9 @@ start_server {tags {"expire"}} {
     test {PERSIST can undo an EXPIRE} {
         r set x foo
         r expire x 50
+        after 200
         list [r ttl x] [r persist x] [r ttl x] [r get x]
-    } {50 1 -1 foo}
+    } {49 1 -1 foo}
 
     test {PERSIST returns 0 against non existing or non volatile keys} {
         r set x foo
@@ -178,7 +181,7 @@ start_server {tags {"expire"}} {
         # Redis expires random keys ten times every second so we are
         # fairly sure that all the three keys should be evicted after
         # two seconds.
-        wait_for_condition 20 100 {
+        wait_for_condition 20 500 {
             [r dbsize] eq 0
         } fail {
             "Keys did not actively expire."
@@ -601,4 +604,125 @@ start_server {tags {"expire"}} {
            {del foo}
         }
     } {} {needs:repl}
+
+    test {EXPIRE with NX option on a key with ttl} {
+        r SET foo bar EX 100
+        assert_equal [r EXPIRE foo 200 NX] 0
+        assert_range [r TTL foo] 50 100
+    } {}
+
+    test {EXPIRE with NX option on a key without ttl} {
+        r SET foo bar
+        assert_equal [r EXPIRE foo 200 NX] 1
+        assert_range [r TTL foo] 100 200
+    } {}
+
+    test {EXPIRE with XX option on a key with ttl} {
+        r SET foo bar EX 100
+        assert_equal [r EXPIRE foo 200 XX] 1
+        assert_range [r TTL foo] 100 200
+    } {}
+
+    test {EXPIRE with XX option on a key without ttl} {
+        r SET foo bar
+        assert_equal [r EXPIRE foo 200 XX] 0
+        assert_equal [r TTL foo] -1
+    } {}
+
+    test {EXPIRE with GT option on a key with lower ttl} {
+        r SET foo bar EX 100
+        assert_equal [r EXPIRE foo 200 GT] 1
+        assert_range [r TTL foo] 100 200
+    } {}
+
+    test {EXPIRE with GT option on a key with higher ttl} {
+        r SET foo bar EX 200
+        assert_equal [r EXPIRE foo 100 GT] 0
+        assert_range [r TTL foo] 100 200
+    } {}
+
+    test {EXPIRE with GT option on a key without ttl} {
+        r SET foo bar
+        assert_equal [r EXPIRE foo 200 GT] 0
+        assert_equal [r TTL foo] -1
+    } {}
+
+    test {EXPIRE with LT option on a key with higher ttl} {
+        r SET foo bar EX 100
+        assert_equal [r EXPIRE foo 200 LT] 0
+        assert_range [r TTL foo] 50 100
+    } {}
+
+    test {EXPIRE with LT option on a key with lower ttl} {
+        r SET foo bar EX 200
+        assert_equal [r EXPIRE foo 100 LT] 1
+        assert_range [r TTL foo] 50 100
+    } {}
+
+    test {EXPIRE with LT option on a key without ttl} {
+        r SET foo bar
+        assert_equal [r EXPIRE foo 100 LT] 1
+        assert_range [r TTL foo] 50 100
+    } {}
+
+    test {EXPIRE with LT and XX option on a key with ttl} {
+        r SET foo bar EX 200
+        assert_equal [r EXPIRE foo 100 LT XX] 1
+        assert_range [r TTL foo] 50 100
+    } {}
+
+    test {EXPIRE with LT and XX option on a key without ttl} {
+        r SET foo bar
+        assert_equal [r EXPIRE foo 200 LT XX] 0
+        assert_equal [r TTL foo] -1
+    } {}
+
+    test {EXPIRE with conflicting options: LT GT} {
+        catch {r EXPIRE foo 200 LT GT} e
+        set e
+    } {ERR GT and LT options at the same time are not compatible}
+
+    test {EXPIRE with conflicting options: NX GT} {
+        catch {r EXPIRE foo 200 NX GT} e
+        set e
+    } {ERR NX and XX, GT or LT options at the same time are not compatible}
+
+    test {EXPIRE with conflicting options: NX LT} {
+        catch {r EXPIRE foo 200 NX LT} e
+        set e
+    } {ERR NX and XX, GT or LT options at the same time are not compatible}
+
+    test {EXPIRE with conflicting options: NX XX} {
+        catch {r EXPIRE foo 200 NX XX} e
+        set e
+    } {ERR NX and XX, GT or LT options at the same time are not compatible}
+
+    test {EXPIRE with unsupported options} {
+        catch {r EXPIRE foo 200 AB} e
+        set e
+    } {ERR Unsupported option AB}
+
+    test {EXPIRE with unsupported options} {
+        catch {r EXPIRE foo 200 XX AB} e
+        set e
+    } {ERR Unsupported option AB}
+
+    test {EXPIRE with negative expiry} {
+        r SET foo bar EX 100
+        assert_equal [r EXPIRE foo -10 LT] 1
+        assert_equal [r TTL foo] -2
+    } {}
+
+    test {EXPIRE with negative expiry on a non-valitale key} {
+        r SET foo bar
+        assert_equal [r EXPIRE foo -10 LT] 1
+        assert_equal [r TTL foo] -2
+    } {}
+
+    test {EXPIRE with non-existed key} {
+        assert_equal [r EXPIRE none 100 NX] 0
+        assert_equal [r EXPIRE none 100 XX] 0
+        assert_equal [r EXPIRE none 100 GT] 0
+        assert_equal [r EXPIRE none 100 LT] 0
+    } {}
 }

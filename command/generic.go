@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -80,6 +81,9 @@ func (c *Command) ExpireAtHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
+	if math.MaxInt64/1000 <= timestamp || math.MinInt64/1000 >= timestamp {
+		return txn.SetError(xerror.InvalidExpireError(EXPIREAT_COMMAND))
+	}
 	newTTL := timestamp * 1000
 	return c.expire(txn, args, newTTL, false)
 }
@@ -94,7 +98,7 @@ func (c *Command) PExpireAtHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
 	newTTL := timestamp
-	return c.expire(txn, args, newTTL, true)
+	return c.expire(txn, args, newTTL, false)
 }
 
 // PEXPIRE key milliseconds [NX|XX|GT|LT]
@@ -105,6 +109,9 @@ func (c *Command) PExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 	milliseconds, err := strconv.ParseInt(string(args[1]), 10, 64)
 	if err != nil {
 		return txn.SetError(xerror.ErrNotInteger)
+	}
+	if math.MaxInt64-txn.Now <= milliseconds {
+		return txn.SetError(xerror.InvalidExpireError(PEXPIRE_COMMAND))
 	}
 	newTTL := txn.Now + milliseconds
 	return c.expire(txn, args, newTTL, false)
@@ -120,6 +127,11 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
+
+	if math.MaxInt64/1000 <= expire || math.MinInt64/1000 >= expire {
+		return txn.SetError(xerror.InvalidExpireError(EXPIRE_COMMAND))
+	}
+
 	newTTL := txn.Now + expire*1000
 	return c.expire(txn, args, newTTL, false)
 }
@@ -133,8 +145,8 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 		if err != nil {
 			return txn.SetError(err)
 		}
-		if len(args[2:]) != i {
-			return txn.SetError(xerror.ErrSyntax)
+		if len(args[2:]) > i {
+			return txn.SetError(xerror.UnsupportedOptionError(args[2+i]))
 		}
 	}
 
@@ -197,7 +209,11 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 			return err
 		}
 	} else {
-		if opt.Check & ^CheckNotExist > 0 {
+		if opt.Check&CheckExist == CheckExist {
+			return SimpleInt(0)
+		}
+		// A non-volatile key is treated as an infinite TTL
+		if opt.Check&CheckGT == CheckGT {
 			return SimpleInt(0)
 		}
 	}

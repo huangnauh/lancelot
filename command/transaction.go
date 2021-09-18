@@ -44,7 +44,12 @@ func (c *Command) SingleHandler(conn *redcon.Conn, txn *store.Txn, txnHandle Txn
 	defer txn.Rollback()
 	resp := txnHandle(txn, args)
 	if txn.Err != nil {
-		txn.WriteAny(resp)
+		err, ok := resp.(error)
+		if ok {
+			writerConnError(conn, err)
+		} else {
+			txn.WriteAny(resp)
+		}
 		return nil
 	}
 	err = txn.Commit()
@@ -316,5 +321,5 @@ func (c *Command) UnWatchHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func writerConnError(conn *redcon.Conn, err error) {
-	conn.WriteError("Err " + err.Error())
+	conn.WriteError("ERR " + err.Error())
 }

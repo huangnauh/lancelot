@@ -39,22 +39,28 @@ func getCheckOption(args [][]byte) (*checkOption, int, error) {
 		switch str {
 		case NX:
 			if opt.Check&(CheckLT|CheckExist|CheckGT) != 0 {
-				return nil, i, xerror.ErrXXNXCompat
+				return nil, i, xerror.ErrGTLTNXCompat
 			}
 			opt.Check |= CheckNotExist
 		case XX:
 			if opt.Check&CheckNotExist == CheckNotExist {
-				return nil, i, xerror.ErrXXNXCompat
+				return nil, i, xerror.ErrGTLTNXCompat
 			}
 			opt.Check |= CheckExist
 		case GT:
-			if opt.Check&(CheckLT|CheckNotExist) != 0 {
-				return nil, i, xerror.ErrXXNXCompat
+			if opt.Check&CheckNotExist != 0 {
+				return nil, i, xerror.ErrGTLTNXCompat
+			}
+			if opt.Check&CheckLT != 0 {
+				return nil, i, xerror.ErrGTLTCompat
 			}
 			opt.Check |= CheckGT
 		case LT:
-			if opt.Check&(CheckGT|CheckNotExist) != 0 {
-				return nil, i, xerror.ErrXXNXCompat
+			if opt.Check&CheckNotExist != 0 {
+				return nil, i, xerror.ErrGTLTNXCompat
+			}
+			if opt.Check&CheckGT != 0 {
+				return nil, i, xerror.ErrGTLTCompat
 			}
 			opt.Check |= CheckLT
 		case CH:

@@ -2,6 +2,7 @@
 package command
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -243,8 +244,14 @@ func checkExpireOption(cmd string, args [][]byte, isSet bool, nowTime time.Time)
 			}
 
 			if unitDuration > 0 {
+				if math.MaxInt64/int64(unitDuration) <= int64(intArg) {
+					return nil, xerror.InvalidExpireError(cmd)
+				}
 				opt.Expire = nowTime.Add(time.Duration(intArg)*unitDuration).UnixNano() / int64(time.Millisecond)
 			} else if unitInt64 > 0 {
+				if math.MaxInt64/unitInt64/1000 <= int64(intArg) {
+					return nil, xerror.InvalidExpireError(cmd)
+				}
 				opt.Expire = intArg * unitInt64
 			}
 			i++
