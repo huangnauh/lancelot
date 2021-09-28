@@ -12,3 +12,4 @@ TAGS="-needs:repl -needs:debug -needs:stralgo -needs:bitfield -large-memory -nee
 ./runtest --host 10.0.5.137 --port 16379 --single unit/bitops --tags "$TAGS" --ignore-encoding
 ./runtest --host 127.0.0.1 --port 6379 --single unit/scan --tags "$TAGS" --ignore-encoding
 ./runtest --host 127.0.0.1 --port 6379 --single unit/multi --tags "$TAGS" --ignore-encoding
+./runtest --host 127.0.0.1 --port 6379 --single unit/expire --tags "$TAGS" --ignore-encoding

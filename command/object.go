@@ -415,7 +415,7 @@ func (c *Command) getTxnObject(txn *store.Txn, key []byte, object *Object, clear
 	}
 
 	if getType != UnknownType && getType != object.Type {
-		return xerror.WrongTypeError
+		return xerror.WrongTypeErr
 	}
 	return nil
 }

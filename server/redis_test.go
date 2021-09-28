@@ -1327,8 +1327,7 @@ var _ = Describe("Commands", func() {
 				Get:  true,
 			}
 			val, err := client.SetArgs(ctx, "key", "hello", args).Result()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("ERR syntax error"))
+			Expect(err).To(Equal(redis.Nil))
 			Expect(val).To(Equal(""))
 		})
 
@@ -1366,8 +1365,7 @@ var _ = Describe("Commands", func() {
 				Get:  true,
 			}
 			val, err := client.SetArgs(ctx, "key", "hello", args).Result()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("ERR syntax error"))
+			Expect(err).To(Equal(redis.Nil))
 			Expect(val).To(Equal(""))
 		})
 

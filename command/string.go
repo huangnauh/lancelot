@@ -57,7 +57,7 @@ func (c *Command) getString(txn *store.Txn, arg []byte) ([]byte, error) {
 	object := NewObject(txn.UserId, txn.DBId, StringType, arg)
 	key := object.GetKeyBytes()
 	err := c.getTxnObject(txn, key, object, false)
-	if err == store.KeyNotFound || err == xerror.WrongTypeError {
+	if err == store.KeyNotFound {
 		return nil, nil
 	} else if err != nil {
 		return nil, err

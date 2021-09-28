@@ -6,6 +6,41 @@ import (
 	"strings"
 )
 
+type Error interface {
+	Error() string
+	SetError(string)
+	StructError() string
+}
+
+type RedisError struct {
+	Prefix string
+	Name   string
+}
+
+func (e *RedisError) Error() string {
+	return e.Name
+}
+
+func (e *RedisError) StructError() string {
+	return fmt.Sprintf("%s %s", e.Prefix, e.Name)
+}
+
+func (e *RedisError) SetError(name string) {
+	e.Name = name
+}
+
+func ScriptNew(text string) *RedisError {
+	return &RedisError{Prefix: "NOSCRIPT", Name: text}
+}
+
+func RedisNew(text string) *RedisError {
+	return &RedisError{Prefix: "ERR", Name: text}
+}
+
+func WrongTypeNew(text string) *RedisError {
+	return &RedisError{Prefix: "WRONGTYPE", Name: text}
+}
+
 var (
 	ErrWatchInsideMulti     = "ERR WATCH inside MULTI is not allowed"
 	ErrMultiNested          = "ERR MULTI calls can not be nested"
@@ -14,74 +49,75 @@ var (
 	ErrMultiErr             = "ERR without MULTI"
 	ErrTransactionDiscarded = "EXECABORT Transaction discarded because of previous errors."
 
-	ErrNotInteger = errors.New("value is not an integer or out of range")
-	// ErrXXNXCompat          = errors.New("XX and NX options at the same time are not compatible")
-	ErrGTLTCompat          = errors.New("GT and LT options at the same time are not compatible")
-	ErrGTLTNXCompat        = errors.New("NX and XX, GT or LT options at the same time are not compatible")
-	ErrInvalidFloat        = errors.New("value is not a valid float")
-	ErrNotPositiveInteger  = errors.New("value is out of range, must be positive")
-	ErrRankZero            = errors.New("RANK can't be zero: use 1 to start from the first match, 2 from the second, ...")
-	ErrBitFieldType        = errors.New("Invalid bitfield type. Use something like i16 u8. Note that u64 is not supported but i64 is.")
-	ErrNotFloat            = errors.New("value is not a valid float")
-	ErrOffset              = errors.New("offset is out of range")
-	ErrFloatInfinity       = errors.New("increment would produce NaN or Infinity")
-	ErrNumberGreater       = errors.New("Number of keys can't be greater than number of args")
-	ErrNumberNegative      = errors.New("Number of keys can't be negative")
-	ErrCountNegative       = errors.New("COUNT can't be negative")
-	ErrTimeoutNegative     = errors.New("timeout is negative")
-	ErrLuaInvalidType      = errors.New("lua invalid type")
-	ErrSyntax              = errors.New("syntax error")
-	ErrMinMaxString        = errors.New("min or max not valid string range item")
-	ErrNotExpire           = errors.New("not expire")
-	WrongTypeError         = errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
-	ErrNoMatchScript       = errors.New("No matching script. Please use EVAL.")
-	ErrReadOnlyScript      = errors.New("Write commands are not allowed from read-only scripts.")
-	UnsupportCmdFromScript = errors.New("Unsupported commands from scripts.")
-	UnsupportFlushOption   = errors.New("SCRIPT FLUSH only support SYNC|ASYNC option.")
-	WRONGPASS              = errors.New("WRONGPASS invalid username-password pair or user is disabled.")
-	ErrAuthentication      = errors.New("Authentication required.")
-	ErrExceedMaxSize       = errors.New("exceeds maximum allowed size")
+	ErrNotInteger          = RedisNew("value is not an integer or out of range")
+	ErrGTLTCompat          = RedisNew("GT and LT options at the same time are not compatible")
+	ErrGTLTNXCompat        = RedisNew("NX and XX, GT or LT options at the same time are not compatible")
+	ErrInvalidFloat        = RedisNew("value is not a valid float")
+	ErrNotPositiveInteger  = RedisNew("value is out of range, must be positive")
+	ErrRankZero            = RedisNew("RANK can't be zero: use 1 to start from the first match, 2 from the second, ...")
+	ErrBitFieldType        = RedisNew("Invalid bitfield type. Use something like i16 u8. Note that u64 is not supported but i64 is.")
+	ErrNotFloat            = RedisNew("value is not a valid float")
+	ErrOffset              = RedisNew("offset is out of range")
+	ErrFloatInfinity       = RedisNew("increment would produce NaN or Infinity")
+	ErrNumberGreater       = RedisNew("Number of keys can't be greater than number of args")
+	ErrNumberNegative      = RedisNew("Number of keys can't be negative")
+	ErrCountNegative       = RedisNew("COUNT can't be negative")
+	ErrTimeoutNegative     = RedisNew("timeout is negative")
+	ErrLuaInvalidType      = RedisNew("lua invalid type")
+	ErrSyntax              = RedisNew("syntax error")
+	ErrMinMaxString        = RedisNew("min or max not valid string range item")
+	ErrNotExpire           = RedisNew("not expire")
+	WrongTypeErr           = WrongTypeNew("Operation against a key holding the wrong kind of value")
+	ErrNoMatchScript       = ScriptNew("No matching script. Please use EVAL.")
+	ErrReadOnlyScript      = RedisNew("Write commands are not allowed from read-only scripts.")
+	CallNeedArgsScript     = RedisNew("Please specify at least one argument for redis.call()")
+	UnsupportCmdFromScript = RedisNew("This Redis command is not allowed from scripts")
+	UnknownCmdFromScript   = RedisNew("Unknown Redis command called from Lua script")
+	UnsupportFlushOption   = RedisNew("SCRIPT FLUSH only support SYNC|ASYNC option.")
+	WRONGPASS              = RedisNew("WRONGPASS invalid username-password pair or user is disabled.")
+	ErrAuthentication      = RedisNew("Authentication required.")
+	ErrExceedMaxSize       = RedisNew("exceeds maximum allowed size")
 
-	MissingTxn        = errors.New("missing transcation")
-	InvalidTxn        = errors.New("invalid transcation")
-	WrongNumberOfArgs = errors.New("wrong number of arguments")
+	MissingTxn        = RedisNew("missing transcation")
+	InvalidTxn        = RedisNew("invalid transcation")
+	WrongNumberOfArgs = RedisNew("wrong number of arguments")
 
-	ErrValueTooShort       = errors.New("value is too short")
-	ErrKeyTooLong          = errors.New("key is too long")
-	ErrValueTooLong        = errors.New("value is too long")
-	ErrNotTTL              = errors.New("value is not ttl")
-	ErrTTLInvalidValueType = errors.New("ttl invalid value type")
+	ErrValueTooShort       = RedisNew("value is too short")
+	ErrKeyTooLong          = RedisNew("key is too long")
+	ErrValueTooLong        = RedisNew("value is too long")
+	ErrNotTTL              = RedisNew("value is not ttl")
+	ErrTTLInvalidValueType = RedisNew("ttl invalid value type")
 
-	ErrNoLuasAvailable         = errors.New("no lua available")
-	ErrNotSupport              = errors.New("not support")
-	InvalidPassword            = errors.New("The password hash must be exactly 64 characters and contain only lowercase hexadecimal characters")
-	ErrNotExistPassword        = errors.New("The password you are trying to remove from the user does not exist")
-	ErrTooManyPasswords        = errors.New("Too many passwords")
-	ErrSubscribeMessageTooSlow = errors.New("subscribe message too slow")
-	UnknownCommandInACL        = errors.New("Unknown command or category name in ACL")
-	ErrCheckFailed             = errors.New("check failed")
-	InvalidJsonError           = errors.New("invalid json")
-	InvalidJsonPathError       = errors.New("invalid json path")
-	InvalidCursor              = errors.New("invalid cursor")
-	InvalidChannel             = errors.New("invalid channel name")
-	InvalidPartition           = errors.New("invalid partition")
-	ErrOutOfRange              = errors.New("index out of range")
-	ErrOverflow                = errors.New("increment or decrement would overflow")
-	ErrNotFound                = errors.New("value not found")
-	TimeOut                    = errors.New("time out")
-	ErrXADDID                  = errors.New("The ID specified in XADD is equal or smaller than the target stream top item")
-	InvalidStreamID            = errors.New("Invalid stream ID specified as stream command argument")
-	XgroupRequireExist         = errors.New("The XGROUP subcommand requires the key to exist. Note that for CREATE you may want to use the MKSTREAM option to create an empty stream automatically.")
-	XgroupAlreadyExist         = errors.New("BUSYGROUP Consumer Group name already exists")
+	ErrNoLuasAvailable         = RedisNew("no lua available")
+	ErrNotSupport              = RedisNew("not support")
+	InvalidPassword            = RedisNew("The password hash must be exactly 64 characters and contain only lowercase hexadecimal characters")
+	ErrNotExistPassword        = RedisNew("The password you are trying to remove from the user does not exist")
+	ErrTooManyPasswords        = RedisNew("Too many passwords")
+	ErrSubscribeMessageTooSlow = RedisNew("subscribe message too slow")
+	UnknownCommandInACL        = RedisNew("Unknown command or category name in ACL")
+	ErrCheckFailed             = RedisNew("check failed")
+	InvalidJsonError           = RedisNew("invalid json")
+	InvalidJsonPathError       = RedisNew("invalid json path")
+	InvalidCursor              = RedisNew("invalid cursor")
+	InvalidChannel             = RedisNew("invalid channel name")
+	InvalidPartition           = RedisNew("invalid partition")
+	ErrOutOfRange              = RedisNew("index out of range")
+	ErrOverflow                = RedisNew("increment or decrement would overflow")
+	ErrNotFound                = RedisNew("value not found")
+	TimeOut                    = RedisNew("time out")
+	ErrXADDID                  = RedisNew("The ID specified in XADD is equal or smaller than the target stream top item")
+	InvalidStreamID            = RedisNew("Invalid stream ID specified as stream command argument")
+	XgroupRequireExist         = RedisNew("The XGROUP subcommand requires the key to exist. Note that for CREATE you may want to use the MKSTREAM option to create an empty stream automatically.")
+	XgroupAlreadyExist         = RedisNew("BUSYGROUP Consumer Group name already exists")
 
-	InvalidOffset = errors.New("invalid offset")
-	InvalidLimit  = errors.New("invalid limit")
-	ErrClosed     = errors.New("closed")
-	ErrEmpty      = errors.New("emtpy")
+	InvalidOffset = RedisNew("invalid offset")
+	InvalidLimit  = RedisNew("invalid limit")
+	ErrClosed     = RedisNew("closed")
+	ErrEmpty      = RedisNew("emtpy")
 )
 
 func WrongArgsString(command string) string {
-	return fmt.Sprintf("ERR wrong number of arguments for '%s' command", command)
+	return fmt.Sprintf("wrong number of arguments for '%s' command", command)
 }
 
 func NotExistKey(key string) string {
@@ -102,7 +138,7 @@ func InvalidExpire(command string) string {
 }
 
 func InvalidCommand(command string) string {
-	return fmt.Sprintf("ERR Can't execute '%s': "+
+	return fmt.Sprintf("Can't execute '%s': "+
 		"only SUBSCRIBE / UNSUBSCRIBE / PING / QUIT are "+
 		"allowed in this context", command)
 }
@@ -112,27 +148,27 @@ func WrongModifier(command, modifier string, err error) error {
 }
 
 func NotExistKeyError(key string) error {
-	return errors.New(NotExistKey(key))
+	return RedisNew(NotExistKey(key))
 }
 
 func UnsupportedOptionError(opt []byte) error {
-	return errors.New(UnsupportedOption(opt))
+	return RedisNew(UnsupportedOption(opt))
 }
 
 func WrongArgsError(command string) error {
-	return errors.New(WrongArgsString(command))
+	return RedisNew(WrongArgsString(command))
 }
 
 func UnknownCommandError(command string) error {
-	return errors.New(UnknownCommand(command))
+	return RedisNew(UnknownCommand(command))
 }
 
 func InvalidExpireError(command string) error {
-	return errors.New(InvalidExpire(command))
+	return RedisNew(InvalidExpire(command))
 }
 
 func InvalidCommandError(command string) error {
-	return errors.New(InvalidCommand(command))
+	return RedisNew(InvalidCommand(command))
 }
 
 func WrongSubArgsString(command, help string) string {
@@ -141,9 +177,14 @@ func WrongSubArgsString(command, help string) string {
 }
 
 func WrongSubArgsError(command, help string) error {
-	return errors.New(WrongSubArgsString(command, help))
+	return RedisNew(WrongSubArgsString(command, help))
 }
 
 func MakeSafeErr(err error) error {
-	return errors.New(strings.Replace(err.Error(), "\n", `\n`, -1))
+	msg := strings.Replace(err.Error(), "\n", `\n`, -1)
+	return RedisNew(msg)
+}
+
+func MakeSafe(err string) error {
+	return errors.New(strings.Replace(err, "\n", `\n`, -1))
 }

@@ -511,7 +511,8 @@ func AppendAny(b []byte, v interface{}) []byte {
 	case nil:
 		b = AppendNull(b)
 	case error:
-		b = AppendError(b, prefixERRIfNeeded(v.Error()))
+		// b = AppendError(b, prefixERRIfNeeded(v.Error()))
+		b = AppendError(b, v.Error())
 	case string:
 		b = AppendBulkString(b, v)
 	case []byte:

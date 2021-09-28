@@ -1254,6 +1254,7 @@ func (c *Command) RPopLPopHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) ListHandle(txn *store.Txn, args [][]byte, lFunc ListFunc, opt *lOpt) (interface{}, error) {
+	utils.ZapLog.Debug("ListHandle", zap.ByteStrings("args", args), zap.Any("opt", opt))
 	object := NewObject(txn.UserId, txn.DBId, ListType, args[0])
 	key := object.GetKeyBytes()
 	err := c.getTxnObject(txn, key, object, true)

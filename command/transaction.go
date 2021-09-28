@@ -2,6 +2,7 @@ package command
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -43,6 +44,7 @@ func (c *Command) SingleHandler(conn *redcon.Conn, txn *store.Txn, txnHandle Txn
 	}
 	defer txn.Rollback()
 	resp := txnHandle(txn, args)
+	utils.ZapLog.Debug("SingleHandler", zap.Any("resp", resp), zap.Error(txn.Err))
 	if txn.Err != nil {
 		err, ok := resp.(error)
 		if ok {
@@ -321,5 +323,11 @@ func (c *Command) UnWatchHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func writerConnError(conn *redcon.Conn, err error) {
-	conn.WriteError("ERR " + err.Error())
+	utils.ZapLog.Debug("writerConnError", zap.Any("error", err), zap.Any("type", reflect.TypeOf(err)))
+	switch e := err.(type) {
+	case *xerror.RedisError:
+		conn.WriteError(e.StructError())
+	default:
+		conn.WriteError(err.Error())
+	}
 }

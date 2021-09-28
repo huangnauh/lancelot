@@ -3,7 +3,7 @@ package command
 import (
 	"bytes"
 	"context"
-	"errors"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -173,7 +173,7 @@ func errResult(ls *lua.LState, err error, raiseErr bool) int {
 func (c *Command) callTxn(txn *store.Txn, ls *lua.LState, raiseErr bool) int {
 	scriptCmd, args := getArgs(ls)
 	if len(args) == 0 {
-		err := txn.SetError(xerror.WrongArgsError(scriptCmd))
+		err := txn.SetError(xerror.CallNeedArgsScript)
 		return errResult(ls, err, raiseErr)
 	}
 
@@ -181,7 +181,9 @@ func (c *Command) callTxn(txn *store.Txn, ls *lua.LState, raiseErr bool) int {
 	if err != nil {
 		return errResult(ls, err, raiseErr)
 	}
-	ls.Push(covertToLua(ls, res))
+	val := covertToLua(ls, res)
+	utils.ZapLog.Debug("callTxn", zap.Any("res", res), zap.Any("val", val))
+	ls.Push(val)
 	return 1
 }
 
@@ -189,7 +191,7 @@ func (c *Command) luaCall(txn *store.Txn, scriptCmd, cmd string, args [][]byte) 
 	cmd = strings.ToLower(cmd)
 	txnHandle, ok := c.TxnHandle[cmd]
 	if !ok {
-		return nil, xerror.UnsupportCmdFromScript
+		return nil, xerror.UnknownCmdFromScript
 	}
 	if txnHandle.NoSupportScript {
 		return nil, xerror.UnsupportCmdFromScript
@@ -198,7 +200,11 @@ func (c *Command) luaCall(txn *store.Txn, scriptCmd, cmd string, args [][]byte) 
 	if readonly && !txnHandle.ReadOnly {
 		return nil, xerror.ErrReadOnlyScript
 	}
-	return txnHandle.Func(txn, args), nil
+	resp := txnHandle.Func(txn, args)
+	if txn.Err != nil {
+		return nil, txn.Err
+	}
+	return resp, nil
 }
 
 func errorReply(ls *lua.LState) int {
@@ -253,7 +259,7 @@ func (c *Command) ScriptLoad(txn *store.Txn, args [][]byte) interface{} {
 func (c *Command) ScriptExists(txn *store.Txn, args [][]byte) interface{} {
 	results := make([]int, len(args))
 	for i := range args {
-		_, ok := c.scriptMap.Get(utils.B2S(args[i]))
+		_, ok := c.scriptMap.Get(strings.ToLower(utils.B2S(args[i])))
 		if ok {
 			results[i] = 1
 		} else {
@@ -312,7 +318,7 @@ func (c *Command) ScriptHandle(txn *store.Txn, args [][]byte) interface{} {
 // EVAL_RO script numkeys key [key ...] arg [arg ...]
 func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command string) interface{} {
 	if len(args) < 2 {
-		return txn.SetWrongArgs(EVAL_COMMAND)
+		return txn.SetWrongArgs(script_command)
 	}
 	script := args[0]
 	numKeysStr := string(args[1])
@@ -349,6 +355,12 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 		argsTable.Append(lua.LString(luaArgs[i]))
 	}
 
+	// FIXME:
+	originDB := txn.DBId
+	defer func() {
+		txn.DBId = originDB
+	}()
+
 	var exports = map[string]lua.LGFunction{
 		"call": func(ls *lua.LState) int {
 			return c.callTxn(txn, ls, true)
@@ -378,7 +390,7 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 
 	sha := strings.HasPrefix(script_command, EVALSHA_COMMAND)
 	if sha {
-		shaSum = utils.B2S(script)
+		shaSum = strings.ToLower(utils.B2S(script))
 	} else {
 		shaSum = utils.Sha1Sum(script)
 	}
@@ -408,14 +420,16 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 	}
 	ret := luaState.Get(-1)
 	luaState.Pop(1)
-	return covertLuaValue(ret)
+	val := covertLuaValue(ret)
+	utils.ZapLog.Debug("covert to go", zap.Any("ret", ret), zap.Any("val", val))
+	return val
 }
 
 func covertToLua(L *lua.LState, val interface{}) lua.LValue {
 	utils.ZapLog.Debug("covert to lua", zap.Any("val", val))
 	switch val := val.(type) {
 	case nil:
-		return lua.LNil
+		return lua.LBool(false)
 	case redcon.SimpleInt:
 		return lua.LNumber(val)
 	case int:
@@ -428,22 +442,32 @@ func covertToLua(L *lua.LState, val interface{}) lua.LValue {
 		return lua.LString(val)
 	case []byte:
 		return lua.LString(string(val))
+	case *xerror.RedisError:
+		luaTable := L.CreateTable(0, 1)
+		luaTable.RawSetString("err", lua.LString(val.StructError()))
+		return luaTable
 	case error:
 		luaTable := L.CreateTable(0, 1)
 		luaTable.RawSetString("err", lua.LString(val.Error()))
 		return luaTable
-	case []interface{}:
-		luaTable := L.CreateTable(len(val), 0)
-		for _, item := range val {
-			luaTable.Append(covertToLua(L, item))
-		}
-		return luaTable
 	default:
-		return lua.LNil
+		vv := reflect.ValueOf(val)
+		if vv.Kind() == reflect.Slice {
+			luaTable := L.CreateTable(vv.Len(), 0)
+			for i := 0; i < vv.Len(); i++ {
+				vvv := covertToLua(L, vv.Index(i).Interface())
+				utils.ZapLog.Debug("covert to lua", zap.Any("value", vvv), zap.Any("index", vv.Index(i).Interface()))
+				luaTable.Append(vvv)
+			}
+			utils.ZapLog.Debug("covert to lua", zap.Int("value", vv.Len()), zap.Int("table", luaTable.Len()))
+			return luaTable
+		}
+		return lua.LBool(false)
 	}
 }
 
 func covertLuaValue(val lua.LValue) interface{} {
+	utils.ZapLog.Debug("covert to go", zap.Any("val", val))
 	switch val.Type() {
 	case lua.LTNil:
 		return nil
@@ -476,7 +500,7 @@ func covertLuaValue(val lua.LValue) interface{} {
 				case "ok":
 					singleValue = SimpleString(lv.String())
 				case "err":
-					singleValue = errors.New(lv.String())
+					singleValue = xerror.MakeSafe(lv.String())
 				}
 			}
 		})
