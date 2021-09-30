@@ -158,6 +158,11 @@ func (c *Command) PingHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) > 1 {
 		return txn.SetWrongArgs(PING_COMMAND)
 	}
+	num := c.luapool.GetWorkingScript()
+	if num >= c.cfg.Lua.MaxPoolSize {
+		return BUSYPONG
+	}
+
 	if len(args) == 0 {
 		return PONG
 	}

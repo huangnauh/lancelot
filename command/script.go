@@ -7,9 +7,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
+	"gitlab.s.upyun.com/platform/lancelot/lua/bit"
 	"gitlab.s.upyun.com/platform/lancelot/lua/cjson"
 	"gitlab.s.upyun.com/platform/lancelot/lua/cmsgpack"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
@@ -21,6 +23,28 @@ import (
 
 const (
 	ScriptHelpCommand = "SCRIPT HELP"
+	StrictScript      = `local dbg=debug
+local mt = {}
+setmetatable(_G, mt)
+mt.__newindex = function (t, n, v)
+    if dbg.getinfo(2) then
+        local w = dbg.getinfo(2, "S").what
+        if w ~= "C" then
+            error("Script attempted to create global variable '" .. tostring(n) .. "'", 2)
+        end
+    end
+    rawset(t, n, v)
+end
+mt.__index = function (t, n)
+    if dbg.getinfo(2) then
+		local w = dbg.getinfo(2, "S").what
+		if w ~= "C" then
+        	error("Script attempted to access nonexistent global variable '" ..tostring(n) .. "'", 2);
+		end
+    end
+    return rawget(t, n)
+end
+debug = nil`
 )
 
 type LuaLib struct {
@@ -41,6 +65,7 @@ var (
 		{lua.ChannelLibName, lua.OpenChannel},
 		{lua.CoroutineLibName, lua.OpenCoroutine},
 		{cjson.LibName, cjson.OpenJson},
+		{bit.LibName, bit.OpenBit},
 		{cmsgpack.LibName, cmsgpack.OpenMsgpack},
 	}
 )
@@ -65,16 +90,19 @@ func (m *LScriptMap) Put(key string, script *lua.FunctionProto) {
 
 type LStatePool struct {
 	sync.Mutex
-	saved []*lua.LState
-	cfg   *config.Lua
-	total int
+	saved   []*lua.LState
+	clock   sync.RWMutex
+	cancels map[*lua.LState]context.CancelFunc
+	cfg     *config.Lua
+	total   int
 }
 
 func NewLStatePool(cfg *config.Lua) *LStatePool {
 	l := &LStatePool{
-		saved: make([]*lua.LState, cfg.InitPoolSize),
-		cfg:   cfg,
-		total: cfg.InitPoolSize,
+		saved:   make([]*lua.LState, cfg.InitPoolSize),
+		cancels: make(map[*lua.LState]context.CancelFunc),
+		cfg:     cfg,
+		total:   cfg.InitPoolSize,
 	}
 	for i := 0; i < cfg.InitPoolSize; i++ {
 		l.saved[i] = l.New()
@@ -143,7 +171,42 @@ func (l *LStatePool) New() *lua.LState {
 		L.Push(lua.LString(lib.libName))
 		L.Call(1, 0)
 	}
+	err := L.DoString(StrictScript)
+	if err != nil {
+		utils.ZapLog.Error("lua strict script error", zap.Error(err))
+	}
 	return L
+}
+
+func (l *LStatePool) SetCancel(ls *lua.LState, cancel context.CancelFunc) {
+	utils.ZapLog.Info("set script cancel")
+	l.clock.Lock()
+	l.cancels[ls] = cancel
+	l.clock.Unlock()
+}
+
+func (l *LStatePool) RemoveCancel(ls *lua.LState) {
+	utils.ZapLog.Info("remove script cancel")
+	l.clock.Lock()
+	delete(l.cancels, ls)
+	l.clock.Unlock()
+}
+
+func (l *LStatePool) GetWorkingScript() int {
+	l.clock.RLock()
+	num := len(l.cancels)
+	l.clock.RUnlock()
+	return num
+}
+
+func (l *LStatePool) GetCancels() []context.CancelFunc {
+	val := make([]context.CancelFunc, 0)
+	l.clock.RLock()
+	for _, cancel := range l.cancels {
+		val = append(val, cancel)
+	}
+	l.clock.RUnlock()
+	return val
 }
 
 func (l *LStatePool) Put(L *lua.LState) {
@@ -153,6 +216,14 @@ func (l *LStatePool) Put(L *lua.LState) {
 }
 
 func (l *LStatePool) Shutdown() {
+	l.clock.Lock()
+	for _, cancel := range l.cancels {
+		cancel()
+	}
+	l.clock.Unlock()
+
+	time.Sleep(time.Millisecond * 100)
+
 	l.Lock()
 	for _, L := range l.saved {
 		L.Close()
@@ -221,6 +292,9 @@ func statusReply(ls *lua.LState) int {
 	return 1
 }
 func sha1hex(ls *lua.LState) int {
+	if ls.GetTop() != 1 {
+		ls.ArgError(1, "wrong number of arguments")
+	}
 	shaSum := utils.Sha1Sum(utils.S2B(ls.ToString(1)))
 	ls.Push(lua.LString(shaSum))
 	return 1
@@ -231,6 +305,7 @@ func (c *Command) ScriptLoad(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongSubArgs(LOAD_COMMAND, ScriptHelpCommand)
 	}
+	utils.ZapLog.Info("script load", zap.String("script", utils.B2S(args[0])))
 	luaState, err := c.luapool.Get()
 	if err != nil {
 		return txn.SetError(err)
@@ -239,6 +314,8 @@ func (c *Command) ScriptLoad(txn *store.Txn, args [][]byte) interface{} {
 
 	ctx, cancel := context.WithTimeout(context.Background(), c.cfg.Lua.Timeout)
 	defer cancel()
+	c.luapool.SetCancel(luaState, cancel)
+	defer c.luapool.RemoveCancel(luaState)
 	luaState.SetContext(ctx)
 	defer luaState.RemoveContext()
 	script := args[0]
@@ -289,6 +366,14 @@ func (c *Command) ScriptFlush(txn *store.Txn, args [][]byte) interface{} {
 
 // SCRIPT KILL
 func (c *Command) ScriptKill(txn *store.Txn, args [][]byte) interface{} {
+	utils.ZapLog.Info("Script Kill")
+	if len(args) != 0 {
+		return txn.SetWrongSubArgs(KILL_COMMAND, ScriptHelpCommand)
+	}
+	cancels := c.luapool.GetCancels()
+	for _, cancel := range cancels {
+		cancel()
+	}
 	return OK
 }
 
@@ -320,13 +405,15 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 	if len(args) < 2 {
 		return txn.SetWrongArgs(script_command)
 	}
+	utils.ZapLog.Info("evalHandle", zap.String("script", utils.B2S(args[0])))
 	script := args[0]
 	numKeysStr := string(args[1])
-	numkeysUInt64, err := strconv.ParseUint(numKeysStr, 10, 64)
+	numkeysInt64, err := strconv.ParseInt(numKeysStr, 10, 64)
 	if err != nil {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
-	numkeys := int(numkeysUInt64)
+
+	numkeys := int(numkeysInt64)
 	if numkeys < 0 {
 		return txn.SetError(xerror.ErrNumberNegative)
 	}
@@ -342,6 +429,8 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 	defer c.luapool.Put(luaState)
 	ctx, cancel := context.WithTimeout(context.Background(), c.cfg.Lua.Timeout)
 	defer cancel()
+	c.luapool.SetCancel(luaState, cancel)
+	defer c.luapool.RemoveCancel(luaState)
 	luaState.SetContext(ctx)
 	defer luaState.RemoveContext()
 	keysTable := luaState.CreateTable(int(numkeys), 0)
@@ -416,6 +505,9 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 	}
 	luaState.Push(fn)
 	if err := luaState.PCall(0, 1, nil); err != nil {
+		if err == context.Canceled {
+			return txn.SetError(xerror.ErrScriptKillED)
+		}
 		return txn.SetError(xerror.MakeSafeErr(err))
 	}
 	ret := luaState.Get(-1)

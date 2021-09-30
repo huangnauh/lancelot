@@ -66,14 +66,14 @@ func apiEncode(L *lua.LState) int {
 }
 
 var (
-	errNested      = errors.New("cannot encode recursively nested tables to JSON")
-	errInvalidKeys = errors.New("cannot encode mixed or invalid key types")
+	errNested      = errors.New("Cannot serialise, excessive nesting")
+	errInvalidKeys = errors.New("Cannot serialise mixed or invalid key types")
 )
 
 type invalidTypeError lua.LValueType
 
 func (i invalidTypeError) Error() string {
-	return `cannot encode ` + lua.LValueType(i).String() + ` to JSON`
+	return `Cannot serialise ` + lua.LValueType(i).String() + ` to JSON`
 }
 
 // Encode returns the JSON encoding of value.

@@ -41,6 +41,10 @@ func WrongTypeNew(text string) *RedisError {
 	return &RedisError{Prefix: "WRONGTYPE", Name: text}
 }
 
+func BusyNew(text string) *RedisError {
+	return &RedisError{Prefix: "BUSY", Name: text}
+}
+
 var (
 	ErrWatchInsideMulti     = "ERR WATCH inside MULTI is not allowed"
 	ErrMultiNested          = "ERR MULTI calls can not be nested"
@@ -77,6 +81,8 @@ var (
 	WRONGPASS              = RedisNew("WRONGPASS invalid username-password pair or user is disabled.")
 	ErrAuthentication      = RedisNew("Authentication required.")
 	ErrExceedMaxSize       = RedisNew("exceeds maximum allowed size")
+	ErrBusyScript          = BusyNew("Redis is busy running a script. You can only call SCRIPT KILL or SHUTDOWN NOSAVE.")
+	ErrScriptKillED        = RedisNew("Script killed by user with SCRIPT KILL...")
 
 	MissingTxn        = RedisNew("missing transcation")
 	InvalidTxn        = RedisNew("invalid transcation")
@@ -172,7 +178,7 @@ func InvalidCommandError(command string) error {
 }
 
 func WrongSubArgsString(command, help string) string {
-	return fmt.Sprintf("ERR Unknown subcommand or wrong number of arguments for '%s'. Try %s.",
+	return fmt.Sprintf("Unknown subcommand or wrong number of arguments for '%s'. Try %s.",
 		command, help)
 }
 
@@ -181,10 +187,10 @@ func WrongSubArgsError(command, help string) error {
 }
 
 func MakeSafeErr(err error) error {
-	msg := strings.Replace(err.Error(), "\n", `\n`, -1)
+	msg := strings.Replace(err.Error(), "\n", ` `, -1)
 	return RedisNew(msg)
 }
 
 func MakeSafe(err string) error {
-	return errors.New(strings.Replace(err, "\n", `\n`, -1))
+	return errors.New(strings.Replace(err, "\n", ` `, -1))
 }

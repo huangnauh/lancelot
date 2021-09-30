@@ -41,4 +41,5 @@ require (
 replace (
 	github.com/go-redis/redis/v8 v8.11.2 => ../redis/v8
 	github.com/golang/protobuf => github.com/golang/protobuf v1.3.4
+	github.com/yuin/gopher-lua v0.0.0-20210529063254-f4c35e4016d9 => github.com/huangnauh/gopher-lua v0.0.0-20210930062039-32ec5e06c52a
 )

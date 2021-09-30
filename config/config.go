@@ -105,8 +105,8 @@ var cfg = &Config{
 		TTLBatchLimit: 100,
 	},
 	Lua: Lua{
-		InitPoolSize: 10,
-		MaxPoolSize:  100,
+		InitPoolSize: 1,
+		MaxPoolSize:  1,
 		Timeout:      time.Minute,
 	},
 	Auth: Auth{

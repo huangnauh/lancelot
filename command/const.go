@@ -202,6 +202,9 @@ const (
 	DBSIZE_COMMAND           = "dbsize"
 	TIME_COMMAND             = "time"
 	ACL_COMMAND              = "acl"
+	CONFIG_COMMAND           = "config"
+	RESETSTAT_COMMAND        = "resetstat"
+	REWRITE_COMMAND          = "rewrite"
 	CAT_COMMAND              = "cat"
 	DELUSER_COMMAND          = "deluser"
 	GENPASS_COMMAND          = "genpass"
@@ -229,6 +232,7 @@ const (
 	Queued      = redcon.SimpleString("QUEUED")
 	PONG        = redcon.SimpleString("PONG")
 	EmptyString = redcon.SimpleString("")
+	BUSYPONG    = redcon.SimpleString("BUSY Redis is busy running a script. You can only call SCRIPT KILL or SHUTDOWN NOSAVE.")
 
 	DataPrefix   PrefixType = 'd'
 	UserPrefix   PrefixType = 'u'

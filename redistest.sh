@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TAGS="-needs:repl -needs:debug -needs:stralgo -needs:bitfield -large-memory -needs:config -needs:config-maxmemory -needs:stream  -needs:encoding -needs:resp3"
+TAGS="-needs:repl -needs:debug -needs:stralgo -needs:bitfield -large-memory -needs:config -needs:config-maxmemory -needs:stream  -needs:encoding -needs:resp3 -needs:blmpop -needs:resp3 -needs:aof -needs:info"
 ./runtest --host 127.0.0.1 --port 6379 --single unit/type/string --tags "$TAGS" --ignore-encoding
 ./runtest --host 127.0.0.1 --port 6379 --single unit/type/incr --tags "$TAGS" --ignore-encoding
 ./runtest --host 127.0.0.1 --port 6379 --single unit/type/hash --tags "$TAGS" --ignore-encoding
@@ -13,3 +13,4 @@ TAGS="-needs:repl -needs:debug -needs:stralgo -needs:bitfield -large-memory -nee
 ./runtest --host 127.0.0.1 --port 6379 --single unit/scan --tags "$TAGS" --ignore-encoding
 ./runtest --host 127.0.0.1 --port 6379 --single unit/multi --tags "$TAGS" --ignore-encoding
 ./runtest --host 127.0.0.1 --port 6379 --single unit/expire --tags "$TAGS" --ignore-encoding
+./runtest --host 10.0.5.137 --port 6379 --single unit/scripting --tags "$TAGS" --ignore-encoding

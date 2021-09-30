@@ -1,3 +1,4 @@
 /redis-server
 /redis.pid
 .vscode
+__debug_bin

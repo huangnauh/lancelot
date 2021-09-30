@@ -435,6 +435,11 @@ func NewCommand(cfg *config.Config) *Command {
 			ID:   67,
 			Type: UserType,
 		},
+		CONFIG_COMMAND: {
+			Func: c.ConfigHandle,
+			ID:   68,
+			Type: UnknownType,
+		},
 		LINDEX_COMMAND: {
 			Func:     c.LIndexHandle,
 			ReadOnly: true,

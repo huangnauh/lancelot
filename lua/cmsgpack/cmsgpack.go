@@ -13,14 +13,14 @@ const (
 )
 
 var (
-	errNested      = errors.New("cannot encode recursively nested tables to msgpack")
-	errInvalidKeys = errors.New("cannot encode mixed or invalid key types")
+	errNested      = errors.New("Cannot serialise, excessive nesting")
+	errInvalidKeys = errors.New("Cannot serialise mixed or invalid key types")
 )
 
 type invalidTypeError lua.LValueType
 
 func (i invalidTypeError) Error() string {
-	return `cannot encode ` + lua.LValueType(i).String() + ` to msgpack`
+	return `Cannot serialise ` + lua.LValueType(i).String() + ` to msgpack`
 }
 
 func Preload(L *lua.LState) {
