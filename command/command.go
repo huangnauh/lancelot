@@ -1069,6 +1069,10 @@ func (c *Command) watchLuaStatePool() {
 	}
 }
 
+func (c *Command) GetCachedScript() int {
+	return c.scriptMap.Len()
+}
+
 func (c *Command) GetCursor(key string) ([]byte, bool) {
 	utils.ZapLog.Debug("GetCursor", zap.String("key", key))
 	v, err := c.cache.Get(utils.S2B(key))

@@ -33,14 +33,14 @@ type Manager struct {
 	wg           sync.WaitGroup
 }
 
-func NewManager(etcdCli *clientv3.Client, id, key string) *Manager {
+func NewManager(etcdCli *clientv3.Client, id string) *Manager {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	return &Manager{
 		etcdCli:      etcdCli,
 		ctx:          ctx,
 		cancel:       cancelFunc,
 		id:           id,
-		key:          key,
+		key:          ManagerKey,
 		wg:           sync.WaitGroup{},
 		resumeLeader: true,
 		leaderChan:   make(chan bool, 1),
@@ -137,11 +137,13 @@ func (m *Manager) GetLeader(ctx context.Context) string {
 			}
 		case <-ctx.Done():
 			return ""
+		case <-m.ctx.Done():
+			return ""
 		}
 	}
 }
 
-func (m *Manager) runElection() error {
+func (m *Manager) RunElection() error {
 	if m.etcdCli == nil {
 		return nil
 	}

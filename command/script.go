@@ -75,6 +75,12 @@ type LScriptMap struct {
 	scripts map[string]*lua.FunctionProto
 }
 
+func (m *LScriptMap) Len() int {
+	m.RLock()
+	defer m.RUnlock()
+	return len(m.scripts)
+}
+
 func (m *LScriptMap) Get(key string) (script *lua.FunctionProto, ok bool) {
 	m.RLock()
 	script, ok = m.scripts[key]
@@ -505,8 +511,11 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 	}
 	luaState.Push(fn)
 	if err := luaState.PCall(0, 1, nil); err != nil {
-		if err == context.Canceled {
-			return txn.SetError(xerror.ErrScriptKillED)
+		emsg := err.Error()
+		if strings.Contains(emsg, "context canceled") {
+			return txn.SetError(xerror.ErrScriptKilled)
+		} else if strings.Contains(emsg, "context deadline exceeded") {
+			return txn.SetError(xerror.ErrScriptTimeout)
 		}
 		return txn.SetError(xerror.MakeSafeErr(err))
 	}

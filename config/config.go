@@ -12,7 +12,9 @@ import (
 type Store struct {
 	Path               string        `yaml:"path"`
 	Level              string        `yaml:"level"`
+	UUID               string        `yaml:"uuid"`
 	GCEnable           bool          `yaml:"gc-enable"`
+	GCConcurrency      int           `yaml:"gc-concurrency"`
 	SlowRequest        time.Duration `yaml:"slow-request"`
 	ReadTimeout        time.Duration `yaml:"read-timeout"`
 	ListTimeout        time.Duration `yaml:"list-timeout"`
@@ -79,6 +81,14 @@ type Config struct {
 	PubSub    PubSub    `yaml:"pubsub"`
 }
 
+func Hostname() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		panic(err)
+	}
+	return hostname
+}
+
 var cfg = &Config{
 	LogLevel:  "debug",
 	PIDFile:   "redis.pid",
@@ -90,6 +100,8 @@ var cfg = &Config{
 	Store: Store{
 		Path:               "mocktikv://",
 		Level:              "debug",
+		UUID:               Hostname(),
+		GCConcurrency:      1,
 		SlowRequest:        100 * time.Millisecond,
 		ReadTimeout:        time.Second,
 		ListTimeout:        time.Minute,

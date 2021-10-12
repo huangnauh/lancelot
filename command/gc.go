@@ -2,6 +2,7 @@ package command
 
 import (
 	"bytes"
+	"context"
 	"sync/atomic"
 	"time"
 
@@ -54,6 +55,14 @@ func (c *Command) touchGC() {
 }
 
 func (c *Command) tickGC() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	leader := c.client.GetLeader(ctx)
+	if leader != c.client.ID() {
+		utils.ZapLog.Debug("[gc] not leader, skip gc", zap.String("leader", leader), zap.String("id", c.client.ID()))
+		return
+	}
+
 	ts, err := c.client.CurrentVersion()
 	if err != nil {
 		utils.ZapLog.Error("[gc] get current version", zap.Error(err))

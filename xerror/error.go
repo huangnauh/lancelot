@@ -82,7 +82,8 @@ var (
 	ErrAuthentication      = RedisNew("Authentication required.")
 	ErrExceedMaxSize       = RedisNew("exceeds maximum allowed size")
 	ErrBusyScript          = BusyNew("Redis is busy running a script. You can only call SCRIPT KILL or SHUTDOWN NOSAVE.")
-	ErrScriptKillED        = RedisNew("Script killed by user with SCRIPT KILL...")
+	ErrScriptKilled        = RedisNew("Script killed by user with SCRIPT KILL...")
+	ErrScriptTimeout       = RedisNew("Script timeout")
 
 	MissingTxn        = RedisNew("missing transcation")
 	InvalidTxn        = RedisNew("invalid transcation")

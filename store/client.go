@@ -27,10 +27,14 @@ import (
 )
 
 type Client struct {
-	store kv.Storage
-	etcd  *clientv3.Client
-	conf  *config.Store
-	mock  bool
+	store   kv.Storage
+	etcd    *clientv3.Client
+	manager *Manager
+	conf    *config.Store
+	mock    bool
+	uuid    string
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 func Open(c *config.Config) (*Client, error) {
@@ -40,6 +44,15 @@ func Open(c *config.Config) (*Client, error) {
 		return nil, err
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
+	client := &Client{
+		conf:   conf,
+		uuid:   conf.UUID,
+		ctx:    ctx,
+		cancel: cancel,
+	}
+
 	if strings.EqualFold(u.Scheme, "mocktikv") {
 		var driver mockstore.MockTiKVDriver
 		s, err := driver.Open(conf.Path)
@@ -47,7 +60,9 @@ func Open(c *config.Config) (*Client, error) {
 			utils.ZapLog.Error("mocktikv driver open", zap.Error(err))
 			return nil, err
 		}
-		return &Client{s, nil, conf, true}, nil
+		client.store = s
+		client.mock = true
+		return client, nil
 	}
 
 	driver := tikv.Driver{}
@@ -61,10 +76,7 @@ func Open(c *config.Config) (*Client, error) {
 		return nil, err
 	}
 
-	client := &Client{
-		store: s,
-		conf:  conf,
-	}
+	client.store = s
 	if ebd, ok := s.(tikv.EtcdBackend); ok {
 		var addrs []string
 		var err error
@@ -92,13 +104,31 @@ func Open(c *config.Config) (*Client, error) {
 				return nil, err
 			}
 			client.etcd = cli
+
+			client.manager = NewManager(cli, client.uuid)
+			err = client.manager.RunElection()
+			if err != nil {
+				return nil, err
+			}
 		}
+	}
+
+	if client.conf.GCEnable {
+		go client.RunGC()
 	}
 	return client, nil
 }
 
 func (c *Client) NewTxn() *Txn {
 	return &Txn{client: c}
+}
+
+func (c *Client) ID() string {
+	return c.uuid
+}
+
+func (c *Client) GetLeader(ctx context.Context) string {
+	return c.manager.GetLeader(ctx)
 }
 
 func (c *Client) GetEtcdCtl() *clientv3.Client {
@@ -110,6 +140,8 @@ func (c *Client) Close() {
 	if c.etcd != nil {
 		c.etcd.Close()
 	}
+	c.manager.Cancel()
+	c.cancel()
 }
 
 func (c *Client) CurrentVersion() (uint64, error) {
