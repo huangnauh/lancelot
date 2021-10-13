@@ -37,7 +37,7 @@ func (c *Command) checkSingle(conn *redcon.Conn, unwatch bool) (*store.Txn, bool
 	return newTxn, true
 }
 
-func (c *Command) SingleHandler(conn *redcon.Conn, txn *store.Txn, txnHandle TxnHandle, args [][]byte) error {
+func (c *Command) SingleHandler(conn *redcon.Conn, txn *store.Txn, txnHandle TxnHandle, comma string, args [][]byte) error {
 	err := txn.Begin()
 	if err != nil {
 		return err
@@ -80,7 +80,7 @@ func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command
 	if single {
 		var err error
 		for i := 0; i < 3; i++ {
-			err = c.SingleHandler(conn, txn, txnHandle, args)
+			err = c.SingleHandler(conn, txn, txnHandle, comma, args)
 			if err == nil {
 				return
 			}

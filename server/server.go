@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	_ "net/http/pprof"
 	"strings"
 	"sync"
 	"time"
@@ -45,6 +46,11 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 			return
 		}
 	}
+
+	metric.inFlight.Inc()
+	defer metric.inFlight.Dec()
+	start := time.Now()
+
 	if handler, ok := s.Command.ConnHandle[comma]; ok {
 		utils.ZapLog.Debug("ConnHandle", zap.String("remote", conn.RemoteAddr()),
 			zap.ByteStrings("args", cmd.Args))
@@ -52,6 +58,9 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 	} else {
 		s.Command.TxnHandler(conn, comma, cmd)
 	}
+
+	metric.requestDuration.WithLabelValues(comma).Observe(time.Since(start).Seconds())
+	metric.requestTotal.WithLabelValues(comma).Inc()
 }
 
 func NewServer(cfg *config.Config) *Server {
@@ -61,6 +70,7 @@ func NewServer(cfg *config.Config) *Server {
 		Command: command.NewCommand(cfg),
 		closed:  make(chan bool),
 	}
+	// http.Handle("/metrics", promhttp.Handler())
 	s.rpc = grpc.NewGrpcServer(cfg)
 	lancepb.RegisterLanceServer(s.rpc.GRPCServer, s.Command)
 	s.red = redcon.NewServer("", s.ServeRESP, s.Accept, s.Close)

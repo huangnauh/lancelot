@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	GcSavedTs = "/lancelot/gcworker/saved_ts"
+	GcSavedTs = "/lancelot/gcworker/saved_command_safe_point"
 )
 
 func (c *Command) startGC() {

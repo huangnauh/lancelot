@@ -1,4 +1,4 @@
-log-level: info
+log-level: error
 pid-file: redis.pid
 host: 0.0.0.0
 redis-port: 6379
@@ -37,7 +37,7 @@ auth:
 key:
   scan-max-count: 10000
   cursor-expirate-second: 600
-  db-size-hash: 128
+  db-size-hash: 0
 rpc:
   timeout: 10s
   max_stream: 1000

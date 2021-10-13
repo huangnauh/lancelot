@@ -2,10 +2,12 @@ package command
 
 import (
 	"encoding/binary"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -168,6 +170,17 @@ func NewObject(user uint16, db uint8, typo ObjectType, key []byte) *Object {
 		Key:    key,
 		Type:   typo,
 		Hash:   DefaultHashMark,
+	}
+}
+
+func (o *Object) Info() string {
+	if o.IsSimple() {
+		return fmt.Sprintf("user:%d, db:%d, type: %s, ttl:%d, timestamp: %d, value: %s",
+			o.UserId, o.Db, string(o.Type), o.TTL, o.Timestamp, o.Value)
+	} else {
+		id, _ := uuid.FromBytes(o.Value)
+		return fmt.Sprintf("user:%d, db:%d, type: %s, ttl:%d, timestamp: %d, value: %s",
+			o.UserId, o.Db, string(o.Type), o.TTL, o.Timestamp, id.String())
 	}
 }
 
@@ -430,30 +443,53 @@ func (c *Command) ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 		return objectHelpInfo
 	}
 
-	if len(args) != 2 {
+	if len(args) < 2 {
 		return txn.SetWrongSubArgs(subcommand, ObjectHelpCommand)
 	}
 
-	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
+	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[1])
 	key := object.GetKeyBytes()
+	err := c.getTxnObject(txn, key, object, false)
+	if err != nil {
+		return nil
+	}
 	switch subcommand {
 	case ENCODING_COMMAND:
-		err := c.getTxnObject(txn, key, object, false)
-		if err != nil {
-			return nil
-		}
 		return SimpleString(object.ObjectEncoding().String())
 	case IDLETIME_COMMAND:
-		err := c.getTxnObject(txn, key, object, false)
-		if err != nil {
-			return nil
-		}
 		timepstamp := oracle.ExtractPhysical(object.Timestamp)
 		return SimpleInt((txn.Now - timepstamp) / 1000)
 	case REFCOUNT_COMMAND:
 		return SimpleInt(0)
 	case FREQ_COMMAND:
 		return SimpleInt(0)
+	case INFO_COMMAND:
+		return SimpleString(object.Info())
+	case SCAN_COMMAND:
+		info := object.Info()
+		rets := make([]string, 0)
+		rets = append(rets, info)
+		if !object.IsSimple() {
+			num := 10
+			if len(args) > 2 {
+				num, err = utils.GetPositiveInt(args[2])
+				if err != nil {
+					return SimpleString("")
+				}
+			}
+			start := object.GetValueBytes(nil)
+			end := utils.PrefixNext(start)
+			_ = txn.List(start, end, num, func(key, value []byte) bool {
+				if len(key) < len(start) {
+					return false
+				}
+				v := &Value{}
+				DecodeValue(value, v)
+				rets = append(rets, fmt.Sprintf("key: %s, value: %s", key[len(start):], v.Value))
+				return true
+			})
+		}
+		return rets
 	default:
 		return txn.SetWrongSubArgs(subcommand, ObjectHelpCommand)
 	}

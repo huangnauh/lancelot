@@ -15,7 +15,7 @@ import (
 const (
 	gcDefaultLifeTime    = time.Minute * 10
 	gcWorkerTickInterval = time.Minute
-	GcSafePoint          = "/lancelot/gcworker/saved_safe_point"
+	GcSafePoint          = "/lancelot/gcworker/saved_tikv_safe_point"
 )
 
 func (c *Client) RunGC() {

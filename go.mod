@@ -17,6 +17,7 @@ require (
 	github.com/onsi/gomega v1.15.0
 	github.com/pingcap/kvproto v0.0.0-20201215060142-f3dafca4c7fd
 	github.com/pingcap/tidb v1.1.0-beta.0.20201222032702-32d8cad845d6
+	github.com/prometheus/client_golang v1.11.0
 	github.com/spf13/cobra v1.1.3 // indirect
 	github.com/stretchr/testify v1.7.0
 	github.com/tidwall/btree v0.5.0
