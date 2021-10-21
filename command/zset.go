@@ -223,7 +223,7 @@ func (c *Command) ZAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	for ; i < len(args); i += 2 {
 		score, err := strconv.ParseFloat(utils.B2S(args[i]), 64)
 		if err != nil {
-			return txn.SetError(err)
+			return txn.SetError(xerror.ErrInvalidFloat)
 		}
 		members[utils.B2S(args[i+1])] = score
 	}
@@ -373,7 +373,7 @@ func (c *Command) zrank(txn *store.Txn, args [][]byte, reversed bool) (int64, bo
 		count++
 		return count < int64(c.cfg.Key.ScanMaxCount)
 	}
-	err = c.ListByScore(txn, object, args[0], -math.MaxFloat64, math.MaxFloat64, true, true, callback, reversed)
+	err = c.ListByScore(txn, object, args[0], math.Inf(-1), math.Inf(1), true, true, callback, reversed)
 	if err != nil {
 		return 0, false, err
 	}
@@ -460,7 +460,7 @@ func checkMinMaxScore(argMin, argMax []byte) (float64, float64, bool, bool, erro
 	if str == "inf" || str == "+inf" {
 		return min, max, includeMin, includeMax, xerror.ErrEmpty
 	} else if str == "-inf" {
-		min = -math.MaxFloat64
+		min = math.Inf(-1)
 	} else if len(str) == 0 {
 		return min, max, includeMin, includeMax, xerror.ErrInvalidFloat
 	} else {
@@ -477,7 +477,7 @@ func checkMinMaxScore(argMin, argMax []byte) (float64, float64, bool, bool, erro
 	if str == "-inf" {
 		return min, max, includeMin, includeMax, xerror.ErrEmpty
 	} else if str == "inf" || str == "+inf" {
-		max = math.MaxFloat64
+		max = math.Inf(1)
 	} else {
 		if str[0] == '(' {
 			includeMax = false
@@ -716,7 +716,7 @@ func (c *Command) zpop(txn *store.Txn, arg []byte, limit int64, reversed bool) (
 }
 
 func (c *Command) objectZpop(txn *store.Txn, object *Object, arg []byte, limit int64, reversed bool) ([]interface{}, error) {
-	ret, err := c.objectZRangeByScore(txn, object, arg, -math.MaxFloat64, math.MaxFloat64, true, true, &zRangeOption{
+	ret, err := c.objectZRangeByScore(txn, object, arg, math.Inf(-1), math.Inf(1), true, true, &zRangeOption{
 		reversed:   reversed,
 		limit:      limit,
 		withScores: true,
@@ -891,7 +891,7 @@ func (c *Command) ZRandMemberHandle(txn *store.Txn, args [][]byte) interface{} {
 		withScores = true
 	}
 
-	ret, err := c.zrangeByScore(txn, args[0], -math.MaxFloat64, math.MaxFloat64, true, true, &zRangeOption{
+	ret, err := c.zrangeByScore(txn, args[0], math.Inf(-1), math.Inf(1), true, true, &zRangeOption{
 		limit:      int64(ucount),
 		withScores: withScores,
 	})
@@ -1093,7 +1093,7 @@ func (c *Command) objectZrangeByRank(txn *store.Txn, object *Object, arg []byte,
 		}
 		return true
 	}
-	err := c.ListByScore(txn, object, arg, -math.MaxFloat64, math.MaxFloat64, true, true, callback, opt.reversed)
+	err := c.ListByScore(txn, object, arg, math.Inf(-1), math.Inf(1), true, true, callback, opt.reversed)
 	if err != nil {
 		return nil, err
 	}

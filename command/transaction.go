@@ -76,6 +76,7 @@ func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command
 	args := cmd.Args[1:]
 	txn, single := c.checkSingle(conn, comma == UNWATCH_COMMAND)
 	utils.ZapLog.Debug("TxnHandler", zap.String("remote", conn.RemoteAddr()),
+		zap.Uint16("user-id", conn.UserId), zap.Uint8("db", conn.DBId),
 		zap.ByteStrings("args", cmd.Args), zap.Bool("single", single))
 	if single {
 		var err error
