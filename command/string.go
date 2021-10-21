@@ -1,4 +1,4 @@
-// https://redis.io/commands#string
+// Package command https://redis.io/commands#string
 package command
 
 import (
@@ -446,9 +446,8 @@ func (c *Command) stringHandle(txn *store.Txn, args [][]byte, stringFunc StringF
 	err = c.setTxnObject(txn, key, object, create)
 	if err != nil {
 		return txn.SetError(err)
-	} else {
-		return value
 	}
+	return value
 }
 
 // (string) DECRBY key decrement
@@ -684,9 +683,8 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 		if setOption.Get {
 			if oldObject != nil && oldObject.Value != nil {
 				return oldObject.Value
-			} else {
-				return nil
 			}
+			return nil
 		}
 		return nil
 	} else if err != nil {
@@ -716,9 +714,8 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 	} else if setOption.Get {
 		if oldObject != nil && oldObject.Value != nil {
 			return oldObject.Value
-		} else {
-			return nil
 		}
+		return nil
 	} else {
 		return OK
 	}

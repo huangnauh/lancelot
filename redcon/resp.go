@@ -1,4 +1,4 @@
-// github.com/tidwall/redcon
+//Package redcon github.com/tidwall/redcon
 package redcon
 
 import (

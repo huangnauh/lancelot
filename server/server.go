@@ -4,7 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
-	_ "net/http/pprof"
+	_ "net/http/pprof" // pprof
 	"strings"
 	"sync"
 	"time"

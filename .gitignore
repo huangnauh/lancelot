@@ -1,4 +1,5 @@
 /redis-server
+lancelot
 /redis.pid
 .vscode
 __debug_bin

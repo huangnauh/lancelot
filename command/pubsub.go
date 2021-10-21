@@ -26,7 +26,7 @@ const (
 	PUBSUB_HELP = "PUBSUB HELP"
 )
 
-type psConn struct {
+type PsConn struct {
 	dconn    *redcon.DetachedConn
 	messages chan []interface{}
 	others   chan interface{}
@@ -34,13 +34,13 @@ type psConn struct {
 	channels [2]map[string]bool
 }
 
-func (p *psConn) Close() {
+func (p *PsConn) Close() {
 	close(p.closed)
 	close(p.messages)
 	close(p.others)
 }
 
-func (p *psConn) sendMessage() {
+func (p *PsConn) sendMessage() {
 	for {
 		select {
 		case msg := <-p.messages:
@@ -73,20 +73,20 @@ func (p *PsManager) Channels() (int, int) {
 
 type Hub struct {
 	sync.RWMutex
-	subscribes map[*psConn]bool
+	subscribes map[*PsConn]bool
 }
 
-func (h *Hub) GetSubscribes() []*psConn {
+func (h *Hub) GetSubscribes() []*PsConn {
 	h.RLock()
 	defer h.RUnlock()
-	subscribes := make([]*psConn, 0, len(h.subscribes))
+	subscribes := make([]*PsConn, 0, len(h.subscribes))
 	for sub := range h.subscribes {
 		subscribes = append(subscribes, sub)
 	}
 	return subscribes
 }
 
-func (h *Hub) SetSubscribe(conn *psConn) {
+func (h *Hub) SetSubscribe(conn *PsConn) {
 	h.Lock()
 	defer h.Unlock()
 	h.subscribes[conn] = true
@@ -136,7 +136,7 @@ SUBSLOOP:
 	return count
 }
 
-func (p *PsManager) Close(ps *psConn) {
+func (p *PsManager) Close(ps *PsConn) {
 	for i := 0; i < 2; i++ {
 		for channel := range ps.channels[i] {
 			p.unsubscribeChannel(ps, channel, i)
@@ -366,7 +366,7 @@ func (c *Command) subscribe(conn *redcon.Conn, cmd redcon.Command, channelType i
 		return
 	}
 
-	ps := &psConn{
+	ps := &PsConn{
 		dconn: conn.Detach(),
 		channels: [2]map[string]bool{
 			NormalChannel:  make(map[string]bool),
@@ -381,7 +381,7 @@ func (c *Command) subscribe(conn *redcon.Conn, cmd redcon.Command, channelType i
 	go c.psManager.runDetach(ps)
 }
 
-func (p *PsManager) unsubscribeChannel(ps *psConn, channel string, channelType int) {
+func (p *PsManager) unsubscribeChannel(ps *PsConn, channel string, channelType int) {
 	p.Lock()
 	hub, ok := p.hubs[channelType][channel]
 	p.Unlock()
@@ -400,7 +400,7 @@ func (p *PsManager) unsubscribeChannel(ps *psConn, channel string, channelType i
 	delete(ps.channels[channelType], channel)
 }
 
-func (p *PsManager) unsubscribe(ps *psConn, args [][]byte, channelType int) {
+func (p *PsManager) unsubscribe(ps *PsConn, args [][]byte, channelType int) {
 	command := UNSUBSCRIBE_COMMAND
 	if channelType == PatternChannel {
 		command = PUNSUBSCRIBE_COMMAND
@@ -421,14 +421,14 @@ func (p *PsManager) unsubscribe(ps *psConn, args [][]byte, channelType int) {
 	}
 }
 
-func (p *PsManager) subscribe(ps *psConn, args [][]byte, channelType int) {
+func (p *PsManager) subscribe(ps *PsConn, args [][]byte, channelType int) {
 	for _, arg := range args {
 		channel := utils.B2S(arg)
 		p.Lock()
 		hub, ok := p.hubs[channelType][channel]
 		if !ok {
 			hub = &Hub{
-				subscribes: map[*psConn]bool{ps: true},
+				subscribes: map[*PsConn]bool{ps: true},
 			}
 			p.hubs[channelType][channel] = hub
 		}
@@ -447,7 +447,7 @@ func (p *PsManager) subscribe(ps *psConn, args [][]byte, channelType int) {
 	}
 }
 
-func (p *PsManager) runDetach(sconn *psConn) {
+func (p *PsManager) runDetach(sconn *PsConn) {
 	defer func() {
 		select {
 		case <-sconn.closed:

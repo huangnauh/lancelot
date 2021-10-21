@@ -66,6 +66,9 @@ func TestMain(m *testing.M) {
 	fmt.Println("server test end")
 	if exitCode == 0 {
 		if err := goleak.Find(
+			goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
+			goleak.IgnoreTopFunction("github.com/klauspost/compress/zstd.(*blockDec).startDecoder"),
+			goleak.IgnoreTopFunction("github.com/onsi/ginkgo/internal/specrunner.(*SpecRunner).registerForInterrupts"),
 			goleak.IgnoreTopFunction("github.com/pingcap/goleveldb/leveldb.(*DB).mpoolDrain"),
 			goleak.IgnoreTopFunction("github.com/pingcap/goleveldb/leveldb.(*DB).tCompaction"),
 			goleak.IgnoreTopFunction("github.com/pingcap/goleveldb/leveldb/util.(*BufferPool).drain"),
@@ -77,8 +80,7 @@ func TestMain(m *testing.M) {
 			goleak.IgnoreTopFunction("google.golang.org/grpc.(*addrConn).resetTransport"),
 			goleak.IgnoreTopFunction("google.golang.org/grpc.(*Server).handleRawConn"),
 			goleak.IgnoreTopFunction("go.etcd.io/etcd/pkg/logutil.(*MergeLogger).outputLoop"),
-			goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
-			goleak.IgnoreTopFunction("github.com/onsi/ginkgo/internal/specrunner.(*SpecRunner).registerForInterrupts"),
+			goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
 		); err != nil {
 			fmt.Fprintf(os.Stderr, "goleak: Errors on successful test run: %v\n", err)
 			exitCode = 1

@@ -13,6 +13,7 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/server"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"gitlab.s.upyun.com/platform/lancelot/version"
 	"go.uber.org/zap"
 )
 
@@ -32,6 +33,11 @@ func main() {
 	err := config.LoadYAMLConfig(configFile)
 	if err != nil {
 		panic(err)
+	}
+
+	if showVersion {
+		fmt.Println(version.Version())
+		return
 	}
 
 	if save {

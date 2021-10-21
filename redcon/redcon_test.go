@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"os"
@@ -159,7 +158,7 @@ func TestRandomCommands(t *testing.T) {
 			if err == io.EOF {
 				break
 			}
-			log.Fatal(err)
+			t.Fatal(err)
 		}
 		if len(cmd.Args) == 3 && string(cmd.Args[0]) == "RESET" &&
 			string(cmd.Args[1]) == "THE" && string(cmd.Args[2]) == "INDEX" {

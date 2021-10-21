@@ -66,9 +66,8 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	err = txn.Put(key, ObjectEncode(object))
 	if err != nil {
 		return txn.SetError(err)
-	} else {
-		return count
 	}
+	return count
 }
 
 // (json) JSON.SET <key> <path> <json> [EX seconds|PX milliseconds|EXAT timestamp|PXAT milliseconds-timestamp|KEEPTTL] [NX|XX] [GET]
@@ -186,11 +185,10 @@ func (c *Command) JsonGetHandle(txn *store.Txn, args [][]byte) interface{} {
 	for i := 0; i < len(results); i++ {
 		if !results[i].Exists() {
 			return txn.SetError(xerror.NotExistKeyError(paths[i]))
-		} else {
-			jsonResponse, err = sjson.SetRaw(jsonResponse, paths[i], results[i].Raw)
-			if err != nil {
-				return txn.SetError(err)
-			}
+		}
+		jsonResponse, err = sjson.SetRaw(jsonResponse, paths[i], results[i].Raw)
+		if err != nil {
+			return txn.SetError(err)
 		}
 	}
 	return jsonResponse

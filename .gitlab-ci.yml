@@ -1,0 +1,17 @@
+stages:
+  - test
+  - build
+
+compile-alpine:
+  stage: test
+  image: golang:1.17-alpine
+  script:
+    - apk add --no-cache --virtual .build-deps git make gcc musl-dev
+    - go get -u github.com/mgechev/revive
+    - make app
+    - make test
+  tags:
+    - offline-test
+  artifacts:
+    paths:
+      - bin

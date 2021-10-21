@@ -139,8 +139,8 @@ func (c *Client) Close() {
 	c.store.Close()
 	if c.etcd != nil {
 		c.etcd.Close()
+		c.manager.Cancel()
 	}
-	c.manager.Cancel()
 	c.cancel()
 }
 

@@ -148,11 +148,11 @@ func (l *LStatePool) Prune() {
 func getArgs(ls *lua.LState) (cmd string, args [][]byte) {
 	cmd = ls.GetGlobal("SCRIPT_CMD").String()
 	for i := 1; ; i++ {
-		if arg := ls.ToString(i); arg == "" {
+		arg := ls.ToString(i)
+		if arg == "" {
 			break
-		} else {
-			args = append(args, utils.S2B(arg))
 		}
+		args = append(args, utils.S2B(arg))
 	}
 	return
 }
@@ -241,10 +241,9 @@ func errResult(ls *lua.LState, err error, raiseErr bool) int {
 	if raiseErr {
 		ls.RaiseError(err.Error())
 		return 0
-	} else {
-		ls.Push(covertToLua(ls, err))
-		return 1
 	}
+	ls.Push(covertToLua(ls, err))
+	return 1
 }
 
 func (c *Command) callTxn(txn *store.Txn, ls *lua.LState, raiseErr bool) int {
@@ -575,9 +574,8 @@ func covertLuaValue(val lua.LValue) interface{} {
 	case lua.LTBool:
 		if val == lua.LTrue {
 			return SimpleInt(1)
-		} else {
-			return nil
 		}
+		return nil
 	case lua.LTNumber:
 		num := int64(val.(lua.LNumber))
 		return SimpleInt(num)
