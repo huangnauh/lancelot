@@ -311,10 +311,11 @@ func (t *Iterator) DeleteUntil(limit int, callback KVCallback) (key []byte, coun
 }
 
 type IterScan struct {
-	prefix  []byte
-	current []byte
-	idx     int
-	iter    *Iterator
+	prefix   []byte
+	current  []byte
+	curValue []byte
+	idx      int
+	iter     *Iterator
 }
 type IterList struct {
 	iters map[int]*IterScan
@@ -326,7 +327,7 @@ func NewIterList() *IterList {
 }
 
 func (i *IterList) Add(prefix []byte, idx int, iter *Iterator) {
-	i.iters[len(i.iters)] = &IterScan{prefix, prefix, idx, iter}
+	i.iters[len(i.iters)] = &IterScan{prefix, prefix, nil, idx, iter}
 }
 
 func (i *IterList) Close() {
@@ -387,7 +388,7 @@ func (i *IterList) NextUntil(key []byte, all bool) (map[int][]byte, error) {
 		if len(it.current) >= len(it.prefix) {
 			c := bytes.Compare(it.current[len(it.prefix):], key)
 			if c == 0 {
-				values[it.idx] = it.iter.Value()
+				values[it.idx] = it.curValue
 				if !all {
 					return values, nil
 				}
@@ -402,10 +403,10 @@ func (i *IterList) NextUntil(key []byte, all bool) (map[int][]byte, error) {
 
 		for it.iter.Valid() {
 			it.current = it.iter.Key()
-			value := it.iter.Value()
+			it.curValue = it.iter.Value()
 			utils.ZapLog.Debug("[txn] IterList NextUntil ", zap.String("remote", it.iter.txn.RemoteAddr()),
 				zap.Uint64("timestamp", it.iter.txn.Timestamp), zap.ByteString("key", it.current),
-				zap.ByteString("value", value))
+				zap.ByteString("value", it.curValue))
 			err = it.iter.Next()
 			if err != nil {
 				return nil, err
@@ -416,7 +417,7 @@ func (i *IterList) NextUntil(key []byte, all bool) (map[int][]byte, error) {
 				if c < 0 {
 					continue
 				} else if c == 0 {
-					values[it.idx] = value
+					values[it.idx] = it.curValue
 					if !all {
 						return values, nil
 					}

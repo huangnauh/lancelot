@@ -54,7 +54,7 @@ start_server {tags {"zset"}} {
         test "ZADD XX option without key - $encoding" {
             r del ztmp
             assert {[r zadd ztmp xx 10 x] == 0}
-            assert {[r type ztmp] eq {none}}
+            assert {[r type ztmp] eq {zset}}
         }
 
         test "ZADD XX existing key - $encoding" {
@@ -262,7 +262,7 @@ start_server {tags {"zset"}} {
             assert_equal 0 [r zrem ztmp z]
             assert_equal 1 [r zrem ztmp y]
             assert_equal 1 [r zrem ztmp x]
-            assert_equal 0 [r exists ztmp]
+            assert_equal 0 [r zcard ztmp]
         }
 
         test "ZREM variadic version - $encoding" {
@@ -271,7 +271,7 @@ start_server {tags {"zset"}} {
             assert_equal 2 [r zrem ztmp x y a b k]
             assert_equal 0 [r zrem ztmp foo bar]
             assert_equal 1 [r zrem ztmp c]
-            r exists ztmp
+            r zcard ztmp
         } {0}
 
         test "ZREM variadic version -- remove elements after key deletion - $encoding" {
@@ -600,7 +600,7 @@ start_server {tags {"zset"}} {
 
             # destroy when empty
             assert_equal 5 [remrangebyscore 1 5]
-            assert_equal 0 [r exists zset]
+            assert_equal 0 [r zcard zset]
         }
 
         test "ZREMRANGEBYSCORE with non-value min or max - $encoding" {
@@ -638,7 +638,7 @@ start_server {tags {"zset"}} {
 
             # destroy when empty
             assert_equal 5 [remrangebyrank 0 4]
-            assert_equal 0 [r exists zset]
+            assert_equal 0 [r zcard zset]
         }
 
         test "ZUNIONSTORE against non-existing key doesn't set destination - $encoding" {
@@ -693,7 +693,7 @@ start_server {tags {"zset"}} {
             r zadd zsetf{t} 3 3
             r zadd zsetf{t} 4 4
 
-            assert_equal {1 2 2 2 4 4 3 6} [r zunion 2 zsetd{t} zsetf{t} withscores]
+            assert_equal {1 2 2 2 3 6 4 4} [r zunion 2 zsetd{t} zsetf{t} withscores]
             assert_equal {1 2 3 6} [r zinter 2 zsetd{t} zsetf{t} withscores]
             assert_equal {2 2} [r zdiff 2 zsetd{t} zsetf{t} withscores]
         }
@@ -704,7 +704,7 @@ start_server {tags {"zset"}} {
         }
 
         test "ZUNION with weights - $encoding" {
-            assert_equal {a 2 b 7 d 9 c 12} [r zunion 2 zseta{t} zsetb{t} weights 2 3 withscores]
+            assert_equal {a 2 b 7 c 12 d 9} [r zunion 2 zseta{t} zsetb{t} weights 2 3 withscores]
             assert_equal {b 7 c 12} [r zinter 2 zseta{t} zsetb{t} weights 2 3 withscores]
         }
 

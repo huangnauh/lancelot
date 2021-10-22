@@ -80,7 +80,7 @@ func (c *Command) ZIncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(ZINCRBY_COMMAND)
 	}
 	score, err := strconv.ParseFloat(utils.B2S(args[1]), 64)
-	if err != nil {
+	if err != nil || math.IsNaN(score) {
 		return txn.SetError(xerror.ErrInvalidFloat)
 	}
 	object, err := c.GetOrCreateUUIDObject(txn, ZsetType, args[0])
@@ -118,6 +118,9 @@ func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score floa
 			return 0, 0, err
 		}
 		oldScore = utils.DecodeFloat(zvalue.Value)
+		if opt.Incr {
+			score += oldScore
+		}
 
 		if opt.Check&CheckGT == CheckGT {
 			if score <= oldScore {
@@ -130,15 +133,16 @@ func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score floa
 			}
 		}
 
-		if opt.Incr {
-			score += oldScore
-		}
 		if score == oldScore {
 			return score, 0, nil
 		}
 		if opt.Changed {
 			count++
 		}
+	}
+
+	if math.IsNaN(score) {
+		return 0, 0, xerror.ErrResultNan
 	}
 	// zvalue.Value = utils.EncodeFloat(score)
 	// zvalue.Timestamp = txn.Timestamp
@@ -206,11 +210,11 @@ func (c *Command) ZAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	opt, i, err := getCheckOption(args[1:])
 	if err != nil {
-		return err
+		return txn.SetError(err)
 	}
 	i = i + 1
 	if len(args) < i+2 || (len(args)-i-2)%2 != 0 {
-		return txn.SetWrongArgs(ZADD_COMMAND)
+		return txn.SetError(xerror.ErrSyntax)
 	}
 
 	if opt.Incr && len(args) > i+2 {
@@ -222,7 +226,7 @@ func (c *Command) ZAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	members := make(map[string]float64)
 	for ; i < len(args); i += 2 {
 		score, err := strconv.ParseFloat(utils.B2S(args[i]), 64)
-		if err != nil {
+		if err != nil || math.IsNaN(score) {
 			return txn.SetError(xerror.ErrInvalidFloat)
 		}
 		members[utils.B2S(args[i+1])] = score
@@ -264,6 +268,13 @@ func EncodeScoreKey(score float64, member []byte) []byte {
 	utils.EncodeFloatBytes(score, k[1:])
 	copy(k[9:], member)
 	return k
+}
+
+func EncodeScoreNext(score float64) []byte {
+	k := make([]byte, 1+8)
+	k[0] = 's'
+	utils.EncodeFloatBytes(score, k[1:])
+	return utils.PrefixNext(k)
 }
 
 func (c *Command) PutZset(txn *store.Txn, object *Object, zkey, member []byte,
@@ -469,7 +480,7 @@ func checkMinMaxScore(argMin, argMax []byte) (float64, float64, bool, bool, erro
 			str = str[1:]
 		}
 		min, err = strconv.ParseFloat(str, 64)
-		if err != nil {
+		if err != nil || math.IsNaN(min) {
 			return min, max, includeMin, includeMax, xerror.ErrInvalidFloat
 		}
 	}
@@ -484,7 +495,7 @@ func checkMinMaxScore(argMin, argMax []byte) (float64, float64, bool, bool, erro
 			str = str[1:]
 		}
 		max, err = strconv.ParseFloat(str, 64)
-		if err != nil {
+		if err != nil || math.IsNaN(max) {
 			return min, max, includeMin, includeMax, xerror.ErrInvalidFloat
 		}
 	}
@@ -498,6 +509,8 @@ func getScoreMember(k, v, prefix []byte, min, max float64,
 	}
 	score := utils.DecodeFloat(k[len(prefix)+1:])
 	memb := k[len(prefix)+8+1:]
+	utils.ZapLog.Debug("score member", zap.Float64("min", min), zap.Float64("max", max),
+		zap.Float64("score", score), zap.String("member", utils.B2S(memb)))
 	if score < min || score > max {
 		return score, memb, false, false
 	}
@@ -552,10 +565,7 @@ func (c *Command) ListByScore(txn *store.Txn, object *Object, arg []byte, min, m
 		zap.Float64("max", max), zap.Bool("includeMin", includeMin), zap.Bool("includeMax", includeMax),
 		zap.Bool("reversed", reversed))
 	start := object.GetValueBytes(EncodeScoreKey(min, nil))
-	if includeMax {
-		max = max + 1
-	}
-	end := object.GetValueBytes(EncodeScoreKey(max, nil))
+	end := object.GetValueBytes(EncodeScoreNext(max))
 	if reversed {
 		start, end = end, start
 	}
@@ -1128,27 +1138,27 @@ func (c *Command) objectZRangeByScore(txn *store.Txn, object *Object, arg []byte
 	return ret, nil
 }
 
-func checkStr(arg []byte) (string, bool, error) {
+func checkStr(arg []byte) (string, string, bool, error) {
 	key := utils.B2S(arg)
 	if len(key) < 1 {
-		return key, false, xerror.ErrSyntax
+		return key, key, false, xerror.ErrSyntax
 	}
 	include := false
 	if key[0] == '(' {
 	} else if key[0] == '[' {
 		include = true
 	} else if key == "-" {
-		return "", false, nil
+		return "", key, false, nil
 	} else if key == "+" {
-		return "", false, nil
+		return "", key, false, nil
 	} else {
-		return key, false, xerror.ErrMinMaxString
+		return key, key, false, xerror.ErrMinMaxString
 	}
 
 	if len(key) < 2 {
-		return key, false, xerror.ErrSyntax
+		return key, key, false, xerror.ErrSyntax
 	}
-	return key[1:], include, nil
+	return key[1:], key, include, nil
 }
 
 // ZLEXCOUNT key min max
@@ -1347,14 +1357,19 @@ func (c *Command) ZRangeByLexHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func checkMinMaxLex(argMin, argMax []byte) (string, string, bool, bool, error) {
-	min, includeMin, err := checkStr(argMin)
+	min, minOrigin, includeMin, err := checkStr(argMin)
 	if err != nil {
 		return "", "", false, false, err
 	}
-	max, includeMax, err := checkStr(argMax)
+	max, maxOrigin, includeMax, err := checkStr(argMax)
 	if err != nil {
 		return "", "", false, false, err
 	}
+
+	if minOrigin == "+" || maxOrigin == "-" {
+		return "", "", false, false, xerror.ErrEmpty
+	}
+
 	if min != "" && max != "" {
 		if min > max {
 			return "", "", false, false, xerror.ErrEmpty
@@ -1596,15 +1611,21 @@ func (c *Command) zstore(txn *store.Txn, args [][]byte, sfunc SFunc) interface{}
 		return txn.SetError(err)
 	}
 	opt.getType |= BothKV
-	object, err := c.DeleteThenCreateUUIDObject(txn, ZsetType, args[0])
-	if err != nil {
-		return txn.SetError(err)
-	}
 
 	ret, err := sfunc(txn, args[2:opt.num+2], ZsetType, opt.getType, opt.weights)
 	if err != nil {
 		return txn.SetError(err)
 	}
+
+	if len(ret) == 0 {
+		return redcon.SimpleInt(0)
+	}
+
+	object, err := c.DeleteThenCreateUUIDObject(txn, ZsetType, args[0])
+	if err != nil {
+		return txn.SetError(err)
+	}
+
 	count, err := c.ZaddValues(txn, object, ret)
 	if err != nil {
 		return txn.SetError(err)

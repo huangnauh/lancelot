@@ -227,14 +227,19 @@ func (c *Command) SInterHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) sstore(txn *store.Txn, args [][]byte, sfunc SFunc) interface{} {
-	object, err := c.DeleteThenCreateUUIDObject(txn, SetType, args[0])
-	if err != nil {
-		return txn.SetError(err)
-	}
 	ret, err := sfunc(txn, args[1:], SetType, OnlyKey, nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
+	if len(ret) == 0 {
+		return redcon.SimpleInt(0)
+	}
+
+	object, err := c.DeleteThenCreateUUIDObject(txn, SetType, args[0])
+	if err != nil {
+		return txn.SetError(err)
+	}
+
 	for _, k := range ret {
 		svalue := &Value{Timestamp: txn.Timestamp}
 		skey := object.GetValueBytes(k.([]byte))
@@ -377,6 +382,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 			zv := &Value{}
 			DecodeValue(value, zv)
 			score := utils.DecodeFloat(zv.Value)
+			utils.ZapLog.Debug("inter", zap.ByteString("key", k), zap.Float64("score", score))
 			if len(weight) > 0 {
 				score *= float64(weight[mini])
 			}
@@ -384,6 +390,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 				zv := &Value{}
 				DecodeValue(v, zv)
 				s := utils.DecodeFloat(zv.Value)
+				utils.ZapLog.Debug("inter", zap.ByteString("key", k), zap.Float64("score", s))
 				if len(weight) > 0 {
 					s *= float64(weight[idx])
 				}
@@ -399,6 +406,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 					}
 				}
 			}
+			utils.ZapLog.Debug("inter", zap.ByteString("key", k), zap.Float64("score-sum", score))
 			ret = append(ret, score)
 		}
 		return true

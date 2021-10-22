@@ -37,14 +37,14 @@ start_server {tags {"string"}} {
             set _ $err
         } {}
 
-        test {SET 10000 numeric keys and access all them in reverse order} {
+        test {SET 100 numeric keys and access all them in reverse order} {
             r flushdb
             set err {}
-            for {set x 0} {$x < 10000} {incr x} {
+            for {set x 0} {$x < 100} {incr x} {
                 r set $x $x
             }
             set sum 0
-            for {set x 9999} {$x >= 0} {incr x -1} {
+            for {set x 99} {$x >= 0} {incr x -1} {
                 set val [r get $x]
                 if {$val ne $x} {
                     set err "Element at position $x is $val instead of $x"
@@ -54,9 +54,9 @@ start_server {tags {"string"}} {
             set _ $err
         } {}
 
-        test {DBSIZE should be 10000 now} {
+        test {DBSIZE should be 100 now} {
             r dbsize
-        } {10000}
+        } {100}
     }
 
     test "SETNX target key missing" {

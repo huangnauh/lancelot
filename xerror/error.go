@@ -84,6 +84,7 @@ var (
 	ErrBusyScript          = BusyNew("Redis is busy running a script. You can only call SCRIPT KILL or SHUTDOWN NOSAVE.")
 	ErrScriptKilled        = RedisNew("Script killed by user with SCRIPT KILL...")
 	ErrScriptTimeout       = RedisNew("Script timeout")
+	ErrResultNan           = RedisNew("resulting score is not a number (NaN)")
 
 	MissingTxn        = RedisNew("missing transcation")
 	InvalidTxn        = RedisNew("invalid transcation")

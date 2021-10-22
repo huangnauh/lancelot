@@ -14,6 +14,9 @@ else
 PLAT=linux
 endif
 
+debug:
+	go build -gcflags=all="-N -l" -o bin/lancelot ./cmd/lancelot
+
 app:
 	go build -ldflags '$(GOLDFLAGS)' -o bin/lancelot ./cmd/lancelot
 
