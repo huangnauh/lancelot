@@ -12,9 +12,8 @@ require (
 	github.com/gomodule/redigo v1.8.5
 	github.com/google/uuid v1.1.1
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
-	github.com/nitishm/go-rejson/v4 v4.0.0
-	github.com/onsi/ginkgo v1.16.4
-	github.com/onsi/gomega v1.15.0
+	github.com/onsi/ginkgo v1.16.5
+	github.com/onsi/gomega v1.16.0
 	github.com/pingcap/kvproto v0.0.0-20201215060142-f3dafca4c7fd
 	github.com/pingcap/tidb v1.1.0-beta.0.20201222032702-32d8cad845d6
 	github.com/prometheus/client_golang v1.11.0
@@ -40,7 +39,7 @@ require (
 )
 
 replace (
-	github.com/go-redis/redis/v8 v8.11.2 => ../redis/v8
+	github.com/go-redis/redis/v8 v8.11.2 => github.com/huangnauh/redis/v8 v8.11.3-0.20211026030748-2ce56dd7acbc
 	github.com/golang/protobuf => github.com/golang/protobuf v1.3.4
 	github.com/yuin/gopher-lua v0.0.0-20210529063254-f4c35e4016d9 => github.com/huangnauh/gopher-lua v0.0.0-20210930062039-32ec5e06c52a
 )
