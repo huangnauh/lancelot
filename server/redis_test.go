@@ -224,13 +224,13 @@ var _ = Describe("Commands", func() {
 			Expect(configRewrite.Val()).To(Equal("OK"))
 		})
 
-		It("should DBSize", func() {
+		FIt("should DBSize", func() {
 			size, err := client.DBSize(ctx).Result()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(size).To(Equal(int64(0)))
 		})
 
-		It("should Info", func() {
+		FIt("should Info", func() {
 			info := client.Info(ctx)
 			Expect(info.Err()).NotTo(HaveOccurred())
 			Expect(info.Val()).NotTo(Equal(""))
@@ -327,7 +327,7 @@ var _ = Describe("Commands", func() {
 	})
 
 	Describe("keys", func() {
-		It("should Del", func() {
+		FIt("should Del", func() {
 			err := client.Set(ctx, "key1", "Hello", 0).Err()
 			Expect(err).NotTo(HaveOccurred())
 			err = client.Set(ctx, "key2", "World", 0).Err()
@@ -338,7 +338,7 @@ var _ = Describe("Commands", func() {
 			Expect(n).To(Equal(int64(2)))
 		})
 
-		It("should Unlink", func() {
+		FIt("should Unlink", func() {
 			err := client.Set(ctx, "key1", "Hello", 0).Err()
 			Expect(err).NotTo(HaveOccurred())
 			err = client.Set(ctx, "key2", "World", 0).Err()
@@ -359,7 +359,7 @@ var _ = Describe("Commands", func() {
 			Expect(dump.Val()).NotTo(BeEmpty())
 		})
 
-		It("should Exists", func() {
+		FIt("should Exists", func() {
 			set := client.Set(ctx, "key1", "Hello", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -381,7 +381,7 @@ var _ = Describe("Commands", func() {
 			Expect(n).To(Equal(int64(2)))
 		})
 
-		It("should Expire", func() {
+		FIt("should Expire", func() {
 			set := client.Set(ctx, "key", "Hello", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -407,7 +407,7 @@ var _ = Describe("Commands", func() {
 			Expect(ttl.Val()).To(Equal(time.Duration(-2)))
 		})
 
-		It("should ExpireAt", func() {
+		FIt("should ExpireAt", func() {
 			set := client.Set(ctx, "key", "Hello", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -425,7 +425,7 @@ var _ = Describe("Commands", func() {
 			Expect(n).To(Equal(int64(0)))
 		})
 
-		It("should Keys", func() {
+		FIt("should Keys", func() {
 			mset := client.MSet(ctx, "one", "1", "two", "2", "three", "3", "four", "4")
 			Expect(mset.Err()).NotTo(HaveOccurred())
 			Expect(mset.Val()).To(Equal("OK"))
@@ -508,7 +508,7 @@ var _ = Describe("Commands", func() {
 			Expect(idleTime.Val()).To(BeNumerically("<=", time.Now().Sub(start)+time.Second))
 		})
 
-		It("should Persist", func() {
+		FIt("should Persist", func() {
 			set := client.Set(ctx, "key", "Hello", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -530,7 +530,7 @@ var _ = Describe("Commands", func() {
 			Expect(ttl.Val() < 0).To(Equal(true))
 		})
 
-		It("should PExpire", func() {
+		FIt("should PExpire", func() {
 			set := client.Set(ctx, "key", "Hello", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -549,7 +549,7 @@ var _ = Describe("Commands", func() {
 			Expect(pttl.Val()).To(BeNumerically("~", expiration, 100*time.Millisecond))
 		})
 
-		It("should PExpireAt", func() {
+		FIt("should PExpireAt", func() {
 			set := client.Set(ctx, "key", "Hello", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -568,7 +568,7 @@ var _ = Describe("Commands", func() {
 			Expect(pttl.Val()).To(BeNumerically("~", expiration, 100*time.Millisecond))
 		})
 
-		It("should PTTL", func() {
+		FIt("should PTTL", func() {
 			set := client.Set(ctx, "key", "Hello", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -749,7 +749,7 @@ var _ = Describe("Commands", func() {
 			Expect(els).To(Equal([]string{"1", "2"}))
 		})
 
-		It("should Touch", func() {
+		FIt("should Touch", func() {
 			set1 := client.Set(ctx, "touch1", "hello", 0)
 			Expect(set1.Err()).NotTo(HaveOccurred())
 			Expect(set1.Val()).To(Equal("OK"))
@@ -763,7 +763,7 @@ var _ = Describe("Commands", func() {
 			Expect(touch.Val()).To(Equal(int64(2)))
 		})
 
-		It("should TTL", func() {
+		FIt("should TTL", func() {
 			ttl := client.TTL(ctx, "key")
 			Expect(ttl.Err()).NotTo(HaveOccurred())
 			Expect(ttl.Val() < 0).To(Equal(true))
@@ -781,7 +781,7 @@ var _ = Describe("Commands", func() {
 			Expect(ttl.Val()).To(Equal(60 * time.Second))
 		})
 
-		It("should Type", func() {
+		FIt("should Type", func() {
 			set := client.Set(ctx, "key", "hello", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
@@ -792,7 +792,7 @@ var _ = Describe("Commands", func() {
 		})
 	})
 
-	Describe("scanning", func() {
+	FDescribe("scanning", func() {
 		It("should Scan", func() {
 			for i := 0; i < 1000; i++ {
 				set := client.Set(ctx, fmt.Sprintf("key%d", i), "hello", 0)
@@ -857,7 +857,7 @@ var _ = Describe("Commands", func() {
 		})
 	})
 
-	Describe("string bit", func() {
+	FDescribe("string bit", func() {
 		It("should BitCount", func() {
 			set := client.Set(ctx, "key", "foobar", 0)
 			Expect(set.Err()).NotTo(HaveOccurred())
@@ -1969,7 +1969,7 @@ var _ = Describe("Commands", func() {
 		})
 	})
 
-	Describe("lists", func() {
+	FDescribe("lists", func() {
 		It("should BLPop", func() {
 			rPush := client.RPush(ctx, "list1", "a", "b", "c")
 			Expect(rPush.Err()).NotTo(HaveOccurred())
@@ -2459,6 +2459,28 @@ var _ = Describe("Commands", func() {
 			Expect(lMove.Val()).To(Equal("san"))
 
 			lRange := client.LRange(ctx, "lmove2", 0, -1)
+			Expect(lRange.Err()).NotTo(HaveOccurred())
+			Expect(lRange.Val()).To(Equal([]string{"san"}))
+		})
+
+		It("should BLMove", func() {
+			rPush := client.RPush(ctx, "blmove1", "ichi")
+			Expect(rPush.Err()).NotTo(HaveOccurred())
+			Expect(rPush.Val()).To(Equal(int64(1)))
+
+			rPush = client.RPush(ctx, "blmove1", "ni")
+			Expect(rPush.Err()).NotTo(HaveOccurred())
+			Expect(rPush.Val()).To(Equal(int64(2)))
+
+			rPush = client.RPush(ctx, "blmove1", "san")
+			Expect(rPush.Err()).NotTo(HaveOccurred())
+			Expect(rPush.Val()).To(Equal(int64(3)))
+
+			blMove := client.BLMove(ctx, "blmove1", "blmove2", "RIGHT", "LEFT", time.Second)
+			Expect(blMove.Err()).NotTo(HaveOccurred())
+			Expect(blMove.Val()).To(Equal("san"))
+
+			lRange := client.LRange(ctx, "blmove2", 0, -1)
 			Expect(lRange.Err()).NotTo(HaveOccurred())
 			Expect(lRange.Val()).To(Equal([]string{"san"}))
 		})
@@ -5438,7 +5460,7 @@ var _ = Describe("Commands", func() {
 		})
 	})
 
-	Describe("marshaling/unmarshaling", func() {
+	FDescribe("marshaling/unmarshaling", func() {
 		type convTest struct {
 			value  interface{}
 			wanted string
@@ -5485,7 +5507,7 @@ var _ = Describe("Commands", func() {
 		})
 	})
 
-	Describe("json marshaling/unmarshaling", func() {
+	FDescribe("json marshaling/unmarshaling", func() {
 		BeforeEach(func() {
 			value := &numberStruct{Number: 42}
 			err := client.Set(ctx, "key", value, 0).Err()
@@ -5506,7 +5528,7 @@ var _ = Describe("Commands", func() {
 		})
 	})
 
-	Describe("Eval", func() {
+	FDescribe("Eval", func() {
 		It("returns keys and values", func() {
 			vals, err := client.Eval(
 				ctx,

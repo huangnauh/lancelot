@@ -236,20 +236,25 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 	return SimpleInt(1)
 }
 
-// (generic) EXISTS key
+// (generic) EXISTS key [key ...]
 func (c *Command) ExistsHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 1 {
+	if len(args) < 1 {
 		return txn.SetWrongArgs(EXISTS_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
-	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, false)
-	if err == store.KeyNotFound {
-		return SimpleInt(0)
-	} else if err != nil {
-		return txn.SetError(err)
+
+	count := 0
+	for _, arg := range args {
+		object := NewObject(txn.UserId, txn.DBId, UnknownType, arg)
+		key := object.GetKeyBytes()
+		err := c.getTxnObject(txn, key, object, false)
+		if err == store.KeyNotFound {
+			continue
+		} else if err != nil {
+			return txn.SetError(err)
+		}
+		count++
 	}
-	return SimpleInt(1)
+	return redcon.SimpleInt(count)
 }
 
 func (c *Command) ttl(txn *store.Txn, args [][]byte) (int64, error) {
@@ -279,7 +284,12 @@ func (c *Command) TTLHandle(txn *store.Txn, args [][]byte) interface{} {
 	if ttl < 0 {
 		return redcon.SimpleInt(ttl)
 	}
-	return redcon.SimpleInt(ttl-txn.Now) / 1000
+	val := ttl - txn.Now
+	if val%1000 == 0 {
+		return redcon.SimpleInt((ttl - txn.Now) / 1000)
+	} else {
+		return redcon.SimpleInt((ttl-txn.Now)/1000 + 1)
+	}
 }
 
 // (generic) PTTL key

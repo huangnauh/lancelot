@@ -953,29 +953,32 @@ func (c *Command) BlMoveHandle(txn *store.Txn, args [][]byte) interface{} {
 	sargs := [][]byte{args[0], args[4]}
 	if sstr == "left" {
 		value, err = c.BlockHandle(txn, sargs, func(txn *store.Txn, args [][]byte) (interface{}, error) {
-			return c.listMany(txn, args, lPop)
+			return c.listMany(txn, sargs, lPop)
 		})
 	} else {
 		value, err = c.BlockHandle(txn, sargs, func(txn *store.Txn, args [][]byte) (interface{}, error) {
-			return c.listMany(txn, args, rPop)
+			return c.listMany(txn, sargs, rPop)
 		})
 	}
 	if err != nil {
 		return txn.SetError(err)
 	}
-	msg, ok := value.([]byte)
+	msg, ok := value.([][]byte)
 	if !ok {
 		return nil
 	}
+	if len(msg) != 2 {
+		return nil
+	}
 	if dstr == "left" {
-		_, err = c.ListHandle(txn, [][]byte{args[1], msg}, lPush, &lOpt{})
+		_, err = c.ListHandle(txn, [][]byte{args[1], msg[1]}, lPush, &lOpt{})
 	} else {
-		_, err = c.ListHandle(txn, [][]byte{args[1], msg}, rPush, &lOpt{})
+		_, err = c.ListHandle(txn, [][]byte{args[1], msg[1]}, rPush, &lOpt{})
 	}
 	if err != nil {
 		return txn.SetError(err)
 	}
-	return value
+	return msg[1]
 }
 
 //(list) BRPOPLPUSH source destination timeout
@@ -993,6 +996,9 @@ func (c *Command) BRPopLPushHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	msg, ok := value.([][]byte)
 	if !ok {
+		return nil
+	}
+	if len(msg) != 2 {
 		return nil
 	}
 	_, err = c.ListHandle(txn, [][]byte{args[1], msg[1]}, lPush, &lOpt{})
