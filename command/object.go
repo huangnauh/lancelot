@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -575,6 +576,10 @@ func (c *Command) BlockHandle(txn *store.Txn, args [][]byte, bfunc BFunc) (inter
 		pullInternal = 5 * PullInternal
 	}
 	txn.Rollback()
+
+	atomic.AddInt64(&c.Info.BlockClients, 1)
+	defer atomic.AddInt64(&c.Info.BlockClients, -1)
+
 	tick := time.NewTicker(pullInternal)
 	defer tick.Stop()
 	for range tick.C {

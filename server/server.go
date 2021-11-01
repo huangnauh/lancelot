@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tidb/store/tikv/oracle"
 	"gitlab.s.upyun.com/platform/lancelot/command"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/grpc"
@@ -117,15 +116,9 @@ func (s *Server) Shutdown(ctx context.Context) {
 }
 
 func (s *Server) Accept(conn *redcon.Conn) bool {
-	utils.ZapLog.Debug("Accept", zap.String("remote", conn.RemoteAddr()))
-	id, err := s.Command.GetCurrentID()
-	if err != nil {
-		id = oracle.EncodeTSO(time.Now().UnixMilli())
-	}
-	conn.ID = id
-	return true
+	return s.Command.Accept(conn)
 }
 
 func (s *Server) Close(conn *redcon.Conn, err error) {
-	utils.ZapLog.Debug("Close", zap.String("remote", conn.RemoteAddr()), zap.Error(err))
+	s.Command.Close(conn, err)
 }

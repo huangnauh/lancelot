@@ -420,6 +420,8 @@ start_server {
 
       r rpush list1{t} foo
 
+      wait_for_blocked_clients_count 0 500 10
+
       assert_equal {} [r lrange list1{t} 0 -1]
       assert_equal {} [r lrange list2{t} 0 -1]
       assert_equal {foo} [r lrange list3{t} 0 -1]
@@ -479,6 +481,8 @@ start_server {
         $watching_client get somekey{t}
         $watching_client read
         r lpush srclist{t} element
+        # wait for the BRPOPLPUSH to be processed
+        wait_for_blocked_clients_count 0 500 10
         $watching_client exec
         $watching_client read
     } {}
@@ -517,7 +521,7 @@ start_server {
         r lpush bob{t} abc def hij
         r rename bob{t} foo{t}
         $rd read
-    } {foo{t} hij}
+    } {foo{t} hij} {needs:debug}
 
     test "BLPOP when result key is created by SORT..STORE" {
         set rd [redis_deferring_client]
@@ -531,7 +535,7 @@ start_server {
         r lpush notfoo{t} hello hola aguacate konichiwa zanzibar
         r sort notfoo{t} ALPHA store foo{t}
         $rd read
-    } {foo{t} aguacate}
+    } {foo{t} aguacate} {needs:debug}
 
     foreach {pop} {BLPOP BRPOP} {
         test "$pop: with single empty list argument" {
@@ -552,8 +556,9 @@ start_server {
         test "$pop: with non-integer timeout" {
             set rd [redis_deferring_client]
             r del blist1
-            $rd $pop blist1 0.1
+            $rd $pop blist1 1.1
             r rpush blist1 foo
+            wait_for_blocked_clients_count 0 500 10
             assert_equal {blist1 foo} [$rd read]
             assert_equal 0 [r exists blist1]
         }

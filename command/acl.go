@@ -31,6 +31,7 @@ type User struct {
 	Flag      byte
 	Passwords map[string]bool
 	Commands  *bitmap.Bitmap
+	Timestamp uint64
 }
 
 type ByName []*User

@@ -117,6 +117,7 @@ var (
 	InvalidStreamID            = RedisNew("Invalid stream ID specified as stream command argument")
 	XgroupRequireExist         = RedisNew("The XGROUP subcommand requires the key to exist. Note that for CREATE you may want to use the MKSTREAM option to create an empty stream automatically.")
 	XgroupAlreadyExist         = RedisNew("BUSYGROUP Consumer Group name already exists")
+	ErrStartGreaterThanEnd     = RedisNew("start is larger than the end of the list")
 
 	InvalidOffset = RedisNew("invalid offset")
 	InvalidLimit  = RedisNew("invalid limit")

@@ -121,14 +121,19 @@ func getStartEnd(l *ListObject, opt *lOpt) (int64, int64, error) {
 		endIndex = int64(l.Length) - 1
 	}
 	if startIndex > endIndex {
-		return 0, 0, xerror.ErrOutOfRange
+		return 0, 0, xerror.ErrStartGreaterThanEnd
 	}
 	return startIndex, endIndex, nil
 }
 
 func lTrim(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *lOpt) (interface{}, error) {
 	startIndex, endIndex, err := getStartEnd(l, opt)
-	if err != nil {
+	if err == xerror.ErrStartGreaterThanEnd {
+		startIndex = int64(l.Length)
+		endIndex = int64(l.Length)
+	} else if err != nil {
+		utils.ZapLog.Error("getStartEnd", zap.Float64("left", l.LIndex), zap.Float64("right", l.RIndex), zap.Uint64("length", l.Length),
+			zap.Int64("start", opt.index[0]), zap.Int64("end", opt.index[1]), zap.Error(err))
 		return OK, nil
 	}
 	prefix := object.GetValueBytes(nil)
@@ -536,6 +541,10 @@ func lrem(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *lOp
 
 func lInsert(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *lOpt) (interface{}, error) {
 	ids, err := indexValue(txn, object, l, args[1], opt)
+	if err == xerror.ErrNotFound {
+		return redcon.SimpleInt(-1), nil
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -562,7 +571,7 @@ func lInsert(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *
 	}
 	err = txn.Put(lkey, EncodeValue(lvalue))
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	l.Complex = true
 	l.Length++
@@ -766,7 +775,7 @@ func (c *Command) LRemHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	ret, err := c.ListHandle(txn, args, lrem, opt)
 	if err == store.KeyNotFound {
-		return 0
+		return redcon.SimpleInt(0)
 	} else if err != nil {
 		return txn.SetError(err)
 	}
@@ -795,7 +804,7 @@ func (c *Command) LInsertHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	ret, err := c.ListHandle(txn, args, lInsert, opt)
 	if err == store.KeyNotFound {
-		return 0
+		return redcon.SimpleInt(0)
 	} else if err != nil {
 		return txn.SetError(err)
 	}
@@ -842,7 +851,7 @@ func (c *Command) LSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	ret, err := c.ListHandle(txn, args, lSet, opt)
 	if err == store.KeyNotFound {
-		return 0
+		return redcon.SimpleInt(0)
 	} else if err != nil {
 		return txn.SetError(err)
 	}

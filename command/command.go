@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coocood/freecache"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/member"
@@ -32,6 +34,11 @@ type ConnHandler struct {
 	ID   int
 }
 
+type Info struct {
+	ConnectedClients int64
+	BlockClients     int64
+}
+
 type Command struct {
 	cfg        *config.Config
 	done       chan struct{}
@@ -50,6 +57,7 @@ type Command struct {
 	psManager  *PsManager
 	memberlist *member.MemberList
 	cache      *freecache.Cache
+	Info       *Info
 }
 
 func NewCommand(cfg *config.Config) *Command {
@@ -64,6 +72,7 @@ func NewCommand(cfg *config.Config) *Command {
 		gcClosed: make(chan bool),
 		gcWait:   &sync.WaitGroup{},
 		cache:    freecache.NewCache(cfg.CacheSize),
+		Info:     &Info{},
 	}
 	c.Root = c.rootUser()
 	c.users[c.Root.Name] = c.Root
@@ -1085,4 +1094,20 @@ func (c *Command) GetCursor(key string) ([]byte, bool) {
 func (c *Command) SetCursor(key string, data []byte) {
 	utils.ZapLog.Debug("SetCursor", zap.String("key", key), zap.ByteString("value", data))
 	_ = c.cache.Set(utils.S2B(key), data, c.cfg.Key.CursorExpireSecond)
+}
+
+func (c *Command) Accept(conn *redcon.Conn) bool {
+	atomic.AddInt64(&c.Info.ConnectedClients, 1)
+	utils.ZapLog.Debug("Accept", zap.String("remote", conn.RemoteAddr()))
+	id, err := c.GetCurrentID()
+	if err != nil {
+		id = oracle.EncodeTSO(time.Now().UnixMilli())
+	}
+	conn.ID = id
+	return true
+}
+
+func (c *Command) Close(conn *redcon.Conn, err error) {
+	utils.ZapLog.Debug("Close", zap.String("remote", conn.RemoteAddr()), zap.Error(err))
+	atomic.AddInt64(&c.Info.ConnectedClients, -1)
 }

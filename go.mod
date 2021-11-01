@@ -6,7 +6,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.1.1
 	github.com/cloudflare/tableflip v1.2.2
 	github.com/coocood/freecache v1.1.1
-	github.com/go-redis/redis/v8 v8.11.2
+	github.com/go-redis/redis/v8 v8.11.4
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/protobuf v1.5.2
 	github.com/gomodule/redigo v1.8.5
@@ -39,7 +39,7 @@ require (
 )
 
 replace (
-	github.com/go-redis/redis/v8 v8.11.2 => github.com/huangnauh/redis/v8 v8.11.3-0.20211026030748-2ce56dd7acbc
+	github.com/go-redis/redis/v8 v8.11.4 => github.com/huangnauh/redis/v8 v8.11.5-0.20211029022615-7f6b8adada1c
 	github.com/golang/protobuf => github.com/golang/protobuf v1.3.4
 	github.com/yuin/gopher-lua v0.0.0-20210529063254-f4c35e4016d9 => github.com/huangnauh/gopher-lua v0.0.0-20210930062039-32ec5e06c52a
 )

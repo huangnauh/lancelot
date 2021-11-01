@@ -63,7 +63,7 @@ func (c *Command) SelectHandle(txn *store.Txn, args [][]byte) interface{} {
 
 // CLIENT
 func (c *Command) ClientHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) < 2 {
+	if len(args) < 1 {
 		return txn.SetWrongArgs(CLIENT_COMMAND)
 	}
 	str := strings.ToLower(utils.B2S(args[0]))
@@ -87,7 +87,7 @@ func (c *Command) ClientHandle(txn *store.Txn, args [][]byte) interface{} {
 
 // CLIENT ID
 func (c *Command) ClientIdHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 1 {
+	if len(args) != 0 {
 		return txn.SetWrongSubArgs(CLIENT_COMMAND, ID_COMMAND)
 	}
 	return redcon.SimpleInt(txn.ID)
