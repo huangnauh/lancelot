@@ -115,7 +115,7 @@ func getStartEnd(l *ListObject, opt *lOpt) (int64, int64, error) {
 		endIndex += int64(l.Length)
 	}
 	if endIndex < 0 {
-		return 0, 0, xerror.ErrOutOfRange
+		return 0, 0, xerror.ErrStartGreaterThanEnd
 	}
 	if endIndex >= int64(l.Length) {
 		endIndex = int64(l.Length) - 1
@@ -851,7 +851,7 @@ func (c *Command) LSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	ret, err := c.ListHandle(txn, args, lSet, opt)
 	if err == store.KeyNotFound {
-		return redcon.SimpleInt(0)
+		return txn.SetError(xerror.ErrNoSuchKey)
 	} else if err != nil {
 		return txn.SetError(err)
 	}

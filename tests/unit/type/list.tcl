@@ -1075,7 +1075,7 @@ start_server {
         wait_for_blocked_client
         r lpush l foo
         assert_equal {l foo} [$rd read]
-    } {}
+    } {} {needs:client}
 
     test {List ziplist of various encodings} {
         r del k
@@ -1108,7 +1108,7 @@ start_server {
         assert_equal [lpop k] [string repeat x 8191]
         assert_equal [lpop k] [string repeat x 31]
         set _ $k
-    } {12 0 9223372036854775808 2147483647 32767 127}
+    } {12 0 9223372036854775808 2147483647 32767 127} {needs:dump}
 
     test {List ziplist of various encodings - sanitize dump} {
         config_set sanitize-dump-payload yes mayfail
@@ -1122,6 +1122,6 @@ start_server {
         assert_equal [lpop k] [string repeat x 8191]
         assert_equal [lpop k] [string repeat x 31]
         set _ $k
-    } {12 0 9223372036854775808 2147483647 32767 127}
+    } {12 0 9223372036854775808 2147483647 32767 127} {needs:dump}
 
 }
