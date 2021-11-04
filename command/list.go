@@ -150,6 +150,8 @@ func lTrim(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *lO
 				l.LIndex = utils.DecodeFloat(key[len(prefix):])
 				return false
 			}
+			utils.ZapLog.Debug("ltrim-start", zap.Int64("start", startIndex), zap.Int64("end", endIndex), zap.Int64("count", count),
+				zap.ByteString("key", key))
 			delErr = txn.Del(key)
 			if delErr != nil {
 				return false
@@ -164,17 +166,25 @@ func lTrim(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *lO
 			return nil, delErr
 		}
 	}
+
+	if startIndex == int64(l.Length) {
+		l.Length = 0
+		return OK, nil
+	}
+
 	if endIndex >= int64(l.Length)-1 {
-		l.Length = uint64(endIndex - startIndex + 1)
+		l.Length = l.Length - uint64(startIndex)
 		return OK, nil
 	}
 
 	if !l.Complex {
-		start = object.GetValueBytes(utils.EncodeFloat(float64(endIndex) + 1))
+		start = object.GetValueBytes(utils.EncodeFloat(l.LIndex + float64(endIndex) + 1))
 		err = txn.List(start, end, opt.max, func(key, value []byte) bool {
 			if len(key) < len(prefix) || !bytes.Equal(key[:len(prefix)], prefix) {
 				return false
 			}
+			utils.ZapLog.Debug("ltrim-end", zap.Int64("start", startIndex), zap.Int64("end", endIndex), zap.Int64("count", count),
+				zap.ByteString("key", key))
 			delErr = txn.Del(key)
 			return delErr == nil
 		})
@@ -190,6 +200,8 @@ func lTrim(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *lO
 				l.RIndex = utils.DecodeFloat(key[len(prefix):])
 				return false
 			}
+			utils.ZapLog.Debug("ltrim-end", zap.Int64("start", startIndex), zap.Int64("end", endIndex), zap.Int64("count", count),
+				zap.ByteString("key", key))
 			delErr = txn.Del(key)
 			if delErr != nil {
 				return false
@@ -271,6 +283,8 @@ func lRange(txn *store.Txn, object *Object, l *ListObject, args [][]byte, opt *l
 		}
 		lvalue := &Value{}
 		DecodeValue(value, lvalue)
+		utils.ZapLog.Debug("lRange", zap.Float64("start", s), zap.Float64("end", e), zap.Int("max", opt.max),
+			zap.ByteString("key", key), zap.ByteString("value", lvalue.Value))
 		if !l.Complex {
 			ret = append(ret, lvalue.Value)
 			return true
