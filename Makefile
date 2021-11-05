@@ -28,7 +28,8 @@ start:
 
 test: lint
 	go test ./...
-	./bin/lancelot -dev &
+	nohup ./bin/lancelot -dev &
+	sleep 3
 	./redistest.sh
 
 .PHONY: test lint app
