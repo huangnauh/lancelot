@@ -30,6 +30,7 @@ test: lint
 	go test ./...
 	nohup ./bin/lancelot -dev &
 	sleep 3
+	echo ${SHELL}
 	./redistest.sh
 
 .PHONY: test lint app
