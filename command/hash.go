@@ -502,7 +502,7 @@ func (c *Command) HIncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 	return redcon.SimpleInt(intValue)
 }
 
-func (c *Command) DeleteThenCreateUUIDObject(txn *store.Txn, typo ObjectType, arg []byte) (*Object, error) {
+func (c *Command) DeleteThenCreateUUIDObject(txn *store.Txn, typo ObjectType, arg []byte, create bool) (*Object, error) {
 	object := NewObject(txn.UserId, txn.DBId, typo, arg)
 	key := object.GetKeyBytes()
 	err := c.getTxnObject(txn, key, object, true)
@@ -515,6 +515,9 @@ func (c *Command) DeleteThenCreateUUIDObject(txn *store.Txn, typo ObjectType, ar
 			return object, err
 		}
 		object.CleanValue(typo)
+	}
+	if !create {
+		return object, nil
 	}
 	id, err := uuid.NewUUID()
 	if err != nil {

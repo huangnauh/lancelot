@@ -119,6 +119,7 @@ var (
 	XgroupAlreadyExist         = RedisNew("BUSYGROUP Consumer Group name already exists")
 	ErrStartGreaterThanEnd     = RedisNew("start is larger than the end of the list")
 	ErrNoSuchKey               = RedisNew("no such key")
+	InvalidWeight              = RedisNew("weight value is not a float")
 
 	InvalidOffset = RedisNew("invalid offset")
 	InvalidLimit  = RedisNew("invalid limit")

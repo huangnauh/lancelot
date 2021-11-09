@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type SFunc func(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []int) ([]interface{}, error)
+type SFunc func(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []float64) ([]interface{}, error)
 
 // (sets) SMISMEMBER key member [member ...]
 func (c *Command) SMIsMemberHandle(txn *store.Txn, args [][]byte) interface{} {
@@ -231,13 +231,14 @@ func (c *Command) sstore(txn *store.Txn, args [][]byte, sfunc SFunc) interface{}
 	if err != nil {
 		return txn.SetError(err)
 	}
-	if len(ret) == 0 {
-		return redcon.SimpleInt(0)
-	}
 
-	object, err := c.DeleteThenCreateUUIDObject(txn, SetType, args[0])
+	create := len(ret) > 0
+	object, err := c.DeleteThenCreateUUIDObject(txn, SetType, args[0], create)
 	if err != nil {
 		return txn.SetError(err)
+	}
+	if !create {
+		return redcon.SimpleInt(0)
 	}
 
 	for _, k := range ret {
@@ -263,8 +264,8 @@ func (c *Command) SUnionHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []int) ([]interface{}, error) {
-	getKeyFunc, ok := GetKeyFuncs[typo]
+func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []float64) ([]interface{}, error) {
+	_, ok := GetKeyFuncs[typo]
 	if !ok {
 		return nil, xerror.ErrNotSupport
 	}
@@ -289,8 +290,12 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 				}
 			}
 			return EmptyInterface, nil
-		}
-		if err != nil {
+		} else if err == xerror.WrongTypeErr {
+			if typo == ZsetType && o.Type == SetType {
+			} else {
+				return nil, err
+			}
+		} else if err != nil {
 			return nil, err
 		}
 		count, err := c.GetCountByObject(txn, o)
@@ -323,6 +328,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 		}
 	}
 	utils.ZapLog.Debug("inter", zap.Int("glist", len(glist)), zap.Int("llist", len(llist)))
+	getKeyFunc := GetKeyFuncs[object.Type]
 	start := getKeyFunc(object, nil)
 	end := utils.PrefixNext(start)
 	ret := make([]interface{}, 0)
@@ -337,6 +343,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 		if iterList == nil && len(llist) > 0 {
 			iterList = store.NewIterList()
 			for idx, o := range llist {
+				getKeyFunc := GetKeyFuncs[o.Type]
 				p := getKeyFunc(o, nil)
 				s := getKeyFunc(o, k)
 				e := utils.PrefixNext(p)
@@ -364,6 +371,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 
 		// get check
 		for idx, o := range glist {
+			getKeyFunc := GetKeyFuncs[o.Type]
 			skey := getKeyFunc(o, k)
 			v, err := txn.Get(skey)
 			if err == store.KeyNotFound {
@@ -381,10 +389,15 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 		if getType&OnlyValue == OnlyValue && typo == ZsetType {
 			zv := &Value{}
 			DecodeValue(value, zv)
-			score := utils.DecodeFloat(zv.Value)
+			var score float64
+			if len(zv.Value) > 0 {
+				score = utils.DecodeFloat(zv.Value)
+			} else {
+				score = 1
+			}
 			utils.ZapLog.Debug("inter", zap.ByteString("key", k), zap.Float64("score", score))
 			if len(weight) > 0 {
-				score *= float64(weight[mini])
+				score *= weight[mini]
 			}
 			for idx, v := range lvalues {
 				zv := &Value{}
@@ -392,7 +405,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 				s := utils.DecodeFloat(zv.Value)
 				utils.ZapLog.Debug("inter", zap.ByteString("key", k), zap.Float64("score", s))
 				if len(weight) > 0 {
-					s *= float64(weight[idx])
+					s *= weight[idx]
 				}
 				if getType&SumAGG == SumAGG {
 					score += s
@@ -423,7 +436,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 	return ret, nil
 }
 
-func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []int) ([]interface{}, error) {
+func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []float64) ([]interface{}, error) {
 	utils.ZapLog.Debug("union", zap.ByteStrings("args", args), zap.Int("weight", len(weight)), zap.Int("getType", getType))
 	getKeyFunc, ok := GetKeyFuncs[typo]
 	if !ok {
@@ -433,15 +446,23 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 	var err error
 	iterList := store.NewIterList()
 	for i := 0; i < len(args); i++ {
+		var p []byte
 		object := NewObject(txn.UserId, txn.DBId, typo, args[i])
 		k := object.GetKeyBytes()
 		err = c.getTxnObject(txn, k, object, false)
 		if err == store.KeyNotFound {
 			continue
+		} else if err == xerror.WrongTypeErr {
+			if typo == ZsetType && object.Type == SetType {
+				p = GetKeyFuncs[SetType](object, nil)
+			} else {
+				return nil, err
+			}
 		} else if err != nil {
 			return nil, err
+		} else {
+			p = getKeyFunc(object, nil)
 		}
-		p := getKeyFunc(object, nil)
 		s := p
 		e := utils.PrefixNext(p)
 		iter, err := txn.Iter(s, e, false)
@@ -454,20 +475,24 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 	ret := make([]interface{}, 0)
 	var preKey []byte
 	var preScore float64
+	var i int
 	for {
 		kv, err := iterList.Next()
 		if err != nil {
 			return nil, err
 		}
+		i++
 		new := preKey != nil && !bytes.Equal(preKey, kv.Key)
 		if getType&OnlyKey == OnlyKey {
 			if new {
 				ret = append(ret, preKey)
 			}
+			utils.ZapLog.Debug("union", zap.ByteString("key", kv.Key), zap.Int("i", i), zap.ByteString("pre-key", preKey))
 			preKey = kv.Key
 		}
 		if getType&OnlyValue == OnlyValue && typo == ZsetType {
 			if new {
+				utils.ZapLog.Debug("union", zap.Int("i", i), zap.Float64("ret-score", preScore))
 				ret = append(ret, preScore)
 				preScore = 0
 			}
@@ -476,21 +501,28 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 			}
 			zv := &Value{}
 			DecodeValue(kv.Value, zv)
-			score := utils.DecodeFloat(zv.Value)
+			var score float64
+			if len(zv.Value) > 0 {
+				score = utils.DecodeFloat(zv.Value)
+			} else {
+				score = 1
+			}
 			if len(weight) > 0 {
-				score *= float64(weight[kv.Idx])
+				score *= weight[kv.Idx]
 			}
 			if getType&SumAGG == SumAGG {
 				preScore += score
 			} else if getType&MaxAGG == MaxAGG {
-				if score > preScore {
+				if i == 1 || new || (score > preScore) {
 					preScore = score
 				}
 			} else if getType&MinAGG == MinAGG {
-				if score < preScore {
+				if i == 1 || new || (score < preScore) {
 					preScore = score
 				}
 			}
+			utils.ZapLog.Debug("union", zap.Int("i", i), zap.ByteString("key", kv.Key),
+				zap.Float64("score", score), zap.Float64("pre-score", preScore))
 		}
 		if kv.Key == nil {
 			break
@@ -513,7 +545,7 @@ func (c *Command) checkValidObjectArgs(txn *store.Txn, args [][]byte, typo Objec
 	return nil
 }
 
-func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []int) ([]interface{}, error) {
+func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []float64) ([]interface{}, error) {
 	object := NewObject(txn.UserId, txn.DBId, typo, args[0])
 	key := object.GetKeyBytes()
 	err := c.getTxnObject(txn, key, object, false)
@@ -523,12 +555,16 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 			return nil, err
 		}
 		return EmptyInterface, nil
-	}
-	if err != nil {
+	} else if err == xerror.WrongTypeErr {
+		if typo == ZsetType && object.Type == SetType {
+		} else {
+			return nil, err
+		}
+	} else if err != nil {
 		return nil, err
 	}
 
-	getKeyFunc, ok := GetKeyFuncs[typo]
+	getKeyFunc, ok := GetKeyFuncs[object.Type]
 	if !ok {
 		return nil, xerror.ErrNotSupport
 	}
@@ -599,6 +635,7 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 		if iterList == nil && len(llist) > 0 {
 			iterList = store.NewIterList()
 			for i, o := range llist {
+				getKeyFunc := GetKeyFuncs[o.Type]
 				p := getKeyFunc(o, nil)
 				s := getKeyFunc(o, k)
 				e := utils.PrefixNext(p)
@@ -612,6 +649,7 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 		}
 		// get check
 		for _, o := range glist {
+			getKeyFunc := GetKeyFuncs[o.Type]
 			skey := getKeyFunc(o, k)
 			_, err := txn.Get(skey)
 			if err == nil {
@@ -641,7 +679,12 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 		if getType&OnlyValue == OnlyValue && typo == ZsetType {
 			zv := &Value{}
 			DecodeValue(value, zv)
-			score := utils.DecodeFloat(zv.Value)
+			var score float64
+			if len(zv.Value) > 0 {
+				score = utils.DecodeFloat(zv.Value)
+			} else {
+				score = 1
+			}
 			ret = append(ret, score)
 		}
 		return true

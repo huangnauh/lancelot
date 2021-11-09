@@ -327,6 +327,7 @@ func NewIterList() *IterList {
 }
 
 func (i *IterList) Add(prefix []byte, idx int, iter *Iterator) {
+	utils.ZapLog.Debug("IterList", zap.ByteString("prefix", prefix), zap.ByteString("start", iter.start), zap.ByteString("end", iter.end))
 	i.iters[len(i.iters)] = &IterScan{prefix, prefix, nil, idx, iter}
 }
 
@@ -350,11 +351,13 @@ func (i *IterList) Next() (utils.KV, error) {
 		for it.iter.Valid() {
 			cur := it.iter.Key()
 			if len(cur) >= len(it.prefix) {
-				heap.Push(i.heap, utils.KV{
+				ukv := utils.KV{
 					Idx:   it.idx,
 					Key:   cur[len(it.prefix):],
 					Value: it.iter.Value(),
-				})
+				}
+				utils.ZapLog.Debug("IterList next", zap.ByteString("key", ukv.Key), zap.ByteString("value", ukv.Value))
+				heap.Push(i.heap, ukv)
 			}
 			err = it.iter.Next()
 			if err != nil {

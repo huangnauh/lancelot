@@ -25,7 +25,7 @@ start_server {
 
     test {Stress tester for #3343-alike bugs} {
         r del key
-        for {set j 0} {$j < 10000} {incr j} {
+        for {set j 0} {$j < 100} {incr j} {
             set op [randomInt 6]
             set small_signed_count [expr 5-[randomInt 10]]
             if {[randomInt 2] == 0} {
@@ -93,10 +93,10 @@ start_server {
         }
 
         test {ziplist implementation: encoding stress testing} {
-            for {set j 0} {$j < 200} {incr j} {
+            for {set j 0} {$j < 20} {incr j} {
                 r del l
                 set l {}
-                set len [randomInt 400]
+                set len [randomInt 40]
                 for {set i 0} {$i < $len} {incr i} {
                     set rv [randomValue]
                     randpath {

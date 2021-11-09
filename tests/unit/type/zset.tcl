@@ -751,7 +751,7 @@ start_server {tags {"zset"}} {
             r hello 3
             assert_equal {{b 3.0} {c 5.0}} [r zinter 2 zseta{t} zsetb{t} withscores]
             r hello 2
-        }
+        } {} {needs:resp3}
 
         test "ZINTERSTORE with weights - $encoding" {
             assert_equal 2 [r zinterstore zsetc{t} 2 zseta{t} zsetb{t} weights 2 3]
@@ -788,17 +788,19 @@ start_server {tags {"zset"}} {
                 r zadd zsetinf1{t} +inf key
                 r zadd zsetinf2{t} +inf key
                 r $cmd zsetinf3{t} 2 zsetinf1{t} zsetinf2{t}
-                assert_equal inf [r zscore zsetinf3{t} key]
+                assert_equal +inf [r zscore zsetinf3{t} key]
 
                 r zadd zsetinf1{t} -inf key
                 r zadd zsetinf2{t} +inf key
-                r $cmd zsetinf3{t} 2 zsetinf1{t} zsetinf2{t}
-                assert_equal 0 [r zscore zsetinf3{t} key]
+                assert_error "*resulting score is not a number*" {
+                    r $cmd zsetinf3{t} 2 zsetinf1{t} zsetinf2{t}
+                }
 
                 r zadd zsetinf1{t} +inf key
                 r zadd zsetinf2{t} -inf key
-                r $cmd zsetinf3{t} 2 zsetinf1{t} zsetinf2{t}
-                assert_equal 0 [r zscore zsetinf3{t} key]
+                assert_error "*resulting score is not a number*" {
+                    r $cmd zsetinf3{t} 2 zsetinf1{t} zsetinf2{t}
+                }
 
                 r zadd zsetinf1{t} -inf key
                 r zadd zsetinf2{t} -inf key
@@ -970,7 +972,7 @@ start_server {tags {"zset"}} {
             assert_equal {a 0.0} [r zpopmin z1]
             assert_equal {d 3.0} [r zpopmax z1]
             r hello 2
-        }
+        } {} {needs:resp3}
 
         test "ZPOP with count - $encoding RESP3" {
             r hello 3
@@ -979,7 +981,7 @@ start_server {tags {"zset"}} {
             assert_equal {{a 0.0} {b 1.0}} [r zpopmin z1 2]
             assert_equal {{d 3.0} {c 2.0}} [r zpopmax z1 2]
             r hello 2
-        }
+        } {} {needs:resp3}
 
         test "BZPOP - $encoding RESP3" {
             r hello 3
@@ -994,7 +996,7 @@ start_server {tags {"zset"}} {
             assert_equal {zset c 2} [$rd read]
             assert_equal 0 [r exists zset]
             r hello 2
-        }
+        } {} {needs:resp3}
 
         # r config set zset-max-ziplist-entries $original_max_entries
         # r config set zset-max-ziplist-value $original_max_value
@@ -1568,7 +1570,7 @@ start_server {tags {"zset"}} {
         r hello 3
         assert_equal [r zrange z2{t} 0 -1 withscores] {{a 1.0} {b 2.0} {c 3.0} {d 4.0}}
         r hello 2
-    }
+    } {} {needs:resp3}
 
     test {ZRANGESTORE range} {
         set res [r zrangestore z2{t} z1{t} 1 2]
@@ -1707,7 +1709,7 @@ start_server {tags {"zset"}} {
         assert_equal [llength $res] 3
         assert_equal [llength [lindex $res 1]] 1
         r hello 2
-    }
+    } {} {needs:resp3}
 
     test "ZRANDMEMBER count of 0 is handled correctly" {
         r zrandmember myzset 0

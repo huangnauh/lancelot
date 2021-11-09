@@ -2,6 +2,7 @@
 package redcon
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"sort"
@@ -444,7 +445,7 @@ func AppendNull(b []byte) []byte {
 
 // AppendBulkFloat appends a float64, as bulk bytes.
 func AppendBulkFloat(dst []byte, f float64) []byte {
-	return AppendBulk(dst, strconv.AppendFloat(nil, f, 'f', -1, 64))
+	return AppendBulk(dst, bytes.ToLower(strconv.AppendFloat(nil, f, 'f', -1, 64)))
 }
 
 // AppendBulkInt appends an int64, as bulk bytes.

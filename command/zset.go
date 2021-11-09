@@ -851,10 +851,6 @@ func (c *Command) ZRangeStoreHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 4 {
 		return txn.SetWrongArgs(ZRANGESTORE_COMMAND)
 	}
-	object, err := c.DeleteThenCreateUUIDObject(txn, ZsetType, args[0])
-	if err != nil {
-		return txn.SetError(err)
-	}
 	opt, err := c.checkZRangeOption(args[4:])
 	if err != nil {
 		return txn.SetError(err)
@@ -864,6 +860,17 @@ func (c *Command) ZRangeStoreHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
+
+	create := len(ret) > 0
+	object, err := c.DeleteThenCreateUUIDObject(txn, ZsetType, args[0], create)
+	if err != nil {
+		return txn.SetError(err)
+	}
+
+	if !create {
+		return redcon.SimpleInt(0)
+	}
+
 	count, err := c.ZaddValues(txn, object, ret)
 	if err != nil {
 		return txn.SetError(err)
@@ -1472,7 +1479,7 @@ func (c *Command) ZDiffHandle(txn *store.Txn, args [][]byte) interface{} {
 
 type zsetOptions struct {
 	num     int
-	weights []int
+	weights []float64
 	getType int
 }
 
@@ -1495,11 +1502,11 @@ func checkZsetOptions(args [][]byte) (*zsetOptions, error) {
 			if i+opt.num >= len(args) {
 				return nil, xerror.ErrSyntax
 			}
-			opt.weights = make([]int, opt.num)
+			opt.weights = make([]float64, opt.num)
 			for j := 0; j < opt.num; j++ {
-				weight, err := strconv.Atoi(utils.B2S(args[i+j+1]))
-				if err != nil {
-					return nil, xerror.ErrSyntax
+				weight, err := strconv.ParseFloat(utils.B2S(args[i+j+1]), 64)
+				if err != nil || math.IsNaN(weight) {
+					return nil, xerror.InvalidWeight
 				}
 				opt.weights[j] = weight
 			}
@@ -1617,13 +1624,14 @@ func (c *Command) zstore(txn *store.Txn, args [][]byte, sfunc SFunc) interface{}
 		return txn.SetError(err)
 	}
 
-	if len(ret) == 0 {
-		return redcon.SimpleInt(0)
-	}
-
-	object, err := c.DeleteThenCreateUUIDObject(txn, ZsetType, args[0])
+	create := len(ret) > 0
+	object, err := c.DeleteThenCreateUUIDObject(txn, ZsetType, args[0], create)
 	if err != nil {
 		return txn.SetError(err)
+	}
+
+	if !create {
+		return redcon.SimpleInt(0)
 	}
 
 	count, err := c.ZaddValues(txn, object, ret)

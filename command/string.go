@@ -90,7 +90,9 @@ func (c *Command) MGetHandle(txn *store.Txn, args [][]byte) interface{} {
 	ret := make([]interface{}, len(args))
 	for i := 0; i < len(args); i++ {
 		value, err := c.getString(txn, args[i])
-		if err != nil {
+		if err == xerror.WrongTypeErr {
+			ret[i] = nil
+		} else if err != nil {
 			return txn.SetError(err)
 		}
 		if value == nil {
