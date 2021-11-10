@@ -402,7 +402,12 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 			for idx, v := range lvalues {
 				zv := &Value{}
 				DecodeValue(v, zv)
-				s := utils.DecodeFloat(zv.Value)
+				var s float64
+				if len(zv.Value) > 0 {
+					s = utils.DecodeFloat(zv.Value)
+				} else {
+					s = 1
+				}
 				utils.ZapLog.Debug("inter", zap.ByteString("key", k), zap.Float64("score", s))
 				if len(weight) > 0 {
 					s *= weight[idx]

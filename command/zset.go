@@ -707,7 +707,6 @@ func (c *Command) zpopMany(txn *store.Txn, args [][]byte, reversed bool) (interf
 		if len(ret) > 0 {
 			return []interface{}{args[i], ret[0], ret[1]}, nil
 		}
-		return ret, nil
 	}
 	return nil, nil
 }
@@ -1162,9 +1161,9 @@ func checkStr(arg []byte) (string, string, bool, error) {
 		return key, key, false, xerror.ErrMinMaxString
 	}
 
-	if len(key) < 2 {
-		return key, key, false, xerror.ErrSyntax
-	}
+	// if len(key) < 2 {
+	// 	return key, key, false, xerror.ErrSyntax
+	// }
 	return key[1:], key, include, nil
 }
 
