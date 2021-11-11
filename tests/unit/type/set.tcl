@@ -260,7 +260,7 @@ start_server {
                 r del set_$i{t}
                 lappend args set_$i{t}
                 while {$num_elements} {
-                    set ele [randomValue]
+                    set ele [randomKey]
                     r sadd set_$i{t} $ele
                     if {$i == 0} {
                         set s($ele) x
@@ -323,11 +323,11 @@ start_server {
     }
 
     test "SDIFFSTORE should handle non existing key as empty" {
-        r del set1{t} set2{t} set3{t}
+        r del set1{t} set2{t} set3{t} setres{t}
 
-        r set setres{t} xxx
+        r sadd setres{t} xxx
         assert_equal 0 [r sdiffstore setres{t} foo111{t} bar222{t}]
-        assert_equal 0 [r exists setres{t}]
+        assert_equal 0 [r scard setres{t}]
 
         # with a legal dstkey, should delete dstkey
         r sadd set3{t} a b c
@@ -398,11 +398,11 @@ start_server {
     }
 
     test "SINTERSTORE against non existing keys should delete dstkey" {
-        r del set1{t} set2{t} set3{t}
+        r del set1{t} set2{t} set3{t} setres{t}
 
-        r set setres{t} xxx
+        r sadd setres{t} xxx
         assert_equal 0 [r sinterstore setres{t} foo111{t} bar222{t}]
-        assert_equal 0 [r exists setres{t}]
+        assert_equal 0 [r scard setres{t}]
 
         # with a legal dstkey
         r sadd set3{t} a b c
@@ -464,9 +464,9 @@ start_server {
     test "SUNIONSTORE should handle non existing key as empty" {
         r del set1{t} set2{t} set3{t}
 
-        r set setres{t} xxx
+        r sadd setres{t} xxx
         assert_equal 0 [r sunionstore setres{t} foo111{t} bar222{t}]
-        assert_equal 0 [r exists setres{t}]
+        assert_equal 0 [r scard setres{t}]
 
         # set1 set2 both empty, should delete the dstkey
         r sadd set3{t} a b c
@@ -486,9 +486,9 @@ start_server {
     }
 
     test "SUNIONSTORE against non existing keys should delete dstkey" {
-        r set setres{t} xxx
+        r sadd setres{t} xxx
         assert_equal 0 [r sunionstore setres{t} foo111{t} bar222{t}]
-        assert_equal 0 [r exists setres{t}]
+        assert_equal 0 [r scard setres{t}]
     }
 
     foreach {type contents} {hashtable {a b c} intset {1 2 3}} {
@@ -514,7 +514,7 @@ start_server {
                 set myset([r srandmember myset]) 1
             }
             assert_equal $contents [lsort [array names myset]]
-        }
+        } {} {needs:rand}
     }
 
     foreach {type contents} {
@@ -705,7 +705,7 @@ start_server {
                 }
                 assert {$iterations != 0}
             }
-        }
+        } {} {needs:rand}
     }
 
     foreach {type contents} {
@@ -744,7 +744,7 @@ start_server {
                 # df = 9, 40 means 0.00001 probability
                 assert_lessthan [chi_square_value $allkey] 40
             }
-        }
+        } {} {needs:rand}
     }
 
     proc setup_move {} {

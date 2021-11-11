@@ -73,17 +73,20 @@ func (c *Command) SAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(SADD_COMMAND)
 	}
-	count, err := c.sadd(txn, args[0], args[1:])
+	count, err := c.sadd(txn, args[0], args[1:], false)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	return redcon.SimpleInt(count)
 }
 
-func (c *Command) sadd(txn *store.Txn, arg []byte, args [][]byte) (int64, error) {
+func (c *Command) sadd(txn *store.Txn, arg []byte, args [][]byte, check bool) (int64, error) {
 	object, err := c.GetOrCreateUUIDObject(txn, SetType, arg)
 	if err != nil {
 		return 0, err
+	}
+	if check {
+		return 0, nil
 	}
 
 	var count int64
@@ -154,10 +157,8 @@ func (c *Command) SMoveHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	if count == 0 {
-		return redcon.SimpleInt(0)
-	}
-	count, err = c.sadd(txn, args[1], args[2:])
+	check := count == 0
+	count, err = c.sadd(txn, args[1], args[2:], check)
 	if err != nil {
 		return txn.SetError(err)
 	}
