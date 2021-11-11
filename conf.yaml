@@ -38,7 +38,7 @@ auth:
 key:
   scan-max-count: 10000
   cursor-expirate-second: 600
-  db-size-hash: 1000
+  db-size-hash: 10000
 rpc:
   timeout: 10s
   max_stream: 1000

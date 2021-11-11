@@ -1696,9 +1696,9 @@ start_server {tags {"zset"}} {
                 set myzset($key) 1
             }
             assert_equal [lsort [get_keys $contents]] [lsort [array names myzset]]
-        }
+        } {} {needs:rand}
         # r config set zset-max-ziplist-value $original_max_value
-    } {} {needs:rand}
+    }
 
     test "ZRANDMEMBER with RESP3" {
         r hello 3
