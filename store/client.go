@@ -129,7 +129,7 @@ func (c *Client) ID() string {
 
 func (c *Client) GetLeader(ctx context.Context) string {
 	if c.manager == nil {
-		return ""
+		return c.ID()
 	}
 	return c.manager.GetLeader(ctx)
 }
