@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"go.uber.org/zap"
@@ -79,6 +79,7 @@ func (c *Command) tickGC() {
 
 	saved := oracle.GetTimeFromTS(loadTS)
 	if saved.Add(c.cfg.GC.TickInterval).After(now) {
+		utils.ZapLog.Debug("[gc] not reach tick interval", zap.Time("saved", saved), zap.Time("now", now))
 		return
 	}
 	err = c.client.SaveTS(GcSavedTs, ts)
@@ -90,7 +91,7 @@ func (c *Command) tickGC() {
 	go c.touchGC()
 
 	// go c.gcPubSub(ms)
-
+	utils.ZapLog.Debug("[gc] start gc", zap.Time("now", now))
 	cur := []byte{byte(TTLPrefix)}
 	endGC := []byte{byte(TTLPrefix + 1)}
 LABLE:
@@ -121,6 +122,8 @@ LABLE:
 	}
 	c.gcWait.Wait()
 	c.gcClosed <- true
+	endTime := time.Now()
+	utils.ZapLog.Debug("[gc] end gc", zap.Time("now", endTime))
 }
 
 func (c *Command) DelteRange(start, end []byte, callback func(*store.Client)) {
@@ -153,15 +156,29 @@ func (c *Command) doGC(start, end []byte, now int64) ([]byte, *Object, error) {
 			break
 		}
 
-		object, err := GetObjectFromTTL(lastKey, it.Value())
+		lastValue := it.Value()
+		object, err := GetObjectFromTTL(lastKey, lastValue)
 		if err != nil {
-			return lastKey, nil, err
-		}
-		if object.TTL >= now {
-			return nil, object, nil
+			utils.ZapLog.Warn("invalid key", zap.ByteString("value", lastValue), zap.ByteString("key", lastKey), zap.Error(err))
+			err = txn.Del(lastKey)
+			if err != nil {
+				utils.ZapLog.Error("[gc] del invalid ttl key", zap.ByteString("ttl key", lastKey), zap.Error(err))
+			}
+			err = it.Next()
+			if err != nil {
+				utils.ZapLog.Error("[gc] iter next", zap.Error(err))
+				return lastKey, nil, err
+			}
+			continue
 		}
 
 		o = object
+		if object.TTL >= now {
+			lastKey = nil
+			utils.ZapLog.Debug("[gc] object not expired", zap.Int64("ttl", object.TTL),
+				zap.ByteString("ttl key", lastKey), zap.ByteString("key", object.Key))
+			break
+		}
 		if len(object.Value) > 0 {
 			p := object.GetValueBytes(nil)
 			utils.ZapLog.Debug("[gc] delete value", zap.ByteString("value", object.Value), zap.ByteString("key", object.Key))
@@ -181,6 +198,7 @@ func (c *Command) doGC(start, end []byte, now int64) ([]byte, *Object, error) {
 					err = c.CleanKey(txn, object.GetKeyBytes(), ttlKey, object, 0, MinusCount|GCChange)
 				}
 				if err != nil {
+					utils.ZapLog.Error("[gc] del key", zap.ByteString("value", object.Value), zap.ByteString("key", object.Key), zap.Error(err))
 					return
 				}
 				txn.Commit()
@@ -191,6 +209,7 @@ func (c *Command) doGC(start, end []byte, now int64) ([]byte, *Object, error) {
 			}
 		} else if len(object.Key) > 0 {
 			count++
+			utils.ZapLog.Debug("[gc] del key", zap.ByteString("ttl key", lastKey), zap.ByteString("key", object.Key))
 			err = c.CleanKey(txn, object.GetKeyBytes(), lastKey, object, 0, MinusCount|GCChange)
 			if err != nil {
 				utils.ZapLog.Error("[gc] del key", zap.ByteString("ttl key", lastKey), zap.Error(err))
@@ -212,13 +231,15 @@ func (c *Command) doGC(start, end []byte, now int64) ([]byte, *Object, error) {
 		utils.ZapLog.Error("[gc] commit", zap.Error(err))
 		return lastKey, nil, err
 	}
+	utils.ZapLog.Info("[gc] end gc", zap.Bool("finish", finish), zap.ByteString("last key", lastKey),
+		zap.Any("object", o), zap.ByteString("start", start), zap.ByteString("end", end))
 
-	if finish {
+	if finish || !it.Valid() {
 		return nil, nil, nil
 	}
 
 	if lastKey == nil {
-		return nil, nil, nil
+		return nil, o, nil
 	}
 	return utils.NextKey(lastKey), o, nil
 }

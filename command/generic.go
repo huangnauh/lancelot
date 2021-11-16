@@ -285,7 +285,7 @@ func (c *Command) TTLHandle(txn *store.Txn, args [][]byte) interface{} {
 		return redcon.SimpleInt(ttl)
 	}
 	val := ttl - txn.Now
-	if val%1000 == 0 {
+	if val%1000 < 500 {
 		return redcon.SimpleInt((ttl - txn.Now) / 1000)
 	} else {
 		return redcon.SimpleInt((ttl-txn.Now)/1000 + 1)

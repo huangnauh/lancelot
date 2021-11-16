@@ -3,20 +3,18 @@ package store
 import (
 	"bytes"
 	"context"
-	"net/url"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
-	tikvConfig "github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/pingcap/tidb/store/tikv/tikvrpc"
+	"github.com/pingcap/tidb/store/mockstore/unistore"
+	tikvConfig "github.com/tikv/client-go/v2/config"
+	"github.com/tikv/client-go/v2/oracle"
+	"github.com/tikv/client-go/v2/tikv"
+	"github.com/tikv/client-go/v2/tikvrpc"
+	"github.com/tikv/client-go/v2/txnkv/rangetask"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -27,11 +25,10 @@ import (
 )
 
 type Client struct {
-	store   kv.Storage
+	store   *tikv.KVStore
 	etcd    *clientv3.Client
 	manager *Manager
 	conf    *config.Store
-	mock    bool
 	uuid    string
 	ctx     context.Context
 	cancel  context.CancelFunc
@@ -39,10 +36,6 @@ type Client struct {
 
 func Open(c *config.Config) (*Client, error) {
 	conf := &c.Store
-	u, err := url.Parse(conf.Path)
-	if err != nil {
-		return nil, err
-	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -53,63 +46,48 @@ func Open(c *config.Config) (*Client, error) {
 		cancel: cancel,
 	}
 
-	if strings.EqualFold(u.Scheme, "mocktikv") {
-		var driver mockstore.MockTiKVDriver
-		s, err := driver.Open(conf.Path)
+	var err error
+	if conf.PDAddrs == nil {
+		c, pdClient, cluster, err := unistore.New("")
 		if err != nil {
-			utils.ZapLog.Error("mocktikv driver open", zap.Error(err))
 			return nil, err
 		}
-		client.store = s
-		client.mock = true
-		return client, nil
+		unistore.BootstrapWithSingleStore(cluster)
+		client.store, err = tikv.NewTestTiKVStore(c, pdClient, nil, nil, 0)
+	} else {
+		client.store, err = tikv.NewTxnClient(conf.PDAddrs)
 	}
-
-	driver := tikv.Driver{}
-	cfg := tikvConfig.GetGlobalConfig()
-	cfg.Log.Level = conf.Level
-	cfg.Log.EnableSlowLog = false
-	tikvConfig.StoreGlobalConfig(cfg)
-	s, err := driver.Open(conf.Path)
 	if err != nil {
-		utils.ZapLog.Error("tikv driver open", zap.Error(err))
+		utils.ZapLog.Error("new tikv client", zap.Error(err))
 		return nil, err
 	}
 
-	client.store = s
-	if ebd, ok := s.(tikv.EtcdBackend); ok {
-		var addrs []string
-		var err error
-		if addrs, err = ebd.EtcdAddrs(); err != nil {
+	if len(conf.PDAddrs) > 0 {
+		cfg := tikvConfig.GetGlobalConfig()
+		etcdLogCfg := zap.NewProductionConfig()
+		etcdLogCfg.Level = zap.NewAtomicLevelAt(zap.ErrorLevel)
+		cli, err := clientv3.New(clientv3.Config{
+			LogConfig:        &etcdLogCfg,
+			Endpoints:        conf.PDAddrs,
+			AutoSyncInterval: 30 * time.Second,
+			DialTimeout:      5 * time.Second,
+			DialOptions: []grpc.DialOption{
+				grpc.WithBackoffMaxDelay(time.Second * 3),
+				grpc.WithKeepaliveParams(keepalive.ClientParameters{
+					Time:    time.Duration(cfg.TiKVClient.GrpcKeepAliveTime) * time.Second,
+					Timeout: time.Duration(cfg.TiKVClient.GrpcKeepAliveTimeout) * time.Second,
+				}),
+			},
+		})
+		if err != nil {
 			return nil, err
 		}
-		if addrs != nil {
-			etcdLogCfg := zap.NewProductionConfig()
-			etcdLogCfg.Level = zap.NewAtomicLevelAt(zap.ErrorLevel)
-			cli, err := clientv3.New(clientv3.Config{
-				LogConfig:        &etcdLogCfg,
-				Endpoints:        addrs,
-				AutoSyncInterval: 30 * time.Second,
-				DialTimeout:      5 * time.Second,
-				DialOptions: []grpc.DialOption{
-					grpc.WithBackoffMaxDelay(time.Second * 3),
-					grpc.WithKeepaliveParams(keepalive.ClientParameters{
-						Time:    time.Duration(cfg.TiKVClient.GrpcKeepAliveTime) * time.Second,
-						Timeout: time.Duration(cfg.TiKVClient.GrpcKeepAliveTimeout) * time.Second,
-					}),
-				},
-				TLS: ebd.TLSConfig(),
-			})
-			if err != nil {
-				return nil, err
-			}
-			client.etcd = cli
+		client.etcd = cli
 
-			client.manager = NewManager(cli, client.uuid)
-			err = client.manager.RunElection()
-			if err != nil {
-				return nil, err
-			}
+		client.manager = NewManager(cli, client.uuid)
+		err = client.manager.RunElection()
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -148,16 +126,11 @@ func (c *Client) Close() {
 }
 
 func (c *Client) CurrentVersion() (uint64, error) {
-	ver, err := c.store.CurrentVersion(oracle.GlobalTxnScope)
-	if err != nil {
-		return 0, err
-	}
-	return ver.Ver, nil
+	return c.store.CurrentTimestamp(oracle.GlobalTxnScope)
 }
 
 func (c *Client) GetSafePointKV() tikv.SafePointKV {
-	store := c.store.(tikv.Storage)
-	return store.GetSafePointKV()
+	return c.store.GetSafePointKV()
 }
 
 func (c *Client) LoadTS(savedPath string) (uint64, error) {
@@ -176,6 +149,7 @@ func (c *Client) LoadTS(savedPath string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
+	utils.ZapLog.Debug("load ts", zap.String("path", savedPath), zap.Uint64("ts", t))
 	return t, nil
 }
 
@@ -279,12 +253,11 @@ func (c *Client) Delete(key []byte) error {
 }
 
 func (c *Client) UnsafeDeleteRange(ctx context.Context, startKey, endKey []byte, concurrency int) error {
-	if c.mock {
+	if c.conf.PDAddrs == nil {
 		return c.DelteRange(startKey, endKey, nil)
 	}
 
-	storage := c.store.(tikv.Storage)
-	stores, err := storage.GetRegionCache().PDClient().GetAllStores(ctx)
+	stores, err := c.store.GetRegionCache().PDClient().GetAllStores(ctx)
 	if err != nil {
 		return err
 	}
@@ -293,7 +266,7 @@ func (c *Client) UnsafeDeleteRange(ctx context.Context, startKey, endKey []byte,
 		StartKey: startKey,
 		EndKey:   endKey,
 	})
-	tikvCli := storage.GetTiKVClient()
+	tikvCli := c.store.GetTiKVClient()
 
 	var wg sync.WaitGroup
 	failed := false
@@ -308,7 +281,7 @@ func (c *Client) UnsafeDeleteRange(ctx context.Context, startKey, endKey []byte,
 		go func() {
 			defer wg.Done()
 
-			resp, err := tikvCli.SendRequest(ctx, address, req, tikv.UnsafeDestroyRangeTimeout)
+			resp, err := tikvCli.SendRequest(ctx, address, req, 5*time.Minute)
 			if err != nil {
 				failed = true
 				utils.ZapLog.Error("unsafe destroy range store",
@@ -340,7 +313,7 @@ func (c *Client) UnsafeDeleteRange(ctx context.Context, startKey, endKey []byte,
 	}
 
 	// Notify all affected regions in the range that UnsafeDestroyRange occurs.
-	notifyTask := tikv.NewNotifyDeleteRangeTask(storage, startKey, endKey, concurrency)
+	notifyTask := rangetask.NewNotifyDeleteRangeTask(c.store, startKey, endKey, concurrency)
 	err = notifyTask.Execute(ctx)
 	if err != nil {
 		utils.ZapLog.Error("failed notifying regions affected by UnsafeDestroyRange",

@@ -5,9 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/gcworker"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"go.uber.org/zap"
 )
@@ -19,7 +17,7 @@ const (
 )
 
 func (c *Client) RunGC() {
-	if c.mock {
+	if len(c.conf.PDAddrs) == 0 {
 		return
 	}
 	c.gcTick()
@@ -49,8 +47,9 @@ func (c *Client) gcTick() {
 		return
 	}
 
-	lastSafePoint, err := c.getSafePoint(tikv.GcSavedSafePoint)
+	lastSafePoint, err := c.getSafePoint(GcSafePoint)
 	if err != nil {
+		utils.ZapLog.Error("get safepoint", zap.String("gc-saved", GcSafePoint))
 		return
 	}
 
@@ -61,18 +60,16 @@ func (c *Client) gcTick() {
 
 	err = c.saveSafePoint(GcSafePoint, safePointValue)
 	if err != nil {
+		utils.ZapLog.Error("get safepoint", zap.String("gc-saved", GcSafePoint))
 		return
 	}
 
-	utils.ZapLog.Info("start run distributed gc", zap.Time("safePoint", safePoint), zap.String("id", c.uuid))
-	store := c.store.(tikv.Storage)
-	pdClient := store.GetRegionCache().PDClient()
-	err = gcworker.RunDistributedGCJob(context.Background(), store, pdClient, safePointValue, c.uuid, c.conf.GCConcurrency)
+	utils.ZapLog.Info("gc start", zap.Time("safePoint", safePoint), zap.String("id", c.uuid))
+	_, err = c.store.GC(context.Background(), safePointValue)
 	if err != nil {
-		utils.ZapLog.Error("run distributed gc job failed", zap.Error(err))
 		return
 	}
-	utils.ZapLog.Info("distributed gc finished", zap.Time("safePoint", safePoint))
+	utils.ZapLog.Info("gc finished", zap.Time("safePoint", safePoint), zap.String("id", c.uuid))
 }
 
 func (c *Client) getNewSafePoint() (time.Time, uint64, error) {

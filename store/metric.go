@@ -1,7 +1,7 @@
 package store
 
 import (
-	"github.com/pingcap/tidb/metrics"
+	"github.com/tikv/client-go/v2/metrics"
 )
 
 func init() {

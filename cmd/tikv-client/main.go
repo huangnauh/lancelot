@@ -1,65 +1,29 @@
 package main
 
 import (
-	"context"
+	"fmt"
 
-	"github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/tikv"
+	"github.com/tikv/client-go/v2/tikv"
 )
 
 func main() {
-	cfg := config.GetGlobalConfig()
-	cfg.Log.Level = "debug"
-	config.StoreGlobalConfig(cfg)
-	driver := tikv.Driver{}
-	store, err := driver.Open("tikv://10.0.5.89:2379")
+	store, err := tikv.NewTxnClient([]string{"10.0.5.89:2379"})
 	if err != nil {
 		panic(err)
 	}
 
-	txn1, err := store.Begin()
+	txn, err := store.Begin()
 	if err != nil {
 		panic(err)
 	}
-	err = txn1.LockKeys(context.Background(), new(kv.LockCtx), []byte("key1"))
-	if err != nil {
-		panic(err)
-	}
-
-	txn2, err := store.Begin()
-	if err != nil {
-		panic(err)
-	}
-	err = txn2.Set([]byte("key1"), []byte("value1"))
-	if err != nil {
-		panic(err)
-	}
-	err = txn2.Commit(context.Background())
+	it, err := txn.Iter([]byte("t"), []byte("u"))
 	if err != nil {
 		panic(err)
 	}
 
-	// err = txn1.Set([]byte("key2"), []byte("value2"))
-	// if err != nil {
-	// 	panic(err)
-	// }
-	err = txn1.Commit(context.Background())
-	if err != nil {
-		panic(err)
+	for it.Valid() {
+		fmt.Printf("key: %s, value:%s\n", []byte(it.Key()), []byte(it.Value()))
+		it.Next()
 	}
-	// txn, err := store.Begin()
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// v, err := txn.Get(context.Background(), []byte("key1"))
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Println(v)
-	// v, err = txn.Get(context.Background(), []byte("key2"))
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Println(v)
+	it.Close()
 }

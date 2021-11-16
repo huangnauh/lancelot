@@ -10,7 +10,7 @@ import (
 )
 
 type Store struct {
-	Path               string        `yaml:"path"`
+	PDAddrs            []string      `yaml:"pd-addrs"`
 	Level              string        `yaml:"level"`
 	UUID               string        `yaml:"uuid"`
 	GCEnable           bool          `yaml:"gc-enable"`
@@ -98,7 +98,7 @@ var cfg = &Config{
 	RpcPort:   6381,
 	CacheSize: 10 * 1024 * 1024,
 	Store: Store{
-		Path:               "mocktikv://",
+		PDAddrs:            nil,
 		Level:              "debug",
 		UUID:               Hostname(),
 		GCConcurrency:      1,

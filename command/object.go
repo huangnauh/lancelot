@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"

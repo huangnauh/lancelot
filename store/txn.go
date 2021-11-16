@@ -8,10 +8,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/store/tikv"
-	"github.com/pingcap/tidb/store/tikv/oracle"
-	"github.com/pingcap/tidb/util/execdetails"
+	tikverr "github.com/tikv/client-go/v2/error"
+	tikvstore "github.com/tikv/client-go/v2/kv"
+	"github.com/tikv/client-go/v2/oracle"
+	"github.com/tikv/client-go/v2/tikv"
+	"github.com/tikv/client-go/v2/txnkv/transaction"
+	"github.com/tikv/client-go/v2/txnkv/txnsnapshot"
+	"github.com/tikv/client-go/v2/util"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
@@ -23,7 +26,7 @@ import (
 type Txn struct {
 	*redcon.Conn
 	client     *Client
-	txn        kv.Transaction
+	txn        *transaction.KVTxn
 	Multi      bool
 	Watch      bool
 	Exec       bool
@@ -117,11 +120,10 @@ func (t *Txn) Get(key []byte) ([]byte, error) {
 	}
 	start := time.Now()
 	snapshot := t.txn.GetSnapshot()
-	snapshotStats := &tikv.SnapshotRuntimeStats{}
-	snapshot.SetOption(kv.CollectRuntimeStats, snapshotStats)
+	snapshotStats := &txnsnapshot.SnapshotRuntimeStats{}
+	snapshot.SetRuntimeStats(snapshotStats)
 	ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.ReadTimeout)
-	execDetail := &execdetails.StmtExecDetails{}
-	ctx = context.WithValue(ctx, execdetails.StmtExecDetailKey, execDetail)
+	execDetail := &util.ExecDetails{}
 	defer cancel()
 	v, err := t.txn.Get(ctx, key)
 	utils.ZapLog.Debug("[txn] get", zap.String("remote", t.RemoteAddr()),
@@ -133,7 +135,7 @@ func (t *Txn) Get(key []byte) ([]byte, error) {
 			zap.String("detail", execDetailsString(execDetail)), zap.Any("snapshot", snapshotStats))
 	}
 
-	if kv.IsErrNotFound(err) {
+	if tikverr.IsErrNotFound(err) {
 		return nil, KeyNotFound
 	}
 	if err != nil {
@@ -180,14 +182,12 @@ func (t *Txn) Del(key []byte) error {
 func (t *Txn) LockKeys(keys [][]byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.WriteTimeout)
 	defer cancel()
-	kvKeys := make([]kv.Key, len(keys))
 	for i := range keys {
 		if len(keys[i]) >= utils.MAX_KEY_SIZE {
 			return xerror.ErrExceedMaxSize
 		}
-		kvKeys[i] = kv.Key(keys[i])
 	}
-	err := t.txn.LockKeys(ctx, new(kv.LockCtx), kvKeys...)
+	err := t.txn.LockKeys(ctx, new(tikvstore.LockCtx), keys...)
 	if err != nil {
 		utils.ZapLog.Error("[txn] lock", zap.String("remote", t.RemoteAddr()),
 			zap.Uint64("timestamp", t.Timestamp), zap.Error(err))
@@ -202,14 +202,14 @@ func (t *Txn) Reset() {
 }
 
 type Iterator struct {
-	kv.Iterator
+	tikv.Iterator
 	start []byte
 	end   []byte
 	txn   *Txn
 }
 
 func (t *Txn) Iter(start, end []byte, reversed bool) (*Iterator, error) {
-	var it kv.Iterator
+	var it tikv.Iterator
 	var err error
 	if !reversed {
 		it, err = t.txn.Iter(start, end)
@@ -223,7 +223,7 @@ func (t *Txn) Iter(start, end []byte, reversed bool) (*Iterator, error) {
 }
 
 func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
-	var it kv.Iterator
+	var it tikv.Iterator
 	var err error
 	if bytes.Compare(end, start) >= 0 {
 		it, err = t.Iter(start, end, false)

@@ -2,10 +2,10 @@ start_server {tags {"expire"}} {
     test {EXPIRE - set timeouts multiple times} {
         r set x foobar
         set v1 [r expire x 5]
-        after 200
+        after 500
         set v2 [r ttl x]
         set v3 [r expire x 10]
-        after 200
+        after 500
         set v4 [r ttl x]
         r expire x 2
         list $v1 $v2 $v3 $v4
@@ -66,7 +66,7 @@ start_server {tags {"expire"}} {
     test {PERSIST can undo an EXPIRE} {
         r set x foo
         r expire x 50
-        after 200
+        after 500
         list [r ttl x] [r persist x] [r ttl x] [r get x]
     } {49 1 -1 foo}
 
@@ -82,7 +82,7 @@ start_server {tags {"expire"}} {
         for {set j 0} {$j < 10} {incr j} {
             r del x
             r setex x 1 somevalue
-            after 900
+            after 500
             set a [r get x]
             after 1100
             set b [r get x]
@@ -102,25 +102,25 @@ start_server {tags {"expire"}} {
             r del x
             r del y
             r del z
-            r psetex x 100 somevalue
-            after 80
+            r psetex x 500 somevalue
+            after 10
             set a [r get x]
-            after 120
+            after 500
             set b [r get x]
 
             r set x somevalue
-            r pexpire x 100
-            after 80
+            r pexpire x 500
+            after 10
             set c [r get x]
-            after 120
+            after 500
             set d [r get x]
 
             r set x somevalue
             set now [r time]
-            r pexpireat x [expr ([lindex $now 0]*1000)+([lindex $now 1]/1000)+200]
+            r pexpireat x [expr ([lindex $now 0]*1000)+([lindex $now 1]/1000)+500]
             after 20
             set e [r get x]
-            after 220
+            after 520
             set f [r get x]
 
             if {$a eq {somevalue} && $b eq {} &&
@@ -144,7 +144,7 @@ start_server {tags {"expire"}} {
         r del x
         r setex x 1 somevalue
         set ttl [r pttl x]
-        assert {$ttl > 900 && $ttl <= 1000}
+        assert {$ttl > 500 && $ttl <= 1000}
     }
 
     test {TTL / PTTL / EXPIRETIME / PEXPIRETIME return -1 if key has no expire} {

@@ -6,14 +6,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/tidb/util/execdetails"
+	"github.com/tikv/client-go/v2/util"
 )
 
 const (
 	slowTime = 10 * time.Millisecond
 )
 
-func execDetailsString(execDetails *execdetails.StmtExecDetails) string {
+func execDetailsString(execDetails *util.ExecDetails) string {
 	if execDetails == nil {
 		return ""
 	}
@@ -42,7 +42,7 @@ func execDetailsString(execDetails *execdetails.StmtExecDetails) string {
 	return builder.String()
 }
 
-func commitDetailsString(commitDetails *execdetails.CommitDetails) string {
+func commitDetailsString(commitDetails *util.CommitDetails) string {
 	if commitDetails == nil {
 		return ""
 	}
@@ -63,7 +63,7 @@ func commitDetailsString(commitDetails *execdetails.CommitDetails) string {
 		builder.WriteString(" ")
 	}
 
-	commitBackOffTime := time.Duration(commitDetails.CommitBackoffTime)
+	commitBackOffTime := time.Duration(commitDetails.Mu.CommitBackoffTime)
 	if commitBackOffTime > slowTime {
 		builder.WriteString("Commit_back_off_time: ")
 		builder.WriteString(commitBackOffTime.String())

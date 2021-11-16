@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/coocood/freecache"
-	"github.com/pingcap/tidb/store/tikv/oracle"
+	"github.com/tikv/client-go/v2/oracle"
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/member"
@@ -69,7 +69,7 @@ func NewCommand(cfg *config.Config) *Command {
 			scripts: make(map[string]*lua.FunctionProto),
 		},
 		users:    make(map[string]*User),
-		gcClosed: make(chan bool),
+		gcClosed: make(chan bool, 1),
 		gcWait:   &sync.WaitGroup{},
 		cache:    freecache.NewCache(cfg.CacheSize),
 		Info:     &Info{},
@@ -1101,7 +1101,7 @@ func (c *Command) Accept(conn *redcon.Conn) bool {
 	utils.ZapLog.Debug("Accept", zap.String("remote", conn.RemoteAddr()))
 	id, err := c.GetCurrentID()
 	if err != nil {
-		id = oracle.EncodeTSO(time.Now().UnixMilli())
+		id = oracle.GoTimeToTS(time.Now())
 	}
 	conn.ID = id
 	return true
