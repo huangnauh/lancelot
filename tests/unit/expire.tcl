@@ -2,10 +2,10 @@ start_server {tags {"expire"}} {
     test {EXPIRE - set timeouts multiple times} {
         r set x foobar
         set v1 [r expire x 5]
-        after 500
+        after 600
         set v2 [r ttl x]
         set v3 [r expire x 10]
-        after 500
+        after 600
         set v4 [r ttl x]
         r expire x 2
         list $v1 $v2 $v3 $v4
@@ -66,7 +66,7 @@ start_server {tags {"expire"}} {
     test {PERSIST can undo an EXPIRE} {
         r set x foo
         r expire x 50
-        after 500
+        after 800
         list [r ttl x] [r persist x] [r ttl x] [r get x]
     } {49 1 -1 foo}
 

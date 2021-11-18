@@ -1110,4 +1110,11 @@ func (c *Command) Accept(conn *redcon.Conn) bool {
 func (c *Command) Close(conn *redcon.Conn, err error) {
 	utils.ZapLog.Debug("Close", zap.String("remote", conn.RemoteAddr()), zap.Error(err))
 	atomic.AddInt64(&c.Info.ConnectedClients, -1)
+	connTxn := conn.Transaction()
+	if connTxn != nil {
+		txn, ok := connTxn.(*store.Txn)
+		if ok {
+			txn.Close()
+		}
+	}
 }

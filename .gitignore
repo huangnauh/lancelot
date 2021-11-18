@@ -1,6 +1,8 @@
 /redis-server
+/lancelot-client
 lancelot
 /tikv-client
 /redis.pid*
 .vscode
+*.log
 __debug_bin

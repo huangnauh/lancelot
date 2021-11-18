@@ -582,23 +582,27 @@ func (c *Command) BlockHandle(txn *store.Txn, args [][]byte, bfunc BFunc) (inter
 
 	tick := time.NewTicker(pullInternal)
 	defer tick.Stop()
-	for range tick.C {
-		err = txn.Begin()
-		if err != nil {
-			return nil, err
-		}
-		ret, err := bfunc(txn, args[0:len(args)-1])
-		if err != nil {
-			return nil, err
-		}
-		if ret != nil {
-			return ret, nil
-		}
-		txn.Rollback()
-		now := time.Now()
-		if timeout > 0 && now.Add(PullInternal).Sub(start) >= timeout {
+	for {
+		select {
+		case <-tick.C:
+			err = txn.Begin()
+			if err != nil {
+				return nil, err
+			}
+			ret, err := bfunc(txn, args[0:len(args)-1])
+			if err != nil {
+				return nil, err
+			}
+			if ret != nil {
+				return ret, nil
+			}
+			txn.Rollback()
+			now := time.Now()
+			if timeout > 0 && now.Add(PullInternal).Sub(start) >= timeout {
+				return nil, nil
+			}
+		case <-txn.Closed:
 			return nil, nil
 		}
 	}
-	return nil, nil
 }

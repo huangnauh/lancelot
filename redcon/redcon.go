@@ -414,7 +414,9 @@ func handle(s *Server, c *Conn) {
 	}()
 }
 
-type Transaction interface{}
+type Transaction interface {
+	Close() error
+}
 
 // conn represents a client connection
 type Conn struct {

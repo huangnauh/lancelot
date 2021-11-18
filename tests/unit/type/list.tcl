@@ -145,17 +145,22 @@ start_server {
 
     foreach {type large} [array get largevalue] {
         test "BLPOP, BRPOP: single existing list - $type" {
+            wait_for_blocked_clients_count 0
             set rd [redis_deferring_client]
             create_list blist "a b $large c d"
 
             $rd blpop blist 1
+            wait_for_blocked_clients_count 0
             assert_equal {blist a} [$rd read]
             $rd brpop blist 1
+            wait_for_blocked_clients_count 0
             assert_equal {blist d} [$rd read]
 
             $rd blpop blist 1
+            wait_for_blocked_clients_count 0
             assert_equal {blist b} [$rd read]
             $rd brpop blist 1
+            wait_for_blocked_clients_count 0
             assert_equal {blist c} [$rd read]
         }
 
@@ -165,15 +170,19 @@ start_server {
             create_list blist2{t} "d $large f"
 
             $rd blpop blist1{t} blist2{t} 1
+            wait_for_blocked_clients_count 0
             assert_equal {blist1{t} a} [$rd read]
             $rd brpop blist1{t} blist2{t} 1
+            wait_for_blocked_clients_count 0
             assert_equal {blist1{t} c} [$rd read]
             assert_equal 1 [r llen blist1{t}]
             assert_equal 3 [r llen blist2{t}]
 
             $rd blpop blist2{t} blist1{t} 1
+            wait_for_blocked_clients_count 0
             assert_equal {blist2{t} d} [$rd read]
             $rd brpop blist2{t} blist1{t} 1
+            wait_for_blocked_clients_count 0
             assert_equal {blist2{t} f} [$rd read]
             assert_equal 1 [r llen blist1{t}]
             assert_equal 1 [r llen blist2{t}]
@@ -185,8 +194,10 @@ start_server {
             create_list blist2{t} "d $large f"
 
             $rd blpop blist1{t} blist2{t} 1
+            wait_for_blocked_clients_count 0
             assert_equal {blist2{t} d} [$rd read]
             $rd brpop blist1{t} blist2{t} 1
+            wait_for_blocked_clients_count 0
             assert_equal {blist2{t} f} [$rd read]
             assert_equal 0 [r llen blist1{t}]
             assert_equal 1 [r llen blist2{t}]
@@ -200,6 +211,7 @@ start_server {
             create_list blist{t} "a b $large c d"
 
             $rd brpoplpush blist{t} target{t} 1
+            wait_for_blocked_clients_count 0
             assert_equal d [$rd read]
 
             assert_equal d [r lpop target{t}]
@@ -216,6 +228,7 @@ start_server {
                     create_list blist{t} "a b $large c d"
 
                     $rd blmove blist{t} target{t} $wherefrom $whereto 1
+                    wait_for_blocked_clients_count 0
                     set poppedelement [$rd read]
 
                     if {$wherefrom eq "right"} {
@@ -241,12 +254,14 @@ start_server {
         r del list
 
         $rd blpop list 0
+        wait_for_blocked_clients_count 1
         r multi
         r lpush list a
         r del list
         r exec
         r del list
         r lpush list b
+        wait_for_blocked_clients_count 0
         $rd read
     } {list b}
 
@@ -255,6 +270,7 @@ start_server {
         r del list
 
         $rd blpop list 0
+        wait_for_blocked_clients_count 1
         after 100 ;# Make sure rd is blocked before MULTI
 
         r multi
@@ -264,6 +280,7 @@ start_server {
         r exec
         r del list
         r lpush list b
+        wait_for_blocked_clients_count 0
         $rd read
     } {list b}
 
@@ -273,30 +290,38 @@ start_server {
 
         # Data arriving after the BLPOP.
         $rd blpop list1{t} list2{t} list2{t} list1{t} 0
+        wait_for_blocked_clients_count 1
         r lpush list1{t} a
         assert_equal [$rd read] {list1{t} a}
+        wait_for_blocked_clients_count 0
         $rd blpop list1{t} list2{t} list2{t} list1{t} 0
+        wait_for_blocked_clients_count 1
         r lpush list2{t} b
         assert_equal [$rd read] {list2{t} b}
+        wait_for_blocked_clients_count 0
 
         # Data already there.
         r lpush list1{t} a
         r lpush list2{t} b
         $rd blpop list1{t} list2{t} list2{t} list1{t} 0
         assert_equal [$rd read] {list1{t} a}
+        wait_for_blocked_clients_count 0
         $rd blpop list1{t} list2{t} list2{t} list1{t} 0
         assert_equal [$rd read] {list2{t} b}
+        wait_for_blocked_clients_count 0
     }
 
     test "MULTI/EXEC is isolated from the point of view of BLPOP" {
         set rd [redis_deferring_client]
         r del list
         $rd blpop list 0
+        wait_for_blocked_clients_count 1
         r multi
         r lpush list a
         r lpush list b
         r lpush list c
         r exec
+        wait_for_blocked_clients_count 0
         $rd read
     } {list c}
 
@@ -305,10 +330,12 @@ start_server {
         r del blist
         if {$::valgrind} {after 100}
         $rd blpop blist 0
+        wait_for_blocked_clients_count 1
         if {$::valgrind} {after 100}
         assert_equal 2 [r lpush blist foo bar]
         if {$::valgrind} {after 100}
         assert_equal {blist bar} [$rd read]
+        wait_for_blocked_clients_count 0
         assert_equal foo [lindex [r lrange blist 0 -1] 0]
     }
 
@@ -320,6 +347,7 @@ start_server {
         wait_for_blocked_clients_count 1
         r rpush blist{t} foo
         assert_equal foo [$rd read]
+        wait_for_blocked_clients_count 0
         assert_equal {foo bar} [r lrange target{t} 0 -1]
     }
 
@@ -338,6 +366,7 @@ start_server {
                 } else {
                     assert_equal {foo bar} [r lrange target{t} 0 -1]
                 }
+                wait_for_blocked_clients_count 0
             }
         }
     }
@@ -355,6 +384,7 @@ start_server {
                 assert_equal foo [$rd read]
                 assert_equal {target{t} foo} [$rd2 read]
                 assert_equal 0 [r exists target{t}]
+                wait_for_blocked_clients_count 0
             }
         }
     }
@@ -365,6 +395,7 @@ start_server {
         r set blist{t} nolist
         $rd brpoplpush blist{t} target{t} 1
         assert_error "WRONGTYPE*" {$rd read}
+        wait_for_blocked_clients_count 0
     }
 
     test "BRPOPLPUSH with wrong destination type" {
@@ -374,6 +405,7 @@ start_server {
         r lpush blist{t} foo
         $rd brpoplpush blist{t} target{t} 1
         assert_error "WRONGTYPE*" {$rd read}
+        wait_for_blocked_clients_count 0
 
         set rd [redis_deferring_client]
         r del blist{t} target{t}
@@ -383,6 +415,7 @@ start_server {
         r rpush blist{t} foo
         assert_error "WRONGTYPE*" {$rd read}
         assert_equal {foo} [r lrange blist{t} 0 -1]
+        wait_for_blocked_clients_count 0
     }
 
     test "BRPOPLPUSH maintains order of elements after failure" {
@@ -392,6 +425,7 @@ start_server {
         $rd brpoplpush blist{t} target{t} 0
         r rpush blist{t} a b c
         assert_error "WRONGTYPE*" {$rd read}
+        wait_for_blocked_clients_count 0
         r lrange blist{t} 0 -1
     } {a b c}
 
@@ -402,11 +436,14 @@ start_server {
         r set target1{t} nolist
         $rd1 brpoplpush blist{t} target1{t} 0
         $rd2 brpoplpush blist{t} target2{t} 0
+        wait_for_blocked_clients_count 2
         r lpush blist{t} foo
+        r lpush blist{t} bar
 
         assert_error "WRONGTYPE*" {$rd1 read}
         assert_equal {foo} [$rd2 read]
         assert_equal {foo} [r lrange target2{t} 0 -1]
+        wait_for_blocked_clients_count 0
     }
 
     test "Linked LMOVEs" {
@@ -417,6 +454,7 @@ start_server {
 
       $rd1 blmove list1{t} list2{t} right left 0
       $rd2 blmove list2{t} list3{t} left right 0
+      wait_for_blocked_clients_count 2
 
       r rpush list1{t} foo
 
@@ -435,9 +473,10 @@ start_server {
 
       $rd1 brpoplpush list1{t} list2{t} 0
       $rd2 brpoplpush list2{t} list1{t} 0
+      wait_for_blocked_clients_count 2
 
       r rpush list1{t} foo
-
+      wait_for_blocked_clients_count 0
       assert_equal {foo} [r lrange list1{t} 0 -1]
       assert_equal {} [r lrange list2{t} 0 -1]
     }
@@ -448,9 +487,11 @@ start_server {
       r del blist{t}
 
       $rd brpoplpush blist{t} blist{t} 0
+      wait_for_blocked_clients_count 1
 
       r rpush blist{t} foo
 
+      wait_for_blocked_clients_count 0
       assert_equal {foo} [r lrange blist{t} 0 -1]
     }
 
@@ -474,6 +515,7 @@ start_server {
         r del srclist{t} dstlist{t} somekey{t}
         r set somekey{t} somevalue
         $blocked_client brpoplpush srclist{t} dstlist{t} 0
+        wait_for_blocked_clients_count 1
         $watching_client watch dstlist{t}
         $watching_client read
         $watching_client multi
@@ -493,6 +535,7 @@ start_server {
         r del srclist{t} dstlist{t} somekey{t}
         r set somekey{t} somevalue
         $blocked_client brpoplpush srclist{t} dstlist{t} 0
+        wait_for_blocked_clients_count 1
         $watching_client watch dstlist{t}
         $watching_client read
         $watching_client multi
@@ -502,6 +545,7 @@ start_server {
         $watching_client exec
         # Blocked BLPOPLPUSH may create problems, unblock it.
         r lpush srclist{t} element
+        wait_for_blocked_clients_count 0
         $watching_client read
     } {somevalue}
 
@@ -535,7 +579,7 @@ start_server {
         r lpush notfoo{t} hello hola aguacate konichiwa zanzibar
         r sort notfoo{t} ALPHA store foo{t}
         $rd read
-    } {foo{t} aguacate} {needs:debug}
+    } {foo{t} aguacate} {needs:sort}
 
     foreach {pop} {BLPOP BRPOP} {
         test "$pop: with single empty list argument" {
@@ -545,12 +589,14 @@ start_server {
             r rpush blist1 foo
             assert_equal {blist1 foo} [$rd read]
             assert_equal 0 [r exists blist1]
+            wait_for_blocked_clients_count 0
         }
 
         test "$pop: with negative timeout" {
             set rd [redis_deferring_client]
             $rd $pop blist1 -1
             assert_error "ERR*is negative*" {$rd read}
+            wait_for_blocked_clients_count 0
         }
 
         test "$pop: with non-integer timeout" {
@@ -569,8 +615,10 @@ start_server {
             set rd [redis_deferring_client]
             $rd $pop blist1 0
             after 1000
+            wait_for_blocked_clients_count 1
             r rpush blist1 foo
             assert_equal {blist1 foo} [$rd read]
+            wait_for_blocked_clients_count 0
         }
 
         test "$pop: second argument is not a list" {
@@ -579,6 +627,7 @@ start_server {
             r set blist2{t} nolist{t}
             $rd $pop blist1{t} blist2{t} 1
             assert_error "WRONGTYPE*" {$rd read}
+            wait_for_blocked_clients_count 0
         }
 
         test "$pop: timeout" {
@@ -586,6 +635,7 @@ start_server {
             r del blist1{t} blist2{t}
             $rd $pop blist1{t} blist2{t} 1
             assert_equal {} [$rd read]
+            wait_for_blocked_clients_count 0
         }
 
         test "$pop: arguments are empty" {
@@ -597,12 +647,14 @@ start_server {
             assert_equal {blist1{t} foo} [$rd read]
             assert_equal 0 [r exists blist1{t}]
             assert_equal 0 [r exists blist2{t}]
+            wait_for_blocked_clients_count 0
 
             $rd $pop blist1{t} blist2{t} 1
             r rpush blist2{t} foo
             assert_equal {blist2{t} foo} [$rd read]
             assert_equal 0 [r exists blist1{t}]
             assert_equal 0 [r exists blist2{t}]
+            wait_for_blocked_clients_count 0
         }
     }
 

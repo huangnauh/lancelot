@@ -12,7 +12,6 @@ require (
 	github.com/gomodule/redigo v1.8.5
 	github.com/google/uuid v1.1.2
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
-	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.16.0
 	github.com/pingcap/errors v0.11.5-0.20210513014640-40f9a1999b3b // indirect
@@ -21,7 +20,7 @@ require (
 	github.com/pingcap/tidb/parser v0.0.0-20211025024448-36e694bfc536 // indirect
 	github.com/prometheus/client_golang v1.11.0
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/spf13/cobra v1.1.3 // indirect
+	github.com/spf13/cobra v1.2.1
 	github.com/stretchr/testify v1.7.0
 	github.com/tidwall/btree v0.5.0
 	github.com/tidwall/gjson v1.8.1
