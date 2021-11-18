@@ -13,6 +13,7 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"go.uber.org/zap"
 )
 
 type ObjectEncoding byte
@@ -585,6 +586,12 @@ func (c *Command) BlockHandle(txn *store.Txn, args [][]byte, bfunc BFunc) (inter
 	for {
 		select {
 		case <-tick.C:
+			err = utils.ConnCheck(txn.NetConn())
+			if err != nil {
+				utils.ZapLog.Warn("conn check error", zap.Error(err),
+					zap.String("remote", txn.RemoteAddr()))
+				return nil, err
+			}
 			err = txn.Begin()
 			if err != nil {
 				return nil, err

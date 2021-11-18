@@ -438,6 +438,24 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 	defer c.luapool.RemoveCancel(luaState)
 	luaState.SetContext(ctx)
 	defer luaState.RemoveContext()
+	go func() {
+		tick := time.NewTicker(time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-tick.C:
+				err = utils.ConnCheck(txn.NetConn())
+				if err != nil {
+					utils.ZapLog.Warn("conn check error", zap.Error(err),
+						zap.String("remote", txn.RemoteAddr()))
+					cancel()
+				}
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 	keysTable := luaState.CreateTable(int(numkeys), 0)
 	for i := 0; i < numkeys; i++ {
 		key := args[2+i]

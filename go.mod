@@ -3,6 +3,7 @@ module gitlab.s.upyun.com/platform/lancelot
 go 1.16
 
 require (
+	github.com/alicebob/miniredis/v2 v2.16.0
 	github.com/cenkalti/backoff/v4 v4.1.1
 	github.com/cloudflare/tableflip v1.2.2
 	github.com/coocood/freecache v1.1.1

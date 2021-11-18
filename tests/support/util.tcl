@@ -827,7 +827,7 @@ proc wait_for_blocked_client {} {
     }
 }
 
-proc wait_for_blocked_clients_count {count {maxtries 100} {delay 10}} {
+proc wait_for_blocked_clients_count {count {maxtries 50} {delay 100}} {
     wait_for_condition $maxtries $delay  {
         [s blocked_clients] == $count
     } else {

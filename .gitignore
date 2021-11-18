@@ -3,6 +3,7 @@
 lancelot
 /tikv-client
 /redis.pid*
+/miniredis
 .vscode
 *.log
 __debug_bin

@@ -186,14 +186,14 @@ start_server {tags {"multi"}} {
         r unwatch
     } {OK}
 
-    test {FLUSHALL is able to touch the watched keys} {
+    test {FLUSHALL does not touch the watched keys} {
         r set x 30
         r watch x
         r flushall
         r multi
         r ping
         r exec
-    } {}
+    } {PONG}
 
     test {FLUSHALL does not touch non affected keys} {
         r del x
@@ -204,14 +204,14 @@ start_server {tags {"multi"}} {
         r exec
     } {PONG}
 
-    test {FLUSHDB is able to touch the watched keys} {
+    test {FLUSHDB does not touch the watched keys} {
         r set x 30
         r watch x
         r flushdb
         r multi
         r ping
         r exec
-    } {}
+    } {ping}
 
     test {FLUSHDB does not touch non affected keys} {
         r del x

@@ -89,6 +89,7 @@ func (t *Txn) Begin() error {
 }
 
 func (t *Txn) Close() error {
+	utils.ZapLog.Info("[txn] close", zap.String("remote", t.RemoteAddr()))
 	t.Rollback()
 	close(t.Closed)
 	return nil

@@ -133,7 +133,7 @@ func (c *Command) DelteRange(start, end []byte, callback func(*store.Client)) {
 }
 
 func (c *Command) doGC(start, end []byte, now int64) ([]byte, *Object, error) {
-	utils.ZapLog.Info("[gc] start gc", zap.ByteString("start", start), zap.ByteString("end", end))
+	utils.ZapLog.Debug("[gc] start gc", zap.ByteString("start", start), zap.ByteString("end", end))
 	txn := c.client.NewTxn()
 	err := txn.Begin()
 	if err != nil {
@@ -231,7 +231,7 @@ func (c *Command) doGC(start, end []byte, now int64) ([]byte, *Object, error) {
 		utils.ZapLog.Error("[gc] commit", zap.Error(err))
 		return lastKey, nil, err
 	}
-	utils.ZapLog.Info("[gc] end gc", zap.Bool("finish", finish), zap.ByteString("last key", lastKey),
+	utils.ZapLog.Debug("[gc] end gc", zap.Bool("finish", finish), zap.ByteString("last key", lastKey),
 		zap.Any("object", o), zap.ByteString("start", start), zap.ByteString("end", end))
 
 	if finish || !it.Valid() {
