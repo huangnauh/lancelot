@@ -28,8 +28,8 @@ warningCode = -1
 #   severity = "warning"
 # [rule.unused-parameter]
 #   severity = "warning"
-[rule.deep-exit]
-  severity = "warning"
+#[rule.deep-exit]
+#  severity = "warning"
 #[rule.flag-parameter]
 #  severity = "warning"
 

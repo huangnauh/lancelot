@@ -1376,6 +1376,11 @@ func checkMinMaxLex(argMin, argMax []byte) (string, string, bool, bool, error) {
 		return "", "", false, false, xerror.ErrEmpty
 	}
 
+	if maxOrigin != "+" && max == "" {
+		// empty max
+		return "", "", false, false, xerror.ErrEmpty
+	}
+
 	if min != "" && max != "" {
 		if min > max {
 			return "", "", false, false, xerror.ErrEmpty
