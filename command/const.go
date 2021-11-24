@@ -212,6 +212,7 @@ const (
 	SETUSER_COMMAND          = "setuser"
 	USERS_COMMAND            = "users"
 	LIST_COMMAND             = "list"
+	WHOAMI_COMMAND           = "whoami"
 	SAVE_COMMAND             = "save"
 	PING_COMMAND             = "ping"
 	ECHO_COMMAND             = "echo"

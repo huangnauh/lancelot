@@ -44,6 +44,8 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 			conn.WriteError(xerror.ErrAuthentication.Error())
 			return
 		}
+		conn.UserName = s.Command.Default.Name
+		conn.UserId = s.Command.Default.ID
 	}
 
 	metric.inFlight.Inc()

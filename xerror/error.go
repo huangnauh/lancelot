@@ -191,6 +191,15 @@ func WrongSubArgsError(command, help string) error {
 	return RedisNew(WrongSubArgsString(command, help))
 }
 
+func WrongPermissionString(command string) string {
+	return fmt.Sprintf("this user has no permissions to run the '%s' command or its subcommand",
+		command)
+}
+
+func WrongPermissionError(command string) error {
+	return RedisNew(WrongPermissionString(command))
+}
+
 func MakeSafeErr(err error) error {
 	msg := strings.Replace(err.Error(), "\n", ` `, -1)
 	return RedisNew(msg)

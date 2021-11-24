@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/utils/bitmap"
@@ -243,12 +244,20 @@ func (c *Command) AclHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(ACL_COMMAND)
 	}
 
+	if txn.UserId != c.Root.ID {
+		return txn.SetError(xerror.WrongPermissionError(ACL_COMMAND))
+	}
+
 	subCommand := strings.ToLower(utils.B2S(args[0]))
 	switch subCommand {
 	case SETUSER_COMMAND:
 		return c.AclSetUser(txn, args[1:])
 	case GETUSER_COMMAND:
 		return c.AclGetUser(txn, args[1:])
+	case DELUSER_COMMAND:
+		return c.AclDelUser(txn, args[1:])
+	case WHOAMI_COMMAND:
+		return c.AclWhoami(txn, args[1:])
 	case LIST_COMMAND:
 		return c.AclList(txn, args[1:])
 	default:
@@ -320,6 +329,11 @@ func (c *Command) GetUserCount(txn *store.Txn) (uint16, error) {
 	return count, nil
 }
 
+// (server) ACL whoami
+func (c *Command) AclWhoami(txn *store.Txn, args [][]byte) interface{} {
+	return redcon.SimpleString(txn.UserName)
+}
+
 // (server) ACL LIST
 func (c *Command) AclList(txn *store.Txn, args [][]byte) interface{} {
 	users := c.GetLocalUsers()
@@ -344,6 +358,25 @@ func (c *Command) AclGetUser(txn *store.Txn, args [][]byte) interface{} {
 		return nil
 	}
 	return c.GetResp(u)
+}
+
+// ACL DELUSER username [username ...]
+func (c *Command) AclDelUser(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 1 {
+		return txn.SetWrongSubArgs(DELUSER_COMMAND, AclHelpCommand)
+	}
+	for _, username := range args {
+		u, err := c.GetUser(txn, utils.B2S(username))
+		if err == store.KeyNotFound {
+			continue
+		}
+		if err != nil {
+			return txn.SetError(err)
+		}
+		if u.ID == txn.UserId {
+
+		}
+	}
 }
 
 // (server) ACL SETUSER username [rule [rule ...]]
@@ -439,7 +472,7 @@ func (c *Command) aclSetRule(txn *store.Txn, u *User, rule string) error {
 	default:
 		if rule[0] == '>' {
 			password := utils.Sha256Sum(utils.S2B(rule[1:]))
-			if len(password) >= c.cfg.Auth.MaxPasswordsPerUser {
+			if len(u.Passwords) >= c.cfg.Auth.MaxPasswordsPerUser {
 				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND),
 					rule, xerror.ErrTooManyPasswords)
 			}
