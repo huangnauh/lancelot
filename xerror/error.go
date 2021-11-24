@@ -157,7 +157,7 @@ func InvalidCommand(command string) string {
 }
 
 func WrongModifier(command, modifier string, err error) error {
-	return fmt.Errorf("Error in %s modifier '%s': %s", command, modifier, err.Error())
+	return fmt.Errorf("Error in %s modifier '%s': %s", strings.ToUpper(command), modifier, err.Error())
 }
 
 func NotExistKeyError(key string) error {

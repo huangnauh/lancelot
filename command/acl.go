@@ -516,7 +516,7 @@ func (c *Command) aclSetRule(txn *store.Txn, u *User, rule string) error {
 			if err != nil {
 				return err
 			}
-			if len(password) >= c.cfg.Auth.MaxPasswordsPerUser {
+			if len(u.Passwords) >= c.cfg.Auth.MaxPasswordsPerUser {
 				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND),
 					rule, xerror.ErrTooManyPasswords)
 			}
