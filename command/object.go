@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tikv/client-go/v2/oracle"
+	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
@@ -582,14 +583,21 @@ func (c *Command) BlockHandle(txn *store.Txn, args [][]byte, bfunc BFunc) (inter
 	}
 	txn.Rollback()
 
+	txn.Blocked = true
 	atomic.AddInt64(&c.Info.BlockClients, 1)
-	defer atomic.AddInt64(&c.Info.BlockClients, -1)
+	defer func() {
+		txn.Blocked = false
+		atomic.AddInt64(&c.Info.BlockClients, -1)
+	}()
 
 	tick := time.NewTicker(pullInternal)
 	defer tick.Stop()
 	for {
 		select {
 		case <-tick.C:
+			if txn.Conn.Closed() {
+				return nil, xerror.ErrClientClosed
+			}
 			err = utils.ConnCheck(txn.NetConn())
 			if err != nil {
 				utils.ZapLog.Warn("conn check error", zap.Error(err),
@@ -612,8 +620,16 @@ func (c *Command) BlockHandle(txn *store.Txn, args [][]byte, bfunc BFunc) (inter
 			if timeout > 0 && now.Add(PullInternal).Sub(start) >= timeout {
 				return nil, nil
 			}
-		case <-txn.Closed:
-			return nil, nil
+		case trigger, ok := <-txn.Conn.Trigger:
+			if !ok {
+				return nil, nil
+			}
+			switch trigger {
+			case redcon.ErrorTrigger:
+				return nil, xerror.ErrUnBlocked
+			default:
+				return nil, nil
+			}
 		}
 	}
 }

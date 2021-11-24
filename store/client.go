@@ -98,7 +98,7 @@ func Open(c *config.Config) (*Client, error) {
 }
 
 func (c *Client) NewTxn() *Txn {
-	return &Txn{client: c, Closed: make(chan struct{})}
+	return &Txn{client: c}
 }
 
 func (c *Client) ID() string {

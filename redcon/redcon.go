@@ -27,7 +27,13 @@ var (
 	errDetached               = errors.New("detached")
 	errIncompleteCommand      = errors.New("incomplete command")
 	errTooMuchData            = errors.New("too much data")
+	connID                    uint64
 )
+
+func init() {
+	rand.New(rand.NewSource(time.Now().UnixNano()))
+	connID = uint64(rand.Int())
+}
 
 const shutdownPollIntervalMax = 500 * time.Millisecond
 
@@ -81,7 +87,7 @@ func NewServerNetwork(
 		handler: handler,
 		accept:  accept,
 		closed:  closed,
-		conns:   make(map[*Conn]bool),
+		conns:   make(map[uint64]*Conn),
 	}
 	return s
 }
@@ -104,7 +110,7 @@ func NewServerNetworkTLS(
 		handler: handler,
 		accept:  accept,
 		closed:  closed,
-		conns:   make(map[*Conn]bool),
+		conns:   make(map[uint64]*Conn),
 	}
 
 	tls := &TLSServer{
@@ -147,14 +153,14 @@ func (s *Server) Close(ctx context.Context) error {
 		}
 
 		s.mu.Lock()
-		for conn := range s.conns {
+		for id, conn := range s.conns {
 			state, unixSec := conn.getState()
 			if state == StateActive {
 				continue
 			}
 
 			if unixSec < time.Now().Unix()-5 {
-				delete(s.conns, conn)
+				delete(s.conns, id)
 				conn.Close()
 			}
 		}
@@ -173,7 +179,8 @@ func (s *Server) Close(ctx context.Context) error {
 	}
 
 	s.mu.Lock()
-	for conn := range s.conns {
+	for id, conn := range s.conns {
+		delete(s.conns, id)
 		conn.Close()
 	}
 	s.mu.Unlock()
@@ -188,6 +195,23 @@ func (s *Server) ListenAndServe() error {
 // Addr returns server's listen address
 func (s *Server) Addr() net.Addr {
 	return s.ln.Addr()
+}
+
+func (s *Server) GetConnByID(id uint64) (*Conn, bool) {
+	s.mu.RLock()
+	conn, ok := s.conns[id]
+	s.mu.RUnlock()
+	return conn, ok
+}
+
+func (s *Server) Conns() []*Conn {
+	s.mu.RLock()
+	conns := make([]*Conn, 0, len(s.conns))
+	for _, conn := range s.conns {
+		conns = append(conns, conn)
+	}
+	s.mu.RUnlock()
+	return conns
 }
 
 // Close stops listening on the TCP address.
@@ -214,7 +238,7 @@ func Serve(ln net.Listener,
 		handler: handler,
 		accept:  accept,
 		closed:  closed,
-		conns:   make(map[*Conn]bool),
+		conns:   make(map[uint64]*Conn),
 	}
 
 	return serve(s)
@@ -324,18 +348,25 @@ func serve(s *Server) error {
 			rd:        NewReader(lnconn),
 			CreatedAt: now,
 			UpdatedAt: now,
+			Trigger:   make(chan Trigger, 1),
 		}
 		c.setState(StateNew)
-		s.mu.Lock()
-		c.idleClose = s.idleClose
-		s.conns[c] = true
-		s.mu.Unlock()
 		if s.accept != nil && !s.accept(c) {
-			s.mu.Lock()
-			delete(s.conns, c)
-			s.mu.Unlock()
 			c.Close()
 			continue
+		}
+		if c.ID == 0 {
+			c.ID = atomic.AddUint64(&connID, 1)
+		}
+		s.mu.Lock()
+		c.idleClose = s.idleClose
+		s.conns[c.ID] = c
+		s.mu.Unlock()
+		if s.keepAlive > 0 {
+			if conn, ok := c.conn.(*net.TCPConn); ok {
+				_ = conn.SetKeepAlive(true)
+				_ = conn.SetKeepAlivePeriod(s.keepAlive)
+			}
 		}
 		go handle(s, c)
 	}
@@ -352,8 +383,8 @@ func handle(s *Server, c *Conn) {
 		func() {
 			// remove the conn from the server
 			s.mu.Lock()
-			defer s.mu.Unlock()
-			delete(s.conns, c)
+			delete(s.conns, c.ID)
+			s.mu.Unlock()
 			if s.closed != nil {
 				if err == io.EOF {
 					err = nil
@@ -368,7 +399,7 @@ func handle(s *Server, c *Conn) {
 		for {
 			// read pipeline commands
 			if c.idleClose != 0 {
-				c.conn.SetReadDeadline(time.Now().Add(c.idleClose))
+				_ = c.conn.SetReadDeadline(time.Now().Add(c.idleClose))
 			}
 			cmds, err := c.rd.readCommands(nil)
 			c.UpdatedAt = time.Now()
@@ -395,6 +426,7 @@ func handle(s *Server, c *Conn) {
 				} else {
 					c.cmds = c.cmds[1:]
 				}
+				c.LastCmd = cmd
 				s.handler(c, cmd)
 			}
 			if c.detached {
@@ -427,6 +459,7 @@ type Conn struct {
 	DBId      uint8
 	UserId    uint16
 	UserName  string
+	Blocked   bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	wr        *Writer
@@ -436,10 +469,19 @@ type Conn struct {
 	detached  bool
 	closed    bool
 	cmds      []Command
+	LastCmd   Command
 	idleClose time.Duration
 	txn       Transaction
+	Trigger   chan Trigger
 	state     struct{ atomic uint64 } // packed (unixtime<<8|uint8(ConnState))
 }
+
+type Trigger int
+
+const (
+	TimeoutTrigger Trigger = 1
+	ErrorTrigger   Trigger = 2
+)
 
 type ConnState int
 
@@ -466,9 +508,11 @@ func (c *Conn) Close() error {
 	}
 	c.wr.Flush()
 	c.closed = true
+	close(c.Trigger)
 	return c.conn.Close()
 }
 
+func (c *Conn) Closed() bool                   { return c.closed }
 func (c *Conn) Transaction() Transaction       { return c.txn }
 func (c *Conn) SetTransaction(txn Transaction) { c.txn = txn }
 func (c *Conn) Context() interface{}           { return c.ctx }
@@ -556,18 +600,26 @@ type Command struct {
 	Args [][]byte
 }
 
+func (c Command) String() string {
+	if len(c.Args) == 0 {
+		return ""
+	}
+	return string(c.Args[0])
+}
+
 // Server defines a server for clients for managing client connections.
 type Server struct {
-	mu        sync.Mutex
+	mu        sync.RWMutex
 	net       string
 	laddr     string
 	handler   func(conn *Conn, cmd Command)
 	accept    func(conn *Conn) bool
 	closed    func(conn *Conn, err error)
-	conns     map[*Conn]bool
+	conns     map[uint64]*Conn
 	ln        net.Listener
 	done      atomicBool
 	idleClose time.Duration
+	keepAlive time.Duration
 
 	// AcceptError is an optional function used to handle Accept errors.
 	AcceptError func(err error)
@@ -1384,7 +1436,9 @@ func (ps *PubSub) unsubscribe(conn *Conn, pattern, all bool, channel string) {
 // SetIdleClose will automatically close idle connections after the specified
 // duration. Use zero to disable this feature.
 func (s *Server) SetIdleClose(dur time.Duration) {
-	s.mu.Lock()
 	s.idleClose = dur
-	s.mu.Unlock()
+}
+
+func (s *Server) SetKeepAlive(dur time.Duration) {
+	s.keepAlive = dur
 }

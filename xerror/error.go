@@ -120,6 +120,8 @@ var (
 	ErrStartGreaterThanEnd     = RedisNew("start is larger than the end of the list")
 	ErrNoSuchKey               = RedisNew("no such key")
 	InvalidWeight              = RedisNew("weight value is not a float")
+	ErrClientClosed            = RedisNew("client closed")
+	ErrUnBlocked               = RedisNew("UNBLOCKED client unblocked via CLIENT UNBLOCK")
 
 	InvalidOffset = RedisNew("invalid offset")
 	InvalidLimit  = RedisNew("invalid limit")

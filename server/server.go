@@ -66,15 +66,15 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 
 func NewServer(cfg *config.Config) *Server {
 	s := &Server{
-		cfg:     cfg,
-		http:    &http.Server{},
-		Command: command.NewCommand(cfg),
-		closed:  make(chan bool),
+		cfg:    cfg,
+		http:   &http.Server{},
+		closed: make(chan bool),
 	}
 	// http.Handle("/metrics", promhttp.Handler())
 	s.rpc = grpc.NewGrpcServer(cfg)
 	lancepb.RegisterLanceServer(s.rpc.GRPCServer, s.Command)
 	s.red = redcon.NewServer("", s.ServeRESP, s.Accept, s.Close)
+	s.Command = command.NewCommand(cfg, s.red)
 	return s
 }
 

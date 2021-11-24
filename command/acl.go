@@ -260,6 +260,8 @@ func (c *Command) AclHandle(txn *store.Txn, args [][]byte) interface{} {
 		return c.AclWhoami(txn, args[1:])
 	case LIST_COMMAND:
 		return c.AclList(txn, args[1:])
+	case USERS_COMMAND:
+		return c.AclUsers(txn, args[1:])
 	default:
 		return txn.SetWrongSubArgs(subCommand, AclHelpCommand)
 	}
@@ -310,6 +312,11 @@ func (c *Command) GetUser(txn *store.Txn, username string) (*User, error) {
 	return u, nil
 }
 
+func (c *Command) DelUser(txn *store.Txn, username string) error {
+	userKey := c.GetUserBytes(utils.S2B(username))
+	return txn.Del(userKey)
+}
+
 func (c *Command) SetUserCount(txn *store.Txn, count uint16) error {
 	key := GetGeneralBytes(CountGeneral, UserPrefix)
 	b := make([]byte, 2)
@@ -332,6 +339,20 @@ func (c *Command) GetUserCount(txn *store.Txn) (uint16, error) {
 // (server) ACL whoami
 func (c *Command) AclWhoami(txn *store.Txn, args [][]byte) interface{} {
 	return redcon.SimpleString(txn.UserName)
+}
+
+func (c *Command) AclUsers(txn *store.Txn, args [][]byte) interface{} {
+	users, err := c.ListUsers()
+	if err != nil {
+		return txn.SetError(err)
+	}
+	b := make([]string, len(users))
+	i := 0
+	for _, user := range users {
+		b[i] = user.Name
+		i++
+	}
+	return b
 }
 
 // (server) ACL LIST
@@ -365,8 +386,11 @@ func (c *Command) AclDelUser(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 1 {
 		return txn.SetWrongSubArgs(DELUSER_COMMAND, AclHelpCommand)
 	}
-	for _, username := range args {
-		u, err := c.GetUser(txn, utils.B2S(username))
+
+	count := 0
+	for _, arg := range args {
+		username := utils.B2S(arg)
+		u, err := c.GetUser(txn, username)
 		if err == store.KeyNotFound {
 			continue
 		}
@@ -374,9 +398,14 @@ func (c *Command) AclDelUser(txn *store.Txn, args [][]byte) interface{} {
 			return txn.SetError(err)
 		}
 		if u.ID == txn.UserId {
-
+			return txn.SetError(xerror.WrongPermissionError(DELUSER_COMMAND))
 		}
+		if err := c.DelUser(txn, username); err != nil {
+			return txn.SetError(err)
+		}
+		count++
 	}
+	return redcon.SimpleInt(count)
 }
 
 // (server) ACL SETUSER username [rule [rule ...]]

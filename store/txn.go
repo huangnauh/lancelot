@@ -36,7 +36,6 @@ type Txn struct {
 	Now        int64
 	CurrentID  uint32
 	PendingReq []redcon.Command
-	Closed     chan struct{}
 }
 
 // type Transaction interface {
@@ -85,13 +84,6 @@ func (t *Txn) Begin() error {
 	t.Timestamp = startTs
 	t.Now = oracle.ExtractPhysical(startTs)
 	t.txn = tx
-	return nil
-}
-
-func (t *Txn) Close() error {
-	utils.ZapLog.Info("[txn] close", zap.String("remote", t.RemoteAddr()))
-	t.Rollback()
-	close(t.Closed)
 	return nil
 }
 

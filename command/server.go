@@ -100,6 +100,18 @@ func (c *Command) DBSizeHandle(txn *store.Txn, args [][]byte) interface{} {
 	return redcon.SimpleInt(count)
 }
 
+// func (c *Command) ComamndHandle(txn *store.Txn, args [][]byte) interface{} {
+// 	if len(args) == 0 {
+
+// 	}
+// }
+
+// func (c *Command) commandHandle(txn *store.Txn, args [][]byte) interface{} {
+// 	for com := range c.TxnHandle {
+
+// 	}
+// }
+
 // DEBUG OBJECT key
 
 func (c *Command) InfoHandle(txn *store.Txn, args [][]byte) interface{} {

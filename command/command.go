@@ -42,6 +42,7 @@ type Info struct {
 
 type Command struct {
 	cfg        *config.Config
+	red        *redcon.Server
 	done       chan struct{}
 	luapool    *LStatePool
 	TxnHandle  map[string]TxnHandler
@@ -208,14 +209,15 @@ func (c *Command) Close(conn *redcon.Conn, err error) {
 	if connTxn != nil {
 		txn, ok := connTxn.(*store.Txn)
 		if ok {
-			txn.Close()
+			txn.Rollback()
 		}
 	}
 }
 
-func NewCommand(cfg *config.Config) *Command {
+func NewCommand(cfg *config.Config, red *redcon.Server) *Command {
 	c := &Command{
 		cfg:     cfg,
+		red:     red,
 		done:    make(chan struct{}),
 		luapool: NewLStatePool(&cfg.Lua),
 		scriptMap: &LScriptMap{
@@ -1256,17 +1258,17 @@ func NewCommand(cfg *config.Config) *Command {
 		},
 		// ------------------- client end 319 ---------------------------
 		// ------------------- stream start 320 ---------------------------
-		XADD_COMMAND: {
-			Func: c.XADDHandle,
-			ID:   320,
-			Type: StreamType,
-		},
-		XRANGE_COMMAND: {
-			Func:     c.XRangeHandle,
-			ReadOnly: true,
-			ID:       321,
-			Type:     StreamType,
-		},
+		// XADD_COMMAND: {
+		// 	Func: c.XADDHandle,
+		// 	ID:   320,
+		// 	Type: StreamType,
+		// },
+		// XRANGE_COMMAND: {
+		// 	Func:     c.XRangeHandle,
+		// 	ReadOnly: true,
+		// 	ID:       321,
+		// 	Type:     StreamType,
+		// },
 		// ------------------- stream end 351 ---------------------------
 		// ------------------- pubsub start 352 ---------------------------
 		PUBSUB_COMMAND: {
