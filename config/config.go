@@ -64,21 +64,22 @@ type PubSub struct {
 }
 
 type Config struct {
-	StartAt   time.Time `yaml:"-"`
-	LogLevel  string    `yaml:"log-level"`
-	PIDFile   string    `yaml:"pid-file"`
-	Host      string    `yaml:"host"`
-	RedisPort int       `yaml:"redis-port"`
-	HttpPort  int       `yaml:"http-port"`
-	RpcPort   int       `yaml:"rpc-port"`
-	CacheSize int       `yaml:"cache-size"`
-	Store     Store     `yaml:"store"`
-	GC        GC        `yaml:"gc"`
-	Lua       Lua       `yaml:"lua"`
-	Auth      Auth      `yaml:"auth"`
-	Key       Key       `yaml:"key"`
-	Rpc       Rpc       `yaml:"rpc"`
-	PubSub    PubSub    `yaml:"pubsub"`
+	StartAt       time.Time `yaml:"-"`
+	LogLevel      string    `yaml:"log-level"`
+	PIDFile       string    `yaml:"pid-file"`
+	Host          string    `yaml:"host"`
+	RedisPort     int       `yaml:"redis-port"`
+	HttpPort      int       `yaml:"http-port"`
+	RpcPort       int       `yaml:"rpc-port"`
+	CacheSize     int       `yaml:"cache-size"`
+	AclPermission bool      `yaml:"acl-permission"`
+	Store         Store     `yaml:"store"`
+	GC            GC        `yaml:"gc"`
+	Lua           Lua       `yaml:"lua"`
+	Auth          Auth      `yaml:"auth"`
+	Key           Key       `yaml:"key"`
+	Rpc           Rpc       `yaml:"rpc"`
+	PubSub        PubSub    `yaml:"pubsub"`
 }
 
 func Hostname() string {

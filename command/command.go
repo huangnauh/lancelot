@@ -125,6 +125,12 @@ func (c *Command) SetLocalUser(user *User) {
 	c.ulock.Unlock()
 }
 
+func (c *Command) DelLocalUser(username string) {
+	c.ulock.Lock()
+	delete(c.users, username)
+	c.ulock.Unlock()
+}
+
 func (c *Command) GetLocalUser(username string) (*User, bool) {
 	c.ulock.RLock()
 	user, ok := c.users[username]

@@ -227,7 +227,7 @@ func UserDecode(b []byte, u *User) error {
 
 	u.Passwords = make(map[string]bool, n)
 	for i := 0; i < n; i++ {
-		password := utils.B2S(utils.HexEncode(b[4+i*32 : 2+i*32+32]))
+		password := utils.B2S(utils.HexEncode(b[4+i*32 : 4+i*32+32]))
 		u.Passwords[password] = true
 	}
 	segments := make([]uint64, MAX_COMMANDS/64)
@@ -244,7 +244,9 @@ func (c *Command) AclHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(ACL_COMMAND)
 	}
 
-	if txn.UserId != c.Root.ID {
+	rootPermision := txn.UserId == c.Root.ID
+
+	if !rootPermision && !c.cfg.AclPermission {
 		return txn.SetError(xerror.WrongPermissionError(ACL_COMMAND))
 	}
 
@@ -314,7 +316,12 @@ func (c *Command) GetUser(txn *store.Txn, username string) (*User, error) {
 
 func (c *Command) DelUser(txn *store.Txn, username string) error {
 	userKey := c.GetUserBytes(utils.S2B(username))
-	return txn.Del(userKey)
+	err := txn.Del(userKey)
+	if err != nil {
+		return err
+	}
+	c.DelLocalUser(username)
+	return nil
 }
 
 func (c *Command) SetUserCount(txn *store.Txn, count uint16) error {
@@ -342,10 +349,8 @@ func (c *Command) AclWhoami(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) AclUsers(txn *store.Txn, args [][]byte) interface{} {
-	users, err := c.ListUsers()
-	if err != nil {
-		return txn.SetError(err)
-	}
+	users := c.GetLocalUsers()
+	sort.Sort(ByName(users))
 	b := make([]string, len(users))
 	i := 0
 	for _, user := range users {

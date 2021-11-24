@@ -32,6 +32,9 @@ func (c *Command) AuthHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	users := c.GetLocalUsers()
 	for _, user := range users {
+		if user.Flag&USER_FLAG_ENABLED == 0 {
+			continue
+		}
 		if username == "" || user.Name == username {
 			for p := range user.Passwords {
 				if p == pass {

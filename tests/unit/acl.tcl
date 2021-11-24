@@ -1,4 +1,4 @@
-start_server {tags {"acl external:skip"}} {
+start_server {tags {"acl"}} {
     test {Connections start with the default user} {
         r ACL WHOAMI
     } {default}
@@ -178,7 +178,7 @@ start_server {tags {"acl external:skip"}} {
         catch {$rd read} e
         set e
     } {*NOPERM*channel*}
-    
+
     test {Subscribers are killed when revoked of channel permission} {
         set rd [redis_deferring_client]
         r ACL setuser psuser resetchannels &foo:1
