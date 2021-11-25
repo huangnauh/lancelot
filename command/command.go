@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/coocood/freecache"
-	"github.com/tikv/client-go/v2/oracle"
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/member"
@@ -200,11 +199,11 @@ func (c *Command) SetCursor(key string, data []byte) {
 func (c *Command) Accept(conn *redcon.Conn) bool {
 	atomic.AddInt64(&c.Info.ConnectedClients, 1)
 	utils.ZapLog.Debug("Accept", zap.String("remote", conn.RemoteAddr()))
-	id, err := c.GetCurrentID()
-	if err != nil {
-		id = oracle.GoTimeToTS(time.Now())
-	}
-	conn.ID = id
+	// id, err := c.GetCurrentID()
+	// if err != nil {
+	// 	id = oracle.GoTimeToTS(time.Now())
+	// }
+	// conn.ID = id
 	return true
 }
 

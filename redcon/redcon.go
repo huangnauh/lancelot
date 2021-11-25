@@ -30,11 +30,6 @@ var (
 	connID                    uint64
 )
 
-func init() {
-	rand.New(rand.NewSource(time.Now().UnixNano()))
-	connID = uint64(rand.Int())
-}
-
 const shutdownPollIntervalMax = 500 * time.Millisecond
 
 type errProtocol struct {
