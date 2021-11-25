@@ -18,9 +18,9 @@ import (
 )
 
 var (
-	showVersion bool
-	configFile  string
-	dev, save   bool
+	showVersion      bool
+	configFile       string
+	dev, save, debug bool
 )
 
 func main() {
@@ -28,6 +28,7 @@ func main() {
 	flag.StringVar(&configFile, "config", "./conf.yaml", "configuration filename")
 	flag.BoolVar(&dev, "dev", false, "development")
 	flag.BoolVar(&save, "save", false, "save config")
+	flag.BoolVar(&debug, "debug", false, "log debug level")
 	flag.Parse()
 
 	err := config.LoadYAMLConfig(configFile)
@@ -46,6 +47,10 @@ func main() {
 	}
 
 	cfg := config.GetConfig()
+	if debug {
+		cfg.LogLevel = "debug"
+	}
+
 	if !dev {
 		utils.SetProductionLog(cfg.LogLevel)
 	} else {

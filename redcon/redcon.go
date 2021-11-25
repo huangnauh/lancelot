@@ -885,7 +885,7 @@ func (rd *Reader) readCommands(leftover *int) ([]Command, error) {
 						return nil, errInvalidMultiBulkLength
 					}
 					count, ok := parseInt(b[1 : i-1])
-					if !ok || count <= 0 {
+					if !ok || count <= 0 || count > 1024*1024 {
 						return nil, errInvalidMultiBulkLength
 					}
 					marks = marks[:0]
@@ -904,7 +904,7 @@ func (rd *Reader) readCommands(leftover *int) ([]Command, error) {
 										return nil, errInvalidBulkLength
 									}
 									size, ok := parseInt(b[si+1 : i-1])
-									if !ok || size < 0 {
+									if !ok || size < 0 || size > 1024*1024 {
 										return nil, errInvalidBulkLength
 									}
 									if i+size+2 >= len(b) {

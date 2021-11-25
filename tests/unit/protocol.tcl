@@ -10,7 +10,7 @@ start_server {tags {"protocol network"}} {
         reconnect
         r write "*-10\r\n"
         r flush
-        assert_equal PONG [r ping]
+        assert_error "*invalid multibulk length*" {r read}
     }
 
     test "Out of range multibulk length" {
