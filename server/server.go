@@ -12,6 +12,7 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/command"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/grpc"
+	"gitlab.s.upyun.com/platform/lancelot/metric"
 	"gitlab.s.upyun.com/platform/lancelot/proto/lancepb"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -48,8 +49,8 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 		conn.UserId = s.Command.Default.ID
 	}
 
-	metric.inFlight.Inc()
-	defer metric.inFlight.Dec()
+	metric.Metric.InFlight.Inc()
+	defer metric.Metric.InFlight.Dec()
 	start := time.Now()
 
 	if handler, ok := s.Command.ConnHandle[comma]; ok {
@@ -60,8 +61,8 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 		s.Command.TxnHandler(conn, comma, cmd)
 	}
 
-	metric.requestDuration.WithLabelValues(comma).Observe(time.Since(start).Seconds())
-	metric.requestTotal.WithLabelValues(comma).Inc()
+	metric.Metric.RequestDuration.WithLabelValues(comma).Observe(time.Since(start).Seconds())
+	metric.Metric.RequestTotal.WithLabelValues(comma).Inc()
 }
 
 func NewServer(cfg *config.Config) *Server {
@@ -70,7 +71,7 @@ func NewServer(cfg *config.Config) *Server {
 		http:   &http.Server{},
 		closed: make(chan bool),
 	}
-	// http.Handle("/metrics", promhttp.Handler())
+	metric.MetricsHandle()
 	s.rpc = grpc.NewGrpcServer(cfg)
 	lancepb.RegisterLanceServer(s.rpc.GRPCServer, s.Command)
 	s.red = redcon.NewServer("", s.ServeRESP, s.Accept, s.Close)

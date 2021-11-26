@@ -1,24 +1,27 @@
-package server
+package metric
 
 import (
+	"net/http"
+
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gitlab.s.upyun.com/platform/lancelot/version"
 )
 
-type Metric struct {
-	inFlight        prometheus.Gauge
-	requestTotal    *prometheus.CounterVec
-	requestDuration *prometheus.HistogramVec
+type metric struct {
+	InFlight        prometheus.Gauge
+	RequestTotal    *prometheus.CounterVec
+	RequestDuration *prometheus.HistogramVec
 }
 
-func newMetric() *Metric {
-	return &Metric{
-		inFlight: prometheus.NewGauge(prometheus.GaugeOpts{
+func newMetric() *metric {
+	return &metric{
+		InFlight: prometheus.NewGauge(prometheus.GaugeOpts{
 			Subsystem: version.APP,
 			Name:      "in_flight_requests",
 			Help:      "A gauge of requests currently being served.",
 		}),
-		requestTotal: prometheus.NewCounterVec(
+		RequestTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Subsystem: version.APP,
 				Name:      "requests_total",
@@ -26,7 +29,7 @@ func newMetric() *Metric {
 			},
 			[]string{"command"},
 		),
-		requestDuration: prometheus.NewHistogramVec(
+		RequestDuration: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Subsystem: version.APP,
 				Name:      "request_duration",
@@ -38,8 +41,12 @@ func newMetric() *Metric {
 	}
 }
 
-var metric = newMetric()
+var Metric = newMetric()
 
 func init() {
-	prometheus.MustRegister(metric.inFlight, metric.requestTotal, metric.requestDuration)
+	prometheus.MustRegister(Metric.InFlight, Metric.RequestTotal, Metric.RequestDuration)
+}
+
+func MetricsHandle() {
+	http.Handle("/metrics", promhttp.Handler())
 }

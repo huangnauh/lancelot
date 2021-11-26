@@ -25,7 +25,7 @@ var (
 
 func main() {
 	flag.BoolVar(&showVersion, "version", false, "print version string and quit")
-	flag.StringVar(&configFile, "config", "./conf.yaml", "configuration filename")
+	flag.StringVar(&configFile, "config", "./lancelot.yaml", "configuration filename")
 	flag.BoolVar(&dev, "dev", false, "development")
 	flag.BoolVar(&save, "save", false, "save config")
 	flag.BoolVar(&debug, "debug", false, "log debug level")
