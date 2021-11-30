@@ -1263,17 +1263,17 @@ func NewCommand(cfg *config.Config, red *redcon.Server) *Command {
 		},
 		// ------------------- client end 319 ---------------------------
 		// ------------------- stream start 320 ---------------------------
-		// XADD_COMMAND: {
-		// 	Func: c.XADDHandle,
-		// 	ID:   320,
-		// 	Type: StreamType,
-		// },
-		// XRANGE_COMMAND: {
-		// 	Func:     c.XRangeHandle,
-		// 	ReadOnly: true,
-		// 	ID:       321,
-		// 	Type:     StreamType,
-		// },
+		XADD_COMMAND: {
+			Func: c.XADDHandle,
+			ID:   320,
+			Type: StreamType,
+		},
+		XRANGE_COMMAND: {
+			Func:     c.XRangeHandle,
+			ReadOnly: true,
+			ID:       321,
+			Type:     StreamType,
+		},
 		// ------------------- stream end 351 ---------------------------
 		// ------------------- pubsub start 352 ---------------------------
 		PUBSUB_COMMAND: {

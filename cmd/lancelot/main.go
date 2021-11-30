@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cloudflare/tableflip"
+	"github.com/pingcap/log"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/server"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -49,6 +50,15 @@ func main() {
 	cfg := config.GetConfig()
 	if debug {
 		cfg.LogLevel = "debug"
+		cfg.Store.Level = "debug"
+	}
+
+	if cfg.Store.Level != "" {
+		l := zap.NewAtomicLevel()
+		if err := l.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
+			utils.ZapLog.Fatal("invalid log level", zap.Error(err))
+		}
+		log.SetLevel(l.Level())
 	}
 
 	if !dev {

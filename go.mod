@@ -17,6 +17,7 @@ require (
 	github.com/onsi/gomega v1.16.0
 	github.com/pingcap/errors v0.11.5-0.20210513014640-40f9a1999b3b // indirect
 	github.com/pingcap/kvproto v0.0.0-20211011042309-a4518fcacbc8
+	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
 	github.com/pingcap/tidb v1.1.0-beta.0.20211025024448-36e694bfc536
 	github.com/pingcap/tidb/parser v0.0.0-20211025024448-36e694bfc536 // indirect
 	github.com/prometheus/client_golang v1.11.0

@@ -71,7 +71,6 @@ func NewServer(cfg *config.Config) *Server {
 		http:   &http.Server{},
 		closed: make(chan bool),
 	}
-	metric.MetricsHandle()
 	s.rpc = grpc.NewGrpcServer(cfg)
 	lancepb.RegisterLanceServer(s.rpc.GRPCServer, s.Command)
 	s.red = redcon.NewServer("", s.ServeRESP, s.Accept, s.Close)

@@ -1,10 +1,7 @@
 package metric
 
 import (
-	"net/http"
-
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gitlab.s.upyun.com/platform/lancelot/version"
 )
 
@@ -47,6 +44,6 @@ func init() {
 	prometheus.MustRegister(Metric.InFlight, Metric.RequestTotal, Metric.RequestDuration)
 }
 
-func MetricsHandle() {
-	http.Handle("/metrics", promhttp.Handler())
-}
+// func MetricsHandle() {
+// 	http.Handle("/metrics", promhttp.Handler())
+// }

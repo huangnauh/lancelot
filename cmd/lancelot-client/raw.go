@@ -22,9 +22,14 @@ THE SOFTWARE.
 package main
 
 import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/tikv/client-go/v2/tikv"
 )
 
 // rawCmd represents the raw command
@@ -56,18 +61,97 @@ var rawListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "list key and value",
 	Run: func(cmd *cobra.Command, args []string) {
+		var start, end, regionStartKey, regionEndKey []byte
+		var err error
+
+		if startFlag != "" {
+			if base64Flag {
+				start, err = base64.StdEncoding.DecodeString(startFlag)
+				if err != nil {
+					errorExitf("start %s, err %s", startFlag, err)
+				}
+			} else if hexFlag {
+				start, err = hex.DecodeString(startFlag)
+				if err != nil {
+					errorExitf("start %s, err %s", startFlag, err)
+				}
+			} else {
+				start = []byte(startFlag)
+			}
+		} else {
+			start = []byte{}
+		}
+
+		if endFlag != "" {
+			if base64Flag {
+				end, err = base64.StdEncoding.DecodeString(endFlag)
+				if err != nil {
+					errorExitf("end %s, err %s", endFlag, err)
+				}
+			} else if hexFlag {
+				end, err = hex.DecodeString(endFlag)
+				if err != nil {
+					errorExitf("end %s, err %s", endFlag, err)
+				}
+			} else {
+				end = []byte(endFlag)
+			}
+		} else {
+			end = []byte{'\xFF'}
+		}
+
+		if regionFlag > 0 {
+			region, err := store.GetRegionCache().PDClient().GetRegionByID(context.Background(), uint64(regionFlag))
+			if err != nil {
+				errorExitf("get region %d err %s", regionFlag, err)
+			}
+			regionStartKey = region.Meta.StartKey
+			regionEndKey = region.Meta.EndKey
+			if bytes.Compare(start, regionStartKey) < 0 {
+				start = regionStartKey
+			}
+			if bytes.Compare(end, regionEndKey) > 0 {
+				end = regionEndKey
+			}
+		} else if regionFlag < 0 {
+			region, err := store.GetRegionCache().PDClient().GetRegionByID(context.Background(), uint64(-regionFlag))
+			if err != nil {
+				errorExitf("get region %d err %s", regionFlag, err)
+			}
+			if reverseFlag {
+				end = region.Meta.StartKey
+			} else {
+				start = region.Meta.EndKey
+			}
+		}
 		txn, err := store.Begin()
 		if err != nil {
 			errorExitf("client begin, err %s", err)
 		}
-		it, err := txn.Iter([]byte(startFlag), []byte(endFlag))
-		if err != nil {
-			errorExitf("client iter, err %s", err)
+		var it tikv.Iterator
+		if !reverseFlag {
+			it, err = txn.Iter(start, end)
+			if err != nil {
+				errorExitf("client iter, err %s", err)
+			}
+		} else {
+			it, err = txn.IterReverse(end)
+			if err != nil {
+				errorExitf("client iter, err %s", err)
+			}
 		}
 
 		count := 0
 		for it.Valid() {
-			fmt.Printf("key: %s, value:%s\n", []byte(it.Key()), []byte(it.Value()))
+			key := it.Key()
+			if bytes.Compare(key, start) < 0 || bytes.Compare(key, end) > 0 {
+				break
+			}
+			if keyOnlyFlag {
+				fmt.Println(string(key))
+			} else {
+				fmt.Printf("base64-key: %s, key: %s, value:%s\n", base64.StdEncoding.EncodeToString(it.Key()), []byte(it.Key()), []byte(it.Value()))
+			}
 			count++
 			if count >= limitFlag {
 				break
@@ -81,9 +165,13 @@ var rawListCmd = &cobra.Command{
 }
 
 var (
-	startFlag string
-	endFlag   string
-	limitFlag int
+	startFlag           string
+	endFlag             string
+	base64Flag, hexFlag bool
+	keyOnlyFlag         bool
+	limitFlag           int
+	reverseFlag         bool
+	regionFlag          int
 )
 
 func init() {
@@ -94,6 +182,11 @@ func init() {
 	rawListCmd.Flags().StringVarP(&startFlag, "start", "s", "", "start")
 	rawListCmd.Flags().StringVarP(&endFlag, "end", "e", "", "end")
 	rawListCmd.Flags().IntVarP(&limitFlag, "limit", "l", 256, "limit")
+	rawListCmd.Flags().BoolVar(&base64Flag, "base64", false, "base64")
+	rawListCmd.Flags().BoolVar(&hexFlag, "hex", false, "hex")
+	rawListCmd.Flags().BoolVarP(&keyOnlyFlag, "only-key", "k", false, "only keys")
+	rawListCmd.Flags().BoolVarP(&reverseFlag, "reverse", "r", false, "reverse")
+	rawListCmd.Flags().IntVar(&regionFlag, "region", 0, "region")
 
 	// Here you will define your flags and configuration settings.
 

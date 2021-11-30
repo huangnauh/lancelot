@@ -25,8 +25,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/pingcap/log"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/tikv"
+	"go.uber.org/zap"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -52,6 +54,7 @@ func Execute() {
 
 var (
 	pdAddrs []string
+	debug   bool
 	store   *tikv.KVStore
 )
 
@@ -66,6 +69,7 @@ func init() {
 	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	rootCmd.PersistentFlags().StringSliceVarP(&pdAddrs, "pd", "p", []string{""}, "pd addresses")
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "debug")
 	cobra.OnInitialize(onInit)
 }
 
@@ -75,6 +79,9 @@ func errorExitf(format string, a ...interface{}) {
 }
 
 func onInit() {
+	if debug {
+		log.SetLevel(zap.DebugLevel)
+	}
 	var err error
 	store, err = tikv.NewTxnClient(pdAddrs)
 	if err != nil {
