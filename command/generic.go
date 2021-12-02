@@ -419,6 +419,45 @@ type scanOptions struct {
 	cursor CursorType
 }
 
+func (c *Command) getObjectType(typo ObjectType) ObjectType {
+	switch typo {
+	case LListType:
+		if c.cfg.List == "b" {
+			return BListType
+		} else {
+			return AListType
+		}
+	default:
+		return typo
+	}
+}
+
+func (c *Command) getType(typo string) ObjectType {
+	typo = strings.ToLower(typo)
+	switch typo {
+	case "string":
+		return StringType
+	case "json":
+		return JsonType
+	case "hash":
+		return HashType
+	case "list":
+		if c.cfg.List == "b" {
+			return BListType
+		} else {
+			return AListType
+		}
+	case "set":
+		return SetType
+	case "zset":
+		return ZsetType
+	case "stream":
+		return StreamType
+	default:
+		return UnknownType
+	}
+}
+
 func (c *Command) getScanOptions(opts [][]byte) (*scanOptions, error) {
 	scanOptions := &scanOptions{
 		count:  10,
@@ -449,12 +488,7 @@ func (c *Command) getScanOptions(opts [][]byte) (*scanOptions, error) {
 			}
 			scanOptions.count = count
 		case "type":
-			typo, ok := ObjectNameMap[utils.B2S(opts[i+1])]
-			if !ok {
-				scanOptions.typo = UnknownType
-			} else {
-				scanOptions.typo = typo
-			}
+			scanOptions.typo = c.getType(utils.B2S(opts[i+1]))
 		case "cursor":
 			name := strings.ToLower(utils.B2S(opts[i+1]))
 			cursor, ok := CursorMap[name]

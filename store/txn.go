@@ -2,10 +2,7 @@ package store
 
 import (
 	"bytes"
-	"container/heap"
 	"context"
-	"encoding/binary"
-	"sync/atomic"
 	"time"
 
 	tikverr "github.com/tikv/client-go/v2/error"
@@ -34,7 +31,8 @@ type Txn struct {
 	PendingErr bool
 	Timestamp  uint64
 	Now        int64
-	CurrentID  uint32
+	ListLID    uint32
+	ListRID    uint32
 	PendingReq []redcon.Command
 }
 
@@ -47,17 +45,21 @@ type Txn struct {
 // 	HasTransaction() bool
 // }
 
-func (t *Txn) GetCurrentID() uint32 {
-	return atomic.AddUint32(&t.CurrentID, 1)
-}
+// func (t *Txn) GetListLID() uint32 {
+// 	return atomic.AddUint32(&t.ListLID, 1)
+// }
 
-func (t *Txn) GetCurrentUID() []byte {
-	id := t.GetCurrentID()
-	k := make([]byte, 8+4)
-	binary.BigEndian.PutUint64(k[0:], uint64(t.Timestamp))
-	binary.BigEndian.PutUint32(k[8:], id)
-	return k
-}
+// func (t *Txn) GetListRID() uint32 {
+// 	return atomic.AddUint32(&t.ListRID, 1)
+// }
+
+// func (t *Txn) GetCurrentUID() []byte {
+// 	id := t.GetListaID()
+// 	k := make([]byte, 8+4)
+// 	binary.BigEndian.PutUint64(k[0:], uint64(t.Timestamp))
+// 	binary.BigEndian.PutUint32(k[8:], id)
+// 	return k
+// }
 
 func (t *Txn) RemoteAddr() string {
 	if t.Conn != nil {
@@ -84,6 +86,8 @@ func (t *Txn) Begin() error {
 	t.Timestamp = startTs
 	t.Now = oracle.ExtractPhysical(startTs)
 	t.txn = tx
+	t.ListLID = 0
+	t.ListRID = 0
 	return nil
 }
 
@@ -308,130 +312,4 @@ func (t *Iterator) DeleteUntil(limit int, callback KVCallback) (key []byte, coun
 		}
 	}
 	return
-}
-
-type IterScan struct {
-	prefix   []byte
-	current  []byte
-	curValue []byte
-	idx      int
-	iter     *Iterator
-}
-type IterList struct {
-	iters map[int]*IterScan
-	heap  *utils.BytesHeap
-}
-
-func NewIterList() *IterList {
-	return &IterList{iters: make(map[int]*IterScan)}
-}
-
-func (i *IterList) Add(prefix []byte, idx int, iter *Iterator) {
-	utils.ZapLog.Debug("IterList", zap.ByteString("prefix", prefix), zap.ByteString("start", iter.start), zap.ByteString("end", iter.end))
-	i.iters[len(i.iters)] = &IterScan{prefix, prefix, nil, idx, iter}
-}
-
-func (i *IterList) Close() {
-	if len(i.iters) == 0 {
-		return
-	}
-	for _, iter := range i.iters {
-		iter.iter.Close()
-	}
-}
-
-func (i *IterList) Next() (utils.KV, error) {
-	if i.heap == nil {
-		i.heap = utils.NewBytesHeap()
-		heap.Init(i.heap)
-	}
-	var err error
-	var kv utils.KV
-	for j, it := range i.iters {
-		for it.iter.Valid() {
-			cur := it.iter.Key()
-			if len(cur) >= len(it.prefix) {
-				ukv := utils.KV{
-					Idx:   it.idx,
-					Key:   cur[len(it.prefix):],
-					Value: it.iter.Value(),
-				}
-				utils.ZapLog.Debug("IterList next", zap.ByteString("key", ukv.Key), zap.ByteString("value", ukv.Value))
-				heap.Push(i.heap, ukv)
-			}
-			err = it.iter.Next()
-			if err != nil {
-				return kv, err
-			}
-			if len(cur) >= len(it.prefix) {
-				break
-			}
-		}
-		if !it.iter.Valid() {
-			delete(i.iters, j)
-		}
-	}
-	if i.heap.Len() == 0 {
-		return kv, nil
-	}
-	return heap.Pop(i.heap).(utils.KV), nil
-}
-
-func (i *IterList) NextUntil(key []byte, all bool) (map[int][]byte, error) {
-	utils.ZapLog.Debug("[txn] IterList NextUntil ", zap.ByteString("key", key), zap.Bool("all", all))
-	var err error
-	values := make(map[int][]byte)
-	if len(i.iters) == 0 {
-		return values, nil
-	}
-	for _, it := range i.iters {
-		utils.ZapLog.Debug("[txn] IterList NextUntil ", zap.ByteString("key", key),
-			zap.ByteString("prefix", it.prefix), zap.Int("len", len(i.iters)),
-			zap.ByteString("current", it.current[len(it.prefix):]))
-		if len(it.current) >= len(it.prefix) {
-			c := bytes.Compare(it.current[len(it.prefix):], key)
-			if c == 0 {
-				values[it.idx] = it.curValue
-				if !all {
-					return values, nil
-				}
-				continue
-			} else if c > 0 && all {
-				return nil, nil
-			}
-			if c >= 0 {
-				continue
-			}
-		}
-
-		for it.iter.Valid() {
-			it.current = it.iter.Key()
-			it.curValue = it.iter.Value()
-			utils.ZapLog.Debug("[txn] IterList NextUntil ", zap.String("remote", it.iter.txn.RemoteAddr()),
-				zap.Uint64("timestamp", it.iter.txn.Timestamp), zap.ByteString("key", it.current),
-				zap.ByteString("value", it.curValue))
-			err = it.iter.Next()
-			if err != nil {
-				return nil, err
-			}
-
-			if len(it.current) >= len(it.prefix) {
-				c := bytes.Compare(it.current[len(it.prefix):], key)
-				if c < 0 {
-					continue
-				} else if c == 0 {
-					values[it.idx] = it.curValue
-					if !all {
-						return values, nil
-					}
-					break
-				} else if c > 0 && all {
-					return nil, nil
-				} else {
-					break
-				}
-			}
-		}
-	}
-	return values, nil
 }

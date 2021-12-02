@@ -24,6 +24,8 @@ type ChangeType byte
 
 const (
 	UnknownType ObjectType = '?'
+	AListType   ObjectType = 'a'
+	BListType   ObjectType = 'b'
 	CountType   ObjectType = 'c'
 	ServerType  ObjectType = 'e'
 	GroupType   ObjectType = 'g'
@@ -31,7 +33,7 @@ const (
 	ClientType  ObjectType = 'i'
 	JsonType    ObjectType = 'j'
 	StringType  ObjectType = 'k'
-	ListType    ObjectType = 'l'
+	LListType   ObjectType = 'l'
 	MessageType ObjectType = 'm'
 	StreamType  ObjectType = 'p'
 	PubSubType  ObjectType = 'q'
@@ -63,22 +65,15 @@ const (
 	DeleteKey  ChangeType = 0x08
 )
 
-var ObjectNameMap = map[string]ObjectType{
-	"string": StringType,
-	"json":   JsonType,
-	"list":   ListType,
-	"hash":   HashType,
-	"zset":   ZsetType,
-	"set":    SetType,
-}
-
 func (o ObjectType) Type() string {
 	switch o {
 	case StringType:
 		return "string"
 	case JsonType:
 		return "json"
-	case ListType:
+	case AListType:
+		return "list"
+	case BListType:
 		return "list"
 	case HashType:
 		return "hash"
@@ -239,7 +234,7 @@ func (o *Object) IsSimple() bool {
 }
 
 func (o *Object) IsCountable() bool {
-	return o.Type != StringType && o.Type != JsonType && o.Type != ListType
+	return o.Type != StringType && o.Type != JsonType && o.Type != BListType
 }
 
 func GetObjectFromKV(key, value []byte) (*Object, error) {

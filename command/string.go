@@ -300,7 +300,7 @@ func (c *Command) checkExist(txn *store.Txn, cmd string, key []byte, check Check
 	if !ok {
 		return nil, xerror.UnknownCommandError(cmd)
 	}
-	oldObject := NewObject(txn.UserId, txn.DBId, cmdHandler.Type, key)
+	oldObject := NewObject(txn.UserId, txn.DBId, c.getObjectType(cmdHandler.Typo), key)
 	objectKey := oldObject.GetKeyBytes()
 	err := c.getTxnObject(txn, objectKey, oldObject, false)
 	if err == store.KeyNotFound {

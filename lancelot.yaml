@@ -23,7 +23,7 @@ store:
   disable-lock-back-off: false
   batch-limit: 200
 gc:
-  tick-interval: 2s
+  tick-interval: 200s
   ttl-workers: 2
   ttl-batch-limit: 1
 lua:

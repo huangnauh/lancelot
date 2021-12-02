@@ -80,6 +80,7 @@ type Config struct {
 	Key           Key       `yaml:"key"`
 	Rpc           Rpc       `yaml:"rpc"`
 	PubSub        PubSub    `yaml:"pubsub"`
+	List          string    `yaml:"list"`
 }
 
 func Hostname() string {
@@ -141,6 +142,7 @@ var cfg = &Config{
 	PubSub: PubSub{
 		MaxSlowMessagePerSubscribe: 1000,
 	},
+	List: "a",
 }
 
 func LoadYAMLConfig(filename string) error {
