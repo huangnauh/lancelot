@@ -68,10 +68,12 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interfac
 		endIndex = -endIndex - 1
 	}
 	if !startRevered && !endRevered && startIndex > endIndex {
-		return nil, xerror.ErrStartGreaterThanEnd
+		// return nil, xerror.ErrStartGreaterThanEnd
+		return EmptySlice, nil
 	}
 	if startRevered && endRevered && startIndex < endIndex {
-		return nil, xerror.ErrStartGreaterThanEnd
+		// return nil, xerror.ErrStartGreaterThanEnd
+		return EmptySlice, nil
 	}
 	prefix := object.GetValueBytes(nil)
 	start := prefix
@@ -113,6 +115,8 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interfac
 	var leftC, rightC int64 = -1, -1
 	leftList := make([][]byte, 0)
 	rightList := make([][]byte, 0)
+	var lastLeft, checkLeft []byte
+	var lastRight, checkRight []byte
 	meet := false
 	for {
 		left, right, err := lr.Next()
@@ -122,22 +126,33 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interfac
 		if left == nil && right == nil {
 			break
 		}
-		if len(left) > 0 && len(right) > 0 {
-			if bytes.Compare(left[0], right[0]) > 0 {
-				meet = true
-				break
-			}
-			if bytes.Equal(left[0], right[0]) {
-				meet = true
-				// clear
-				right = nil
-				lr.Left = nil
-				lr.Right = nil
-			}
+		if len(left) > 0 {
+			checkLeft = left[0]
+		} else {
+			checkLeft = lastLeft
+		}
+
+		if len(right) > 0 {
+			checkRight = right[0]
+		} else {
+			checkRight = lastRight
+		}
+
+		if checkRight != nil && bytes.Compare(checkLeft, checkRight) > 0 {
+			meet = true
+			break
+		}
+		if checkRight != nil && bytes.Equal(checkLeft, checkRight) {
+			meet = true
+			// clear
+			right = nil
+			lr.Left = nil
+			lr.Right = nil
 		}
 
 		if len(left) > 0 {
 			leftC++
+			lastLeft = left[0]
 			utils.ZapLog.Debug("lRange left", zap.Int64("start", leftStart),
 				zap.Int64("end", leftEnd), zap.Int64("current", leftC),
 				zap.ByteString("key", left[0]))
@@ -154,6 +169,7 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interfac
 
 		if len(right) > 0 {
 			rightC++
+			lastRight = right[0]
 			utils.ZapLog.Debug("lRange right", zap.Int64("start", rightStart),
 				zap.Int64("end", rightEnd), zap.Int64("current", rightC),
 				zap.ByteString("key", right[0]))
@@ -170,25 +186,29 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interfac
 	if !startRevered && !endRevered {
 		return leftList, nil
 	} else if startRevered && endRevered {
+		utils.ReverseBytes(rightList)
 		return rightList, nil
 	}
 
 	if !startRevered {
 		if rightC < rightStart && leftC < leftStart {
-			return nil, xerror.ErrOutOfRange
+			// return nil, xerror.ErrOutOfRange
+			return EmptySlice, nil
 		}
 
 		if rightC < rightStart {
 			if int(rightStart-rightC) > len(leftList) {
-				return nil, xerror.ErrStartGreaterThanEnd
+				// return nil, xerror.ErrStartGreaterThanEnd
+				return EmptySlice, nil
 			}
-			return leftList[:int(rightStart-rightC)], nil
+			return leftList[:len(leftList)-int(rightStart-rightC)+1], nil
 		}
 		if leftC < leftStart {
 			if int(leftStart-leftC) > len(rightList) {
-				return nil, xerror.ErrStartGreaterThanEnd
+				// return nil, xerror.ErrStartGreaterThanEnd
+				return EmptySlice, nil
 			}
-			ret := rightList[int(leftStart-leftC):]
+			ret := rightList[int(leftStart-leftC)-1:]
 			utils.ReverseBytes(ret)
 			return ret, nil
 		}
@@ -199,18 +219,29 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interfac
 			if meet && len(leftList) > 0 {
 				return leftList[len(leftList)-1:], nil
 			}
-			return nil, xerror.ErrStartGreaterThanEnd
+			// return nil, xerror.ErrStartGreaterThanEnd
+			return EmptySlice, nil
 		}
 
+		var retRight [][]byte
 		if int(leftEnd-leftC) > len(rightList) {
-			return nil, xerror.ErrStartGreaterThanEnd
+			// return nil, xerror.ErrStartGreaterThanEnd
+			// return EmptySlice, nil
+			retRight = rightList
+		} else {
+			retRight = rightList[len(rightList)-int(leftEnd-leftC):]
 		}
+		utils.ReverseBytes(retRight)
+
+		var retLeft [][]byte
 		if int(rightEnd-rightC) > len(leftList) {
-			return nil, xerror.ErrStartGreaterThanEnd
+			// return nil, xerror.ErrStartGreaterThanEnd
+			// return EmptySlice, nil
+			retLeft = leftList
+		} else {
+			retLeft = leftList[len(leftList)-int(rightEnd-rightC):]
 		}
-		ret := rightList[len(rightList)-int(rightEnd-rightC):]
-		utils.ReverseBytes(ret)
-		return append(leftList[len(leftList)-int(rightEnd-rightC):], ret...), nil
+		return append(retLeft, retRight...), nil
 	}
 }
 

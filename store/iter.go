@@ -145,11 +145,12 @@ func (i *LeftRight) Next() ([][]byte, [][]byte, error) {
 	var err error
 	var left, right [][]byte
 	if i.Left != nil && i.Left.Valid() {
-		left = make([][]byte, 2)
-		left[0] = i.Left.Key()
-		if len(left[0]) <= len(i.Prefix) {
+		key := i.Left.Key()
+		if len(key) <= len(i.Prefix) || !bytes.Equal(key[:len(i.Prefix)], i.Prefix) {
 			i.Left = nil
 		} else {
+			left = make([][]byte, 2)
+			left[0] = key
 			left[1] = i.Left.Value()
 			utils.ZapLog.Debug("[txn] LeftRight left", zap.ByteString("key", left[0]), zap.ByteString("value", left[1]))
 			err = i.Left.Next()
@@ -159,11 +160,12 @@ func (i *LeftRight) Next() ([][]byte, [][]byte, error) {
 		}
 	}
 	if i.Right != nil && i.Right.Valid() {
-		if len(right[0]) <= len(i.Prefix) {
+		key := i.Right.Key()
+		if len(key) <= len(i.Prefix) || !bytes.Equal(key[:len(i.Prefix)], i.Prefix) {
 			i.Right = nil
 		} else {
 			right = make([][]byte, 2)
-			right[0] = i.Right.Key()
+			right[0] = key
 			right[1] = i.Right.Value()
 			utils.ZapLog.Debug("[txn] LeftRight right", zap.ByteString("key", right[0]), zap.ByteString("value", right[1]))
 			err = i.Right.Next()
