@@ -56,7 +56,7 @@ const (
 func (c *Command) getString(txn *store.Txn, arg []byte) ([]byte, error) {
 	object := NewObject(txn.UserId, txn.DBId, StringType, arg)
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, false)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return nil, nil
 	} else if err != nil {
@@ -111,14 +111,14 @@ func (c *Command) GetDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, false)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {
 		return txn.SetError(err)
 	} else {
 		value := object.Value
-		err = c.DeleteKey(txn, key, object, txn.Now, MinusCount)
+		err = DeleteKey(txn, key, object, txn.Now, MinusCount)
 		if err != nil {
 			return txn.SetError(err)
 		}
@@ -146,7 +146,7 @@ func (c *Command) AppendHandle(txn *store.Txn, args [][]byte) interface{} {
 	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
 	var create ChangeType
-	err := c.getTxnObject(txn, key, object, true)
+	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		create = PlusCount
 		object.Value = args[1]
@@ -156,7 +156,7 @@ func (c *Command) AppendHandle(txn *store.Txn, args [][]byte) interface{} {
 		object.Value = append(object.Value, args[1]...)
 	}
 	object.Timestamp = txn.Timestamp
-	err = c.setTxnObject(txn, key, object, create)
+	err = setTxnObject(txn, key, object, create)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -302,7 +302,7 @@ func (c *Command) checkExist(txn *store.Txn, cmd string, key []byte, check Check
 	}
 	oldObject := NewObject(txn.UserId, txn.DBId, c.getObjectType(cmdHandler.Typo), key)
 	objectKey := oldObject.GetKeyBytes()
-	err := c.getTxnObject(txn, objectKey, oldObject, false)
+	err := getTxnObject(txn, objectKey, oldObject, false)
 	if err == store.KeyNotFound {
 		if CheckExist == check {
 			return oldObject, xerror.ErrCheckFailed
@@ -325,7 +325,7 @@ func (c *Command) GetSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
 	var create ChangeType
-	err := c.getTxnObject(txn, key, object, true)
+	err := getTxnObject(txn, key, object, true)
 	var ret interface{}
 	if err == store.KeyNotFound {
 		ret = nil
@@ -343,7 +343,7 @@ func (c *Command) GetSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object.Value = args[1]
 	object.Timestamp = txn.Timestamp
-	err = c.setTxnObject(txn, key, object, create)
+	err = setTxnObject(txn, key, object, create)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -430,7 +430,7 @@ func (c *Command) stringHandle(txn *store.Txn, args [][]byte, stringFunc StringF
 	var create ChangeType
 	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, true)
+	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		create = PlusCount
 	} else if err != nil {
@@ -445,7 +445,7 @@ func (c *Command) stringHandle(txn *store.Txn, args [][]byte, stringFunc StringF
 		return value
 	}
 	object.Timestamp = txn.Timestamp
-	err = c.setTxnObject(txn, key, object, create)
+	err = setTxnObject(txn, key, object, create)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -496,7 +496,7 @@ func (c *Command) setString(txn *store.Txn, argKey, argValue []byte, expire int6
 	var create ChangeType
 	object := NewObject(txn.UserId, txn.DBId, StringType, argKey)
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, true)
+	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		if check == CheckExist {
 			return xerror.ErrCheckFailed
@@ -527,7 +527,7 @@ func (c *Command) setString(txn *store.Txn, argKey, argValue []byte, expire int6
 			return err
 		}
 	}
-	err = c.setTxnObject(txn, key, object, create)
+	err = setTxnObject(txn, key, object, create)
 	if err != nil {
 		return err
 	}
@@ -603,7 +603,7 @@ func (c *Command) SetRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 	var create ChangeType
 	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
-	err = c.getTxnObject(txn, key, object, true)
+	err = getTxnObject(txn, key, object, true)
 	var value []byte
 	if err == store.KeyNotFound {
 		if offset+len(args[2]) == 0 {
@@ -633,7 +633,7 @@ func (c *Command) SetRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object.Value = value
 	object.Timestamp = txn.Timestamp
-	err = c.setTxnObject(txn, key, object, create)
+	err = setTxnObject(txn, key, object, create)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -710,7 +710,7 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	key := object.GetKeyBytes()
-	err = c.setTxnObject(txn, key, object, create)
+	err = setTxnObject(txn, key, object, create)
 	if err != nil {
 		return txn.SetError(err)
 	} else if setOption.Get {
@@ -730,7 +730,7 @@ func (c *Command) GetExHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, StringType, args[0])
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, true)
+	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {
@@ -757,7 +757,7 @@ func (c *Command) GetExHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	object.Timestamp = txn.Timestamp
-	err = c.setTxnObject(txn, key, object, 0)
+	err = setTxnObject(txn, key, object, 0)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -817,7 +817,7 @@ func (c *Command) checkAndGetRange(txn *store.Txn, k []byte, args [][]byte) ([]b
 func (c *Command) getRange(txn *store.Txn, k []byte, start, end int) ([]byte, int, int, error) {
 	object := NewObject(txn.UserId, txn.DBId, StringType, k)
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, false)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return nil, start, end, nil
 	} else if err != nil {

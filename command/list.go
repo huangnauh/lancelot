@@ -118,6 +118,13 @@ func (c *Command) LLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(LLEN_COMMAND)
 	}
+	if c.cfg.List == "a" {
+		ret, err := GetCountByKey(txn, args[0], AListType)
+		if err != nil {
+			return txn.SetError(err)
+		}
+		return redcon.SimpleInt(ret)
+	}
 	ret, err := c.ListHandle(txn, args, LLEN_COMMAND, &lOpt{exist: true, readonly: true})
 	if err == store.KeyNotFound {
 		return redcon.SimpleInt(0)

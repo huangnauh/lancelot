@@ -32,13 +32,28 @@ var (
 		RPUSH_COMMAND: func(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
 			return aPush(txn, object, args, opt, false)
 		},
-		LRANGE_COMMAND: alRange,
-		LLEN_COMMAND:   blLen,
-		LTRIM_COMMAND:  blTrim,
-		LINFO_COMMAND:  blInfo,
-		LREM_COMMAND:   blRem,
-		LSET_COMMAND:   blSet,
-		LPOS_COMMAND:   blPos,
+		LRANGE_COMMAND: func(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
+			values, err := alRange(txn, object, args, opt, false)
+			return values, err
+		},
+		// LLEN_COMMAND:,
+		LTRIM_COMMAND: func(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
+			keys, err := alRange(txn, object, args, opt, false)
+			if err != nil {
+				return nil, err
+			}
+			for _, key := range keys {
+				_, err = PutOrDeleteKV(txn, object, key, nil, -1)
+				if err != nil {
+					return nil, err
+				}
+			}
+			return OK, nil
+		},
+		// LINFO_COMMAND:,
+		LREM_COMMAND: blRem,
+		LSET_COMMAND: blSet,
+		LPOS_COMMAND: alPos,
 	}
 )
 
@@ -54,7 +69,7 @@ func nextRightKey(txn *store.Txn, object *Object) []byte {
 	return object.GetValueBytes(utils.EncodeFloat(float64(txn.Timestamp) + fid))
 }
 
-func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
+func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, needKey bool) ([][]byte, error) {
 	startIndex := opt.index[0]
 	startRevered := false
 	if startIndex < 0 {
@@ -69,11 +84,11 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interfac
 	}
 	if !startRevered && !endRevered && startIndex > endIndex {
 		// return nil, xerror.ErrStartGreaterThanEnd
-		return EmptySlice, nil
+		return EmptyBytes, nil
 	}
 	if startRevered && endRevered && startIndex < endIndex {
 		// return nil, xerror.ErrStartGreaterThanEnd
-		return EmptySlice, nil
+		return EmptyBytes, nil
 	}
 	prefix := object.GetValueBytes(nil)
 	start := prefix
@@ -157,9 +172,13 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interfac
 				zap.Int64("end", leftEnd), zap.Int64("current", leftC),
 				zap.ByteString("key", left[0]))
 			if leftC >= leftStart && leftC <= leftEnd {
-				lvalue := &Value{}
-				DecodeValue(left[1], lvalue)
-				leftList = append(leftList, lvalue.Value)
+				if !needKey {
+					lvalue := &Value{}
+					DecodeValue(left[1], lvalue)
+					leftList = append(leftList, lvalue.Value)
+				} else {
+					leftList = append(leftList, left[0])
+				}
 			}
 
 			if leftC >= leftEnd {
@@ -174,9 +193,13 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interfac
 				zap.Int64("end", rightEnd), zap.Int64("current", rightC),
 				zap.ByteString("key", right[0]))
 			if rightC >= rightStart && rightC <= rightEnd {
-				lvalue := &Value{}
-				DecodeValue(right[1], lvalue)
-				rightList = append(rightList, lvalue.Value)
+				if !needKey {
+					lvalue := &Value{}
+					DecodeValue(right[1], lvalue)
+					rightList = append(rightList, lvalue.Value)
+				} else {
+					rightList = append(rightList, right[0])
+				}
 			}
 			if rightC >= rightEnd {
 				lr.Right = nil
@@ -193,20 +216,20 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interfac
 	if !startRevered {
 		if rightC < rightStart && leftC < leftStart {
 			// return nil, xerror.ErrOutOfRange
-			return EmptySlice, nil
+			return EmptyBytes, nil
 		}
 
 		if rightC < rightStart {
 			if int(rightStart-rightC) > len(leftList) {
 				// return nil, xerror.ErrStartGreaterThanEnd
-				return EmptySlice, nil
+				return EmptyBytes, nil
 			}
 			return leftList[:len(leftList)-int(rightStart-rightC)+1], nil
 		}
 		if leftC < leftStart {
 			if int(leftStart-leftC) > len(rightList) {
 				// return nil, xerror.ErrStartGreaterThanEnd
-				return EmptySlice, nil
+				return EmptyBytes, nil
 			}
 			ret := rightList[int(leftStart-leftC)-1:]
 			utils.ReverseBytes(ret)
@@ -220,13 +243,11 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interfac
 				return leftList[len(leftList)-1:], nil
 			}
 			// return nil, xerror.ErrStartGreaterThanEnd
-			return EmptySlice, nil
+			return EmptyBytes, nil
 		}
 
 		var retRight [][]byte
 		if int(leftEnd-leftC) > len(rightList) {
-			// return nil, xerror.ErrStartGreaterThanEnd
-			// return EmptySlice, nil
 			retRight = rightList
 		} else {
 			retRight = rightList[len(rightList)-int(leftEnd-leftC):]
@@ -235,8 +256,6 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interfac
 
 		var retLeft [][]byte
 		if int(rightEnd-rightC) > len(leftList) {
-			// return nil, xerror.ErrStartGreaterThanEnd
-			// return EmptySlice, nil
 			retLeft = leftList
 		} else {
 			retLeft = leftList[len(leftList)-int(rightEnd-rightC):]
@@ -258,12 +277,138 @@ func aPush(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, left bool) 
 			Value:     msg,
 			Timestamp: txn.Timestamp,
 		}
-		err = txn.Put(lkey, EncodeValue(lvalue))
+		_, err = PutOrDeleteKV(txn, object, lkey, EncodeValue(lvalue), 1)
 		if err != nil {
 			return redcon.SimpleInt(0), err
 		}
 	}
 	return redcon.SimpleInt(len(args)), err
+}
+
+func alrem(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
+	prefix := object.GetValueBytes(nil)
+	start := prefix
+	end := utils.PrefixNext(prefix)
+	var count int
+	if opt.count >= 0 {
+		count = opt.count
+	} else {
+		count = -opt.count
+		start, end = end, start
+	}
+	var c int
+	var delErr error
+	first := false
+	var pre, cur float64
+	err := txn.List(start, end, opt.max, func(key, value []byte) bool {
+		if len(key) < len(prefix) || !bytes.Equal(key[:len(prefix)], prefix) {
+			return true
+		}
+		cur = utils.DecodeFloat(key[len(prefix):])
+		if c >= count {
+			if opt.count >= 0 {
+				l.LIndex = cur
+			} else {
+				l.RIndex = cur
+			}
+			return false
+		}
+
+		lvalue := &Value{}
+		DecodeValue(value, lvalue)
+		if !bytes.Equal(args[1], lvalue.Value) {
+			pre = cur
+			if !first {
+				if opt.count >= 0 {
+					l.LIndex = cur
+				} else {
+					l.RIndex = cur
+				}
+				first = true
+			}
+			return true
+		}
+		delErr = txn.Del(key)
+		if delErr != nil {
+			return false
+		}
+		c++
+		if opt.count >= 0 && cur == l.RIndex {
+			l.RIndex = pre
+			return false
+		}
+		if opt.count < 0 && cur == l.LIndex {
+			l.LIndex = pre
+			return false
+		}
+		if c >= count {
+			return !first
+		}
+		return true
+	})
+	if err != nil {
+		return nil, err
+	}
+	if delErr != nil {
+		return nil, delErr
+	}
+	if c == 0 {
+		opt.readonly = true
+		return 0, nil
+	}
+	return redcon.SimpleInt(c), nil
+}
+
+func alPos(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
+	prefix := object.GetValueBytes(nil)
+	start := prefix
+	end := utils.PrefixNext(prefix)
+	uindex := opt.index[0]
+	var length int64
+	var err error
+	if uindex < 0 {
+		uindex = -uindex
+		start, end = end, start
+		length, err = GetCountByKey(txn, args[0], AListType)
+		if err != nil {
+			return nil, err
+		}
+	}
+	idxs := make([]redcon.SimpleInt, 0)
+	v := args[0]
+	var count, idx int64
+	begin := false
+	err = txn.List(start, end, opt.max, func(key, value []byte) bool {
+		idx++
+		lvalue := &Value{}
+		DecodeValue(value, lvalue)
+		if !bytes.Equal(v, lvalue.Value) {
+			return true
+		}
+		count++
+		if count >= uindex {
+			begin = true
+		}
+		if !begin {
+			return true
+		}
+		if opt.index[0] >= 0 {
+			idxs = append(idxs, redcon.SimpleInt(idx-1))
+		} else {
+			idxs = append(idxs, redcon.SimpleInt(length-idx))
+		}
+		return len(idxs) < opt.count
+	})
+	if err != nil && err != store.ReachLimit {
+		return nil, err
+	}
+	if opt.count == 0 {
+		if len(idxs) == 0 {
+			return nil, nil
+		}
+		return idxs[0], nil
+	}
+	return idxs, nil
 }
 
 func aPop(txn *store.Txn, object *Object, _ [][]byte, opt *lOpt, left bool) (interface{}, error) {
@@ -284,7 +429,7 @@ func aPop(txn *store.Txn, object *Object, _ [][]byte, opt *lOpt, left bool) (int
 		if len(key) < len(prefix) {
 			return true
 		}
-		delErr = txn.Del(key)
+		_, delErr = PutOrDeleteKV(txn, object, key, nil, -1)
 		if delErr != nil {
 			return false
 		}
@@ -468,7 +613,7 @@ func (c *Command) AListHandle(txn *store.Txn, args [][]byte, lFunc ListFunc, opt
 
 	object := NewObject(txn.UserId, txn.DBId, AListType, args[0])
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, true)
+	err := getTxnObject(txn, key, object, true)
 	create := false
 	if err == store.KeyNotFound {
 		if opt.exist {
@@ -494,7 +639,7 @@ func (c *Command) AListHandle(txn *store.Txn, args [][]byte, lFunc ListFunc, opt
 	if opt.readonly || !create {
 		return ret, nil
 	}
-	err = c.setTxnObject(txn, key, object, PlusCount)
+	err = setTxnObject(txn, key, object, PlusCount)
 	if err != nil {
 		return nil, err
 	}

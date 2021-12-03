@@ -147,7 +147,7 @@ func (c *Command) HLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(HLEN_COMMAND)
 	}
-	ret, err := c.GetCountByKey(txn, args[0], HashType)
+	ret, err := GetCountByKey(txn, args[0], HashType)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -177,7 +177,7 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 	scanOpt.typo = typo
 	object := NewObject(txn.UserId, txn.DBId, typo, args[0])
 	key := object.GetKeyBytes()
-	err = c.getTxnObject(txn, key, object, false)
+	err = getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return EmptyCursor
 	} else if err != nil {
@@ -253,7 +253,7 @@ func (c *Command) hgetall(txn *store.Txn, args [][]byte, getType int, limit int)
 	ret := make([][]byte, 0)
 	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, false)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return ret, nil
 	} else if err != nil {
@@ -293,7 +293,7 @@ func (c *Command) HMGetHandle(txn *store.Txn, args [][]byte) interface{} {
 	ret := make([]interface{}, len(args)-1)
 	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, false)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return ret
 	} else if err != nil {
@@ -348,7 +348,7 @@ func (c *Command) hget(txn *store.Txn, args [][]byte) ([]byte, error) {
 	field := args[1]
 	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, false)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return nil, nil
 	} else if err != nil {
@@ -376,7 +376,7 @@ func (c *Command) HDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	object := NewObject(txn.UserId, txn.DBId, HashType, args[0])
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, false)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return SimpleInt(0)
 	} else if err != nil {
@@ -394,7 +394,7 @@ func (c *Command) HDelHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 
 		ret++
-		_, err = c.PutOrDeleteKV(txn, object, hkey, nil, -1)
+		_, err = PutOrDeleteKV(txn, object, hkey, nil, -1)
 		if err != nil {
 			return txn.SetError(err)
 		}
@@ -447,7 +447,7 @@ func (c *Command) HIncrByFloatHandle(txn *store.Txn, args [][]byte) interface{} 
 		Value:     utils.S2B(strconv.FormatFloat(floatValue, 'f', -1, 64)),
 		Timestamp: txn.Timestamp,
 	}
-	_, err = c.PutOrDeleteKV(txn, object, hkey, EncodeValue(hvalue), delta)
+	_, err = PutOrDeleteKV(txn, object, hkey, EncodeValue(hvalue), delta)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -495,7 +495,7 @@ func (c *Command) HIncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	intValue += increment
 	hvalue := &Value{Value: utils.S2B(strconv.FormatInt(intValue, 10)), Timestamp: txn.Timestamp}
-	_, err = c.PutOrDeleteKV(txn, object, hkey, EncodeValue(hvalue), delta)
+	_, err = PutOrDeleteKV(txn, object, hkey, EncodeValue(hvalue), delta)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -505,12 +505,12 @@ func (c *Command) HIncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 func (c *Command) DeleteThenCreateUUIDObject(txn *store.Txn, typo ObjectType, arg []byte, create bool) (*Object, error) {
 	object := NewObject(txn.UserId, txn.DBId, typo, arg)
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, true)
+	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 	} else if err != nil {
 		return object, err
 	} else {
-		err = c.DeleteKey(txn, key, object, txn.Now, MinusCount)
+		err = DeleteKey(txn, key, object, txn.Now, MinusCount)
 		if err != nil {
 			return object, err
 		}
@@ -525,7 +525,7 @@ func (c *Command) DeleteThenCreateUUIDObject(txn *store.Txn, typo ObjectType, ar
 	}
 	object.Value = id[:]
 	object.Timestamp = txn.Timestamp
-	err = c.setTxnObject(txn, key, object, PlusCount)
+	err = setTxnObject(txn, key, object, PlusCount)
 	if err != nil {
 		return object, err
 	}
@@ -535,7 +535,7 @@ func (c *Command) DeleteThenCreateUUIDObject(txn *store.Txn, typo ObjectType, ar
 func (c *Command) GetOrCreateUUIDObject(txn *store.Txn, typo ObjectType, arg []byte) (*Object, error) {
 	object := NewObject(txn.UserId, txn.DBId, typo, arg)
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, true)
+	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		id, err := uuid.NewUUID()
 		if err != nil {
@@ -543,7 +543,7 @@ func (c *Command) GetOrCreateUUIDObject(txn *store.Txn, typo ObjectType, arg []b
 		}
 		object.Value = id[:]
 		object.Timestamp = txn.Timestamp
-		err = c.setTxnObject(txn, key, object, PlusCount)
+		err = setTxnObject(txn, key, object, PlusCount)
 		if err != nil {
 			return object, err
 		}
@@ -609,7 +609,7 @@ func (c *Command) hset(txn *store.Txn, args [][]byte, checkExist bool) (int64, e
 			continue
 		}
 		hvalue := &Value{Value: args[start+1], Timestamp: txn.Timestamp}
-		_, err = c.PutOrDeleteKV(txn, object, hkey, EncodeValue(hvalue), delta)
+		_, err = PutOrDeleteKV(txn, object, hkey, EncodeValue(hvalue), delta)
 		if err != nil {
 			return ret, err
 		}

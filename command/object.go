@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tikv/client-go/v2/oracle"
+	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -59,10 +60,10 @@ const (
 	ObjectHelpCommand = "OBJECT HELP"
 	DefaultHashMark   = 1<<4 - 1
 
-	MinusCount ChangeType = 0x01
-	PlusCount  ChangeType = 0x02
-	GCChange   ChangeType = 0x04
-	DeleteKey  ChangeType = 0x08
+	MinusCount    ChangeType = 0x01
+	PlusCount     ChangeType = 0x02
+	GCChange      ChangeType = 0x04
+	DeleteKeyType ChangeType = 0x08
 )
 
 func (o ObjectType) Type() string {
@@ -268,6 +269,9 @@ func GetTTLPrefix(expire int64) []byte {
 }
 
 func (o *Object) getTTLBytes(typo PrefixType, data []byte) []byte {
+	if o.TTL <= 0 {
+		return nil
+	}
 	ttl := make([]byte, 8)
 	binary.BigEndian.PutUint64(ttl, uint64(o.TTL))
 	return GetKeyBytes(TTLPrefix, o.UserId, o.Db, typo, ttl, data)
@@ -369,10 +373,10 @@ func ObjectDecode(b []byte, o *Object) error {
 	return nil
 }
 
-func (c *Command) setTxnObject(txn *store.Txn, key []byte, o *Object, change ChangeType) error {
+func setTxnObject(txn *store.Txn, key []byte, o *Object, change ChangeType) error {
 	delta := int64(0)
 	var err error
-	if change&DeleteKey != 0 {
+	if change&DeleteKeyType != 0 {
 		err = txn.Del(key)
 		if change&MinusCount != 0 {
 			delta = -1
@@ -387,12 +391,13 @@ func (c *Command) setTxnObject(txn *store.Txn, key []byte, o *Object, change Cha
 		return err
 	}
 
-	if c.cfg.Key.DbSizeHash != 0 && delta != 0 {
+	cfg := config.GetConfig()
+	if cfg.Key.DbSizeHash != 0 && delta != 0 {
 		var count *Count
 		if change&GCChange == 0 {
-			count, err = GetCount(txn, o.UserId, o.Db, c.cfg.Key.DbSizeHash-1, CountGeneral, KEYSIZE, o.Key)
+			count, err = GetCount(txn, o.UserId, o.Db, cfg.Key.DbSizeHash-1, CountGeneral, KEYSIZE, o.Key)
 		} else {
-			count, err = GetCount(txn, o.UserId, o.Db, c.cfg.Key.DbSizeHash, CountGeneral, KEYSIZE, nil)
+			count, err = GetCount(txn, o.UserId, o.Db, cfg.Key.DbSizeHash, CountGeneral, KEYSIZE, nil)
 		}
 		if err == store.KeyNotFound {
 		} else if err != nil {
@@ -407,7 +412,7 @@ func (c *Command) setTxnObject(txn *store.Txn, key []byte, o *Object, change Cha
 	return nil
 }
 
-func (c *Command) getTxnObject(txn *store.Txn, key []byte, object *Object, clear bool) error {
+func getTxnObject(txn *store.Txn, key []byte, object *Object, clear bool) error {
 	getType := object.Type
 	value, err := txn.Get(key)
 	if err != nil {
@@ -420,7 +425,7 @@ func (c *Command) getTxnObject(txn *store.Txn, key []byte, object *Object, clear
 
 	if object.TTL > 0 && object.TTL <= txn.Now {
 		if clear {
-			err = c.DeleteKey(txn, key, object, object.TTL, MinusCount)
+			err = DeleteKey(txn, key, object, object.TTL, MinusCount)
 			if err != nil {
 				return err
 			}
@@ -451,7 +456,7 @@ func (c *Command) ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[1])
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, false)
+	err := getTxnObject(txn, key, object, false)
 	if err != nil {
 		return nil
 	}
@@ -497,7 +502,7 @@ func (c *Command) ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 }
 
-func (c *Command) PutOrDeleteKV(txn *store.Txn, object *Object, k, v []byte, delta int64) (int64, error) {
+func PutOrDeleteKV(txn *store.Txn, object *Object, k, v []byte, delta int64) (int64, error) {
 	var err error
 	if v == nil {
 		err = txn.Del(k)
@@ -521,19 +526,19 @@ func (c *Command) PutOrDeleteKV(txn *store.Txn, object *Object, k, v []byte, del
 	return count.Value, err
 }
 
-func (c *Command) GetCountByKey(txn *store.Txn, arg []byte, typo ObjectType) (int64, error) {
+func GetCountByKey(txn *store.Txn, arg []byte, typo ObjectType) (int64, error) {
 	object := NewObject(txn.UserId, txn.DBId, typo, arg)
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, false)
+	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
 		return 0, nil
 	} else if err != nil {
 		return 0, err
 	}
-	return c.GetCountByObject(txn, object)
+	return GetCountByObject(txn, object)
 }
 
-func (c *Command) GetCountByObject(txn *store.Txn, object *Object) (int64, error) {
+func GetCountByObject(txn *store.Txn, object *Object) (int64, error) {
 	counts, err := ListCount(txn, txn.UserId, txn.DBId, KeyPrefix, object.Value)
 	if err != nil {
 		return 0, err

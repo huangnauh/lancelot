@@ -792,7 +792,7 @@ func (c *Command) BListHandle(txn *store.Txn, args [][]byte, lFunc ListFunc, opt
 	utils.ZapLog.Debug("BListHandle", zap.ByteStrings("args", args), zap.Any("opt", opt))
 	object := NewObject(txn.UserId, txn.DBId, BListType, args[0])
 	key := object.GetKeyBytes()
-	err := c.getTxnObject(txn, key, object, true)
+	err := getTxnObject(txn, key, object, true)
 	var change ChangeType
 	if err == store.KeyNotFound {
 		if opt.exist {
@@ -813,7 +813,7 @@ func (c *Command) BListHandle(txn *store.Txn, args [][]byte, lFunc ListFunc, opt
 			return nil, err
 		}
 		if l.Length == 0 && opt.exist {
-			err = c.DeleteKey(txn, key, object, 0, MinusCount)
+			err = DeleteKey(txn, key, object, 0, MinusCount)
 			if err != nil {
 				return nil, err
 			}
@@ -835,7 +835,7 @@ func (c *Command) BListHandle(txn *store.Txn, args [][]byte, lFunc ListFunc, opt
 		return ret, nil
 	}
 	if opt.l.Length == 0 {
-		err = c.setTxnObject(txn, key, object, MinusCount)
+		err = setTxnObject(txn, key, object, MinusCount)
 		if err != nil {
 			return nil, err
 		}
@@ -843,7 +843,7 @@ func (c *Command) BListHandle(txn *store.Txn, args [][]byte, lFunc ListFunc, opt
 	}
 	object.Timestamp = txn.Timestamp
 	object.Extra = EncodeListObjectExtra(opt.l)
-	err = c.setTxnObject(txn, key, object, change)
+	err = setTxnObject(txn, key, object, change)
 	if err != nil {
 		return nil, err
 	}
