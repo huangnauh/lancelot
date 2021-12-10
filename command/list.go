@@ -118,13 +118,6 @@ func (c *Command) LLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(LLEN_COMMAND)
 	}
-	if c.cfg.List == "a" {
-		ret, err := GetCountByKey(txn, args[0], AListType)
-		if err != nil {
-			return txn.SetError(err)
-		}
-		return redcon.SimpleInt(ret)
-	}
 	ret, err := c.ListHandle(txn, args, LLEN_COMMAND, &lOpt{exist: true, readonly: true})
 	if err == store.KeyNotFound {
 		return redcon.SimpleInt(0)
@@ -396,7 +389,7 @@ func (c *Command) listMany(txn *store.Txn, args [][]byte, cmd string) (interface
 		}
 		msg, ok := ret.([]byte)
 		if !ok {
-			return nil, nil
+			continue
 		}
 		return [][]byte{args[i], msg}, nil
 	}
@@ -497,7 +490,7 @@ func (c *Command) BlPopHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(BLPOP_COMMAND)
 	}
 	bfunc := func(txn *store.Txn, args [][]byte) (interface{}, error) {
-		return c.listMany(txn, args, BLPOP_COMMAND)
+		return c.listMany(txn, args, LPOP_COMMAND)
 	}
 	ret, err := c.BlockHandle(txn, args, bfunc)
 	if err != nil {

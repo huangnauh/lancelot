@@ -2,6 +2,7 @@ package command
 
 import (
 	"bytes"
+	"encoding/binary"
 	"math"
 
 	"github.com/google/uuid"
@@ -36,7 +37,7 @@ var (
 			values, err := alRange(txn, object, args, opt, false)
 			return values, err
 		},
-		// LLEN_COMMAND:,
+		LLEN_COMMAND: alLen,
 		LTRIM_COMMAND: func(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
 			keys, err := alRange(txn, object, args, opt, false)
 			if err != nil {
@@ -51,22 +52,36 @@ var (
 			return OK, nil
 		},
 		// LINFO_COMMAND:,
-		LREM_COMMAND: blRem,
-		LSET_COMMAND: blSet,
+		LREM_COMMAND: alRem,
+		LSET_COMMAND: alSet,
 		LPOS_COMMAND: alPos,
 	}
 )
 
 func nextLeftKey(txn *store.Txn, object *Object) []byte {
-	fid := float64(txn.ListLID) / MaxListaPerTxn
+	key := make([]byte, 8+2)
+	binary.BigEndian.PutUint64(key, utils.EncodeInt64ToCmpUint(-int64(txn.Timestamp)))
+	binary.BigEndian.PutUint16(key[8:], utils.EncodeInt16ToCmpUint(-int16(txn.ListLID)))
 	txn.ListLID++
-	return object.GetValueBytes(utils.EncodeFloat(-(float64(txn.Timestamp) + fid)))
+	utils.ZapLog.Debug("nextLeftKey", zap.ByteString("key", key))
+	return object.GetValueBytes(key)
 }
 
 func nextRightKey(txn *store.Txn, object *Object) []byte {
-	fid := float64(txn.ListRID) / MaxListaPerTxn
+	key := make([]byte, 8+2)
+	binary.BigEndian.PutUint64(key, utils.EncodeInt64ToCmpUint(int64(txn.Timestamp)))
+	binary.BigEndian.PutUint16(key[8:], utils.EncodeInt16ToCmpUint(int16(txn.ListRID)))
 	txn.ListRID++
-	return object.GetValueBytes(utils.EncodeFloat(float64(txn.Timestamp) + fid))
+	utils.ZapLog.Debug("nextRightKey", zap.ByteString("key", key))
+	return object.GetValueBytes(key)
+}
+
+func alLen(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
+	count, err := GetCountByObject(txn, object)
+	if err != nil {
+		return nil, err
+	}
+	return redcon.SimpleInt(count), nil
 }
 
 func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, needKey bool) ([][]byte, error) {
@@ -248,6 +263,9 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, needKey b
 
 		var retRight [][]byte
 		if int(leftEnd-leftC) > len(rightList) {
+			if needKey {
+				return EmptyBytes, nil
+			}
 			retRight = rightList
 		} else {
 			retRight = rightList[len(rightList)-int(leftEnd-leftC):]
@@ -256,6 +274,9 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, needKey b
 
 		var retLeft [][]byte
 		if int(rightEnd-rightC) > len(leftList) {
+			if needKey {
+				return EmptyBytes, nil
+			}
 			retLeft = leftList
 		} else {
 			retLeft = leftList[len(leftList)-int(rightEnd-rightC):]
@@ -285,7 +306,7 @@ func aPush(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, left bool) 
 	return redcon.SimpleInt(len(args)), err
 }
 
-func alrem(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
+func alRem(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
 	prefix := object.GetValueBytes(nil)
 	start := prefix
 	end := utils.PrefixNext(prefix)
@@ -298,51 +319,23 @@ func alrem(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{
 	}
 	var c int
 	var delErr error
-	first := false
-	var pre, cur float64
 	err := txn.List(start, end, opt.max, func(key, value []byte) bool {
 		if len(key) < len(prefix) || !bytes.Equal(key[:len(prefix)], prefix) {
-			return true
-		}
-		cur = utils.DecodeFloat(key[len(prefix):])
-		if c >= count {
-			if opt.count >= 0 {
-				l.LIndex = cur
-			} else {
-				l.RIndex = cur
-			}
 			return false
 		}
 
 		lvalue := &Value{}
 		DecodeValue(value, lvalue)
 		if !bytes.Equal(args[1], lvalue.Value) {
-			pre = cur
-			if !first {
-				if opt.count >= 0 {
-					l.LIndex = cur
-				} else {
-					l.RIndex = cur
-				}
-				first = true
-			}
 			return true
 		}
+		c++
 		delErr = txn.Del(key)
 		if delErr != nil {
 			return false
 		}
-		c++
-		if opt.count >= 0 && cur == l.RIndex {
-			l.RIndex = pre
+		if count > 0 && c >= count {
 			return false
-		}
-		if opt.count < 0 && cur == l.LIndex {
-			l.LIndex = pre
-			return false
-		}
-		if c >= count {
-			return !first
 		}
 		return true
 	})
@@ -369,7 +362,7 @@ func alPos(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{
 	if uindex < 0 {
 		uindex = -uindex
 		start, end = end, start
-		length, err = GetCountByKey(txn, args[0], AListType)
+		length, err = GetCountByObject(txn, object)
 		if err != nil {
 			return nil, err
 		}
@@ -379,6 +372,9 @@ func alPos(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{
 	var count, idx int64
 	begin := false
 	err = txn.List(start, end, opt.max, func(key, value []byte) bool {
+		if len(key) < len(prefix) || !bytes.Equal(key[:len(prefix)], prefix) {
+			return false
+		}
 		idx++
 		lvalue := &Value{}
 		DecodeValue(value, lvalue)
@@ -444,8 +440,11 @@ func aPop(txn *store.Txn, object *Object, _ [][]byte, opt *lOpt, left bool) (int
 	if err != nil {
 		return nil, err
 	}
-	if opt.count == 0 && len(ret) == 1 {
-		return ret[0], nil
+	if opt.count == 0 {
+		if len(ret) == 1 {
+			return ret[0], nil
+		}
+		return nil, nil
 	}
 	return ret, nil
 }

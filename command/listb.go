@@ -727,8 +727,11 @@ func blPop(txn *store.Txn, object *Object, _ [][]byte, opt *lOpt) (interface{}, 
 		return nil, err
 	}
 	l.Length -= uint64(len(ret))
-	if opt.count == 0 && len(ret) == 1 {
-		return ret[0], nil
+	if opt.count == 0 {
+		if len(ret) == 1 {
+			return ret[0], nil
+		}
+		return nil, nil
 	}
 	return ret, nil
 }

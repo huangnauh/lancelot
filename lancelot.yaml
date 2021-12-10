@@ -23,7 +23,7 @@ store:
   disable-lock-back-off: false
   batch-limit: 200
 gc:
-  tick-interval: 200s
+  tick-interval: 3m20s
   ttl-workers: 2
   ttl-batch-limit: 1
 lua:
@@ -47,3 +47,4 @@ rpc:
   compress: false
 pubsub:
   max-slow-message-per-subscribe: 1000
+list: a

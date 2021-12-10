@@ -197,7 +197,7 @@ func (c *Command) BitOpHandle(txn *store.Txn, args [][]byte) interface{} {
 		destObject.Value = ret
 	}
 
-	err = c.setTxnObject(txn, destKey, destObject, create)
+	err = setTxnObject(txn, destKey, destObject, create)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -256,7 +256,7 @@ func (c *Command) SetBitHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	value[o] = v & ^(1<<bit) | (uint8(bitChange) << bit)
 	object.Value = value
-	err = c.setTxnObject(txn, key, object, create)
+	err = setTxnObject(txn, key, object, create)
 	if err != nil {
 		return txn.SetError(err)
 	}
