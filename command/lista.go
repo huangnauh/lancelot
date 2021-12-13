@@ -454,7 +454,7 @@ func aindex(txn *store.Txn, object *Object, opt *lOpt) ([]byte, []byte, error) {
 	var reversed bool
 	if i < 0 {
 		reversed = true
-		i = -i
+		i = -i - 1
 	}
 	index := uint64(i)
 	if index >= uint64(opt.max) {

@@ -66,4 +66,32 @@ start_server {
         assert_equal {d c b a 0 1 2 3} [r lrange mylist 0 -1]
     }
 
+    foreach {type large} [array get largevalue] {
+        test "LPUSHX, RPUSHX - $type" {
+            create_list xlist "$large c"
+            assert_equal 3 [r rpushx xlist d]
+            assert_equal 4 [r lpushx xlist a]
+            assert_equal 6 [r rpushx xlist 42 x]
+            assert_equal 9 [r lpushx xlist y3 y2 y1]
+            assert_equal "y1 y2 y3 a $large c d 42 x" [r lrange xlist 0 -1]
+        }
+
+        test "LINSERT - $type" {
+            create_list xlist "a $large c d"
+            assert_equal 5 [r linsert xlist before c zz] "before c"
+            assert_equal "a $large zz c d" [r lrange xlist 0 10] "lrangeA"
+            assert_equal 6 [r linsert xlist after c yy] "after c"
+            assert_equal "a $large zz c yy d" [r lrange xlist 0 10] "lrangeB"
+            assert_equal 7 [r linsert xlist after d dd] "after d"
+            assert_equal -1 [r linsert xlist after bad ddd] "after bad"
+            assert_equal "a $large zz c yy d dd" [r lrange xlist 0 10] "lrangeC"
+            assert_equal 8 [r linsert xlist before a aa] "before a"
+            assert_equal -1 [r linsert xlist before bad aaa] "before bad"
+            assert_equal "aa a $large zz c yy d dd" [r lrange xlist 0 10] "lrangeD"
+
+            # check inserting integer encoded value
+            assert_equal 9 [r linsert xlist before aa 42] "before aa"
+            assert_equal 42 [r lrange xlist 0 0] "lrangeE"
+        }
+    }
 }

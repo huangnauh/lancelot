@@ -383,7 +383,8 @@ start_server {
                 r rpush blist{t} foo
                 assert_equal foo [$rd read]
                 assert_equal {target{t} foo} [$rd2 read]
-                assert_equal 0 [r exists target{t}]
+                # assert_equal 0 [r exists target{t}]
+                assert_equal 0 [r llen target{t}]
                 wait_for_blocked_clients_count 0
             }
         }
@@ -588,7 +589,8 @@ start_server {
             $rd $pop blist1 1
             r rpush blist1 foo
             assert_equal {blist1 foo} [$rd read]
-            assert_equal 0 [r exists blist1]
+            # assert_equal 0 [r exists blist1]
+            assert_equal 0 [r llen blist1]
             wait_for_blocked_clients_count 0
         }
 
@@ -606,7 +608,8 @@ start_server {
             r rpush blist1 foo
             wait_for_blocked_clients_count 0 500 10
             assert_equal {blist1 foo} [$rd read]
-            assert_equal 0 [r exists blist1]
+            # assert_equal 0 [r exists blist1]
+            assert_equal 0 [r llen blist1]
         }
 
         test "$pop: with zero timeout should block indefinitely" {
@@ -645,15 +648,19 @@ start_server {
             $rd $pop blist1{t} blist2{t} 1
             r rpush blist1{t} foo
             assert_equal {blist1{t} foo} [$rd read]
-            assert_equal 0 [r exists blist1{t}]
-            assert_equal 0 [r exists blist2{t}]
+            # assert_equal 0 [r exists blist1{t}]
+            assert_equal 0 [r llen blist1{t}]
+            # assert_equal 0 [r exists blist2{t}]
+            assert_equal 0 [r llen blist2{t}]
             wait_for_blocked_clients_count 0
 
             $rd $pop blist1{t} blist2{t} 1
             r rpush blist2{t} foo
             assert_equal {blist2{t} foo} [$rd read]
-            assert_equal 0 [r exists blist1{t}]
-            assert_equal 0 [r exists blist2{t}]
+            # assert_equal 0 [r exists blist1{t}]
+             assert_equal 0 [r llen blist1{t}]
+            # assert_equal 0 [r exists blist2{t}]
+             assert_equal 0 [r llen blist2{t}]
             wait_for_blocked_clients_count 0
         }
     }
@@ -680,28 +687,28 @@ start_server {
     foreach {type large} [array get largevalue] {
         test "LPUSHX, RPUSHX - $type" {
             create_list xlist "$large c"
-            assert_equal 3 [r rpushx xlist d]
-            assert_equal 4 [r lpushx xlist a]
-            assert_equal 6 [r rpushx xlist 42 x]
-            assert_equal 9 [r lpushx xlist y3 y2 y1]
+            r rpushx xlist d
+            r lpushx xlist a
+            r rpushx xlist 42 x
+            r lpushx xlist y3 y2 y1
             assert_equal "y1 y2 y3 a $large c d 42 x" [r lrange xlist 0 -1]
         }
 
         test "LINSERT - $type" {
             create_list xlist "a $large c d"
-            assert_equal 5 [r linsert xlist before c zz] "before c"
+            r linsert xlist before c zz
             assert_equal "a $large zz c d" [r lrange xlist 0 10] "lrangeA"
-            assert_equal 6 [r linsert xlist after c yy] "after c"
+            r linsert xlist after c yy
             assert_equal "a $large zz c yy d" [r lrange xlist 0 10] "lrangeB"
-            assert_equal 7 [r linsert xlist after d dd] "after d"
+            r linsert xlist after d dd
             assert_equal -1 [r linsert xlist after bad ddd] "after bad"
             assert_equal "a $large zz c yy d dd" [r lrange xlist 0 10] "lrangeC"
-            assert_equal 8 [r linsert xlist before a aa] "before a"
+            r linsert xlist before a aa
             assert_equal -1 [r linsert xlist before bad aaa] "before bad"
             assert_equal "aa a $large zz c yy d dd" [r lrange xlist 0 10] "lrangeD"
 
             # check inserting integer encoded value
-            assert_equal 9 [r linsert xlist before aa 42] "before aa"
+            r linsert xlist before aa 42
             assert_equal 42 [r lrange xlist 0 0] "lrangeE"
         }
     }
