@@ -37,20 +37,8 @@ var (
 			values, err := alRange(txn, object, args, opt, false)
 			return values, err
 		},
-		LLEN_COMMAND: alLen,
-		LTRIM_COMMAND: func(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
-			keys, err := alRange(txn, object, args, opt, false)
-			if err != nil {
-				return nil, err
-			}
-			for _, key := range keys {
-				_, err = PutOrDeleteKV(txn, object, key, nil, -1)
-				if err != nil {
-					return nil, err
-				}
-			}
-			return OK, nil
-		},
+		LLEN_COMMAND:  alLen,
+		LTRIM_COMMAND: alTrim,
 		// LINFO_COMMAND:,
 		LREM_COMMAND: alRem,
 		LSET_COMMAND: alSet,
@@ -285,6 +273,147 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, needKey b
 	}
 }
 
+func alTrim(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
+	startIndex := opt.index[0]
+	startRevered := false
+	if startIndex < 0 {
+		startRevered = true
+		startIndex = -startIndex - 1
+	}
+	endIndex := opt.index[1]
+	endRevered := false
+	if endIndex < 0 {
+		endRevered = true
+		endIndex = -endIndex - 1
+	}
+
+	deleteAll := false
+	if !startRevered && !endRevered && startIndex > endIndex {
+		deleteAll = true
+	} else if startRevered && endRevered && startIndex < endIndex {
+		deleteAll = true
+	}
+
+	if deleteAll {
+		key := object.GetKeyBytes()
+		err := DeleteKey(txn, key, object, txn.Now, MinusCount)
+		if err != nil {
+			return nil, err
+		}
+		return OK, nil
+	}
+
+	prefix := object.GetValueBytes(nil)
+	start := prefix
+	end := utils.PrefixNext(prefix)
+	lr := store.LeftRight{Prefix: prefix}
+	var leftStart, leftEnd, rightStart, rightEnd int64
+	if !startRevered {
+		if !endRevered {
+			leftStart = startIndex
+			leftEnd = endIndex
+		} else {
+			leftStart = startIndex
+			leftEnd = math.MaxInt64
+			rightStart = endIndex
+			rightEnd = math.MaxInt64
+		}
+	} else {
+		if !endRevered {
+			leftEnd = endIndex
+			leftStart = 0
+			rightStart = 0
+			rightEnd = startIndex
+		} else {
+			rightStart = endIndex
+			rightEnd = startIndex
+		}
+	}
+
+	if !startRevered || !endRevered {
+		utils.ZapLog.Debug("alRange", zap.ByteString("start", start), zap.ByteString("end", end))
+		iter, err := txn.Iter(start, end, false)
+		if err != nil {
+			return nil, err
+		}
+		lr.Left = iter
+	}
+
+	if startRevered || endRevered {
+		utils.ZapLog.Debug("alRange reversed", zap.ByteString("start", start), zap.ByteString("end", end))
+		iter, err := txn.Iter(start, end, true)
+		if err != nil {
+			return nil, err
+		}
+		lr.Right = iter
+	}
+	var leftC, rightC int64 = -1, -1
+	var lastLeft, checkLeft []byte
+	var lastRight, checkRight []byte
+	for {
+		left, right, err := lr.Next()
+		if err != nil {
+			return nil, err
+		}
+		if left == nil && right == nil {
+			break
+		}
+		if len(left) > 0 {
+			checkLeft = left[0]
+		} else {
+			checkLeft = lastLeft
+		}
+
+		if len(right) > 0 {
+			checkRight = right[0]
+		} else {
+			checkRight = lastRight
+		}
+
+		if checkRight != nil && bytes.Compare(checkLeft, checkRight) > 0 {
+			break
+		}
+		if checkRight != nil && bytes.Equal(checkLeft, checkRight) {
+			// clear
+			lr.Left = nil
+			lr.Right = nil
+		}
+
+		if len(left) > 0 {
+			leftC++
+			lastLeft = left[0]
+			utils.ZapLog.Debug("lRange left", zap.Int64("start", leftStart),
+				zap.Int64("end", leftEnd), zap.Int64("current", leftC),
+				zap.ByteString("key", lastLeft))
+			if leftC < leftStart || leftC > leftEnd {
+				_, err = PutOrDeleteKV(txn, object, lastLeft, nil, -1)
+				if err != nil {
+					return nil, err
+				}
+			} else if leftC >= leftStart && leftEnd == math.MaxInt64 {
+				lr.Left = nil
+			}
+		}
+
+		if len(right) > 0 {
+			rightC++
+			lastRight = right[0]
+			utils.ZapLog.Debug("lRange right", zap.Int64("start", rightStart),
+				zap.Int64("end", rightEnd), zap.Int64("current", rightC),
+				zap.ByteString("key", lastRight))
+			if rightC < rightStart || rightC > rightEnd {
+				_, err = PutOrDeleteKV(txn, object, lastRight, nil, -1)
+				if err != nil {
+					return nil, err
+				}
+			} else if rightC >= rightStart && rightEnd == math.MaxInt64 {
+				lr.Right = nil
+			}
+		}
+	}
+	return OK, nil
+}
+
 func aPush(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, left bool) (interface{}, error) {
 	var err error
 	for _, msg := range args {
@@ -330,7 +459,7 @@ func alRem(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{
 			return true
 		}
 		c++
-		delErr = txn.Del(key)
+		_, delErr = PutOrDeleteKV(txn, object, key, nil, -1)
 		if delErr != nil {
 			return false
 		}
@@ -546,7 +675,7 @@ func alSet(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{
 		Value:     args[1],
 		Timestamp: txn.Timestamp,
 	}
-	err = txn.Put(lkey, EncodeValue(lvalue))
+	_, err = PutOrDeleteKV(txn, object, lkey, EncodeValue(lvalue), 1)
 	if err != nil {
 		return nil, err
 	}
@@ -594,7 +723,7 @@ func alInsert(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interfa
 		Value:     args[2],
 		Timestamp: txn.Timestamp,
 	}
-	err = txn.Put(lkey, EncodeValue(lvalue))
+	_, err = PutOrDeleteKV(txn, object, lkey, EncodeValue(lvalue), 1)
 	if err != nil {
 		return nil, err
 	}
