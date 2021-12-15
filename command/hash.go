@@ -170,7 +170,7 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 
 	cursor := args[1]
 	opts := args[2:]
-	scanOpt, err := c.getScanOptions(opts)
+	scanOpt, err := c.getScanOptions(txn, opts)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -196,7 +196,7 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 	var lastKey []byte
 	var callbackErr error
 	count := 0
-	err = txn.List(start, end, c.cfg.Key.ScanMaxCount, func(key, value []byte) bool {
+	err = txn.List(start, end, txn.Config.Redis.ScanMaxCount, func(key, value []byte) bool {
 		lastKey = key
 		if len(key) < len(prefix) {
 			return true
@@ -259,8 +259,8 @@ func (c *Command) hgetall(txn *store.Txn, args [][]byte, getType int, limit int)
 	} else if err != nil {
 		return nil, err
 	}
-	if limit <= 0 || limit > c.cfg.Key.ScanMaxCount {
-		limit = c.cfg.Key.ScanMaxCount
+	if limit <= 0 || limit > txn.Config.Redis.ScanMaxCount {
+		limit = txn.Config.Redis.ScanMaxCount
 	}
 	start := object.GetValueBytes(nil)
 	end := utils.PrefixNext(start)

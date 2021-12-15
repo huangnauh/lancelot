@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tikv/client-go/v2/oracle"
+	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"go.uber.org/zap"
@@ -17,7 +18,8 @@ const (
 )
 
 func (c *Command) startGC() {
-	ticker := time.NewTicker(c.cfg.GC.TickInterval)
+	cfg := c.GetConfig(c.Root.ID)
+	ticker := time.NewTicker(cfg.GC.TickInterval)
 	defer func() {
 		ticker.Stop()
 		close(c.gcClosed)
@@ -25,15 +27,20 @@ func (c *Command) startGC() {
 	for {
 		select {
 		case <-ticker.C:
-			c.tickGC()
+			oldTick := cfg.GC.TickInterval
+			cfg := c.GetConfig(c.Root.ID)
+			c.tickGC(cfg)
+			if oldTick != cfg.GC.TickInterval {
+				ticker.Reset(cfg.GC.TickInterval)
+			}
 		case <-c.done:
 			return
 		}
 	}
 }
 
-func (c *Command) touchGC() {
-	touchTicker := time.NewTicker(c.cfg.GC.TickInterval / 10)
+func (c *Command) touchGC(cfg *config.Config) {
+	touchTicker := time.NewTicker(cfg.GC.TickInterval / 10)
 	defer touchTicker.Stop()
 	for {
 		select {
@@ -54,7 +61,7 @@ func (c *Command) touchGC() {
 	}
 }
 
-func (c *Command) tickGC() {
+func (c *Command) tickGC(cfg *config.Config) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	leader := c.client.GetLeader(ctx)
@@ -78,7 +85,7 @@ func (c *Command) tickGC() {
 	}
 
 	saved := oracle.GetTimeFromTS(loadTS)
-	if saved.Add(c.cfg.GC.TickInterval).After(now) {
+	if saved.Add(cfg.GC.TickInterval).After(now) {
 		utils.ZapLog.Debug("[gc] not reach tick interval", zap.Time("saved", saved), zap.Time("now", now))
 		return
 	}
@@ -88,7 +95,7 @@ func (c *Command) tickGC() {
 		return
 	}
 
-	go c.touchGC()
+	go c.touchGC(cfg)
 
 	// go c.gcPubSub(ms)
 	utils.ZapLog.Debug("[gc] start gc", zap.Time("now", now))
@@ -102,8 +109,8 @@ LABLE:
 		default:
 		}
 
-		if atomic.LoadInt32(&c.gcWorkers) < int32(c.cfg.GC.TTLWorkers) {
-			lastKey, o, err := c.doGC(cur, endGC, ms)
+		if atomic.LoadInt32(&c.gcWorkers) < int32(cfg.GC.TTLWorkers) {
+			lastKey, o, err := c.doGC(cur, endGC, ms, cfg)
 			if err != nil {
 				break LABLE
 			}
@@ -132,7 +139,7 @@ func (c *Command) DelteRange(start, end []byte, callback func(*store.Client)) {
 	atomic.AddInt32(&c.gcWorkers, -1)
 }
 
-func (c *Command) doGC(start, end []byte, now int64) ([]byte, *Object, error) {
+func (c *Command) doGC(start, end []byte, now int64, cfg *config.Config) ([]byte, *Object, error) {
 	utils.ZapLog.Debug("[gc] start gc", zap.ByteString("start", start), zap.ByteString("end", end))
 	txn := c.client.NewTxn()
 	err := txn.Begin()
@@ -203,7 +210,7 @@ func (c *Command) doGC(start, end []byte, now int64) ([]byte, *Object, error) {
 				}
 				txn.Commit()
 			})
-			if int(gcWorkers) >= c.cfg.GC.TTLWorkers {
+			if int(gcWorkers) >= cfg.GC.TTLWorkers {
 				// limit the number of goroutines
 				break
 			}
@@ -215,7 +222,7 @@ func (c *Command) doGC(start, end []byte, now int64) ([]byte, *Object, error) {
 				utils.ZapLog.Error("[gc] del key", zap.ByteString("ttl key", lastKey), zap.Error(err))
 				return lastKey, nil, err
 			}
-			if count >= c.cfg.Store.BatchLimit {
+			if count >= cfg.Store.BatchLimit {
 				break
 			}
 		}

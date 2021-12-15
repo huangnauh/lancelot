@@ -47,7 +47,7 @@ func main() {
 		return
 	}
 
-	cfg := config.GetConfig()
+	cfg := config.GetDefaultConfig()
 	if debug {
 		cfg.LogLevel = "debug"
 		cfg.Store.Level = "debug"
@@ -104,7 +104,7 @@ func main() {
 	if err != nil {
 		utils.ZapLog.Fatal("Rpc Server listen failed", zap.Error(err))
 	}
-	serv := server.NewServer(cfg)
+	serv := server.NewServer(&cfg)
 	serv.Start(httpln, redln, rpcln)
 
 	if err := upg.Ready(); err != nil {

@@ -14,8 +14,8 @@ var cmd *command.Command
 
 func TestMain(m *testing.M) {
 	fmt.Println("command test begin")
-	cfg := config.GetConfig()
-	cmd = command.NewCommand(cfg, nil)
+	cfg := config.GetDefaultConfig()
+	cmd = command.NewCommand(nil)
 	err := cmd.Start()
 	if err != nil {
 		panic(err)

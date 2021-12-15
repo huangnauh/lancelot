@@ -382,7 +382,7 @@ func (c *Command) zrank(txn *store.Txn, args [][]byte, reversed bool) (int64, bo
 			return false
 		}
 		count++
-		return count < int64(c.cfg.Key.ScanMaxCount)
+		return count < int64(txn.Config.Redis.ScanMaxCount)
 	}
 	err = c.ListByScore(txn, object, args[0], math.Inf(-1), math.Inf(1), true, true, callback, reversed)
 	if err != nil {
@@ -569,7 +569,7 @@ func (c *Command) ListByScore(txn *store.Txn, object *Object, arg []byte, min, m
 	if reversed {
 		start, end = end, start
 	}
-	return txn.List(start, end, c.cfg.Key.ScanMaxCount, callback)
+	return txn.List(start, end, txn.Config.Redis.ScanMaxCount, callback)
 }
 
 func (c *Command) ListByMember(txn *store.Txn, object *Object, arg []byte, min, max []byte,
@@ -593,10 +593,10 @@ func (c *Command) ListByMember(txn *store.Txn, object *Object, arg []byte, min, 
 	if reversed {
 		start, end = end, start
 	}
-	return txn.List(start, end, c.cfg.Key.ScanMaxCount, callback)
+	return txn.List(start, end, txn.Config.Redis.ScanMaxCount, callback)
 }
 
-func (c *Command) checkLimit(args [][]byte) (int64, int64, error) {
+func (c *Command) checkLimit(txn *store.Txn, args [][]byte) (int64, int64, error) {
 	if len(args) < 2 || len(args) > 3 {
 		return 0, 0, xerror.ErrSyntax
 	}
@@ -604,7 +604,7 @@ func (c *Command) checkLimit(args [][]byte) (int64, int64, error) {
 	if err != nil {
 		return 0, 0, xerror.ErrOffset
 	}
-	limit := int64(c.cfg.Key.ScanMaxCount)
+	limit := int64(txn.Config.Redis.ScanMaxCount)
 	if len(args) == 3 {
 		limit, err = utils.GetNonnegativeInt64(args[2])
 		if err != nil {
@@ -775,8 +775,8 @@ type zRangeOption struct {
 	by         int
 }
 
-func (c *Command) checkZRangeOption(args [][]byte) (*zRangeOption, error) {
-	opt := &zRangeOption{limit: int64(c.cfg.Key.ScanMaxCount)}
+func (c *Command) checkZRangeOption(txn *store.Txn, args [][]byte) (*zRangeOption, error) {
+	opt := &zRangeOption{limit: int64(txn.Config.Redis.ScanMaxCount)}
 	var err error
 	for i := 0; i < len(args); i++ {
 		str := strings.ToLower(utils.B2S(args[i]))
@@ -788,7 +788,7 @@ func (c *Command) checkZRangeOption(args [][]byte) (*zRangeOption, error) {
 			if len(args) < i+3 {
 				return nil, xerror.ErrSyntax
 			}
-			opt.offset, opt.limit, err = c.checkLimit(args[i : i+3])
+			opt.offset, opt.limit, err = c.checkLimit(txn, args[i:i+3])
 			if err != nil {
 				return nil, err
 			}
@@ -837,7 +837,7 @@ func (c *Command) ZRevRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 	ret, err := c.objectZrangeByRank(txn, object, args[0], start, end, &zRangeOption{
 		withScores: withScores,
 		reversed:   true,
-		limit:      int64(c.cfg.Key.ScanMaxCount),
+		limit:      int64(txn.Config.Redis.ScanMaxCount),
 	})
 	if err != nil {
 		return txn.SetError(err)
@@ -850,7 +850,7 @@ func (c *Command) ZRangeStoreHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 4 {
 		return txn.SetWrongArgs(ZRANGESTORE_COMMAND)
 	}
-	opt, err := c.checkZRangeOption(args[4:])
+	opt, err := c.checkZRangeOption(txn, args[4:])
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -945,7 +945,7 @@ func (c *Command) ZRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 3 {
 		return txn.SetWrongArgs(ZRANGE_COMMAND)
 	}
-	opt, err := c.checkZRangeOption(args[3:])
+	opt, err := c.checkZRangeOption(txn, args[3:])
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -1051,7 +1051,7 @@ func (c *Command) ZRangeByScoreHandle(txn *store.Txn, args [][]byte) interface{}
 }
 
 func (c *Command) zrangeByScoreHandle(txn *store.Txn, args [][]byte, min, max float64, includeMin, includeMax, reversed bool) ([]interface{}, error) {
-	opt, err := c.checkZRangeOption(args[3:])
+	opt, err := c.checkZRangeOption(txn, args[3:])
 	if err != nil {
 		return nil, err
 	}
@@ -1276,7 +1276,7 @@ func (c *Command) ZRemRangeByScoreHandle(txn *store.Txn, args [][]byte) interfac
 		return txn.SetError(err)
 	}
 	ret, err := c.objectZRangeByScore(txn, object, args[0], min, max, includeMin, includeMax, &zRangeOption{
-		offset: 0, limit: int64(c.cfg.Key.ScanMaxCount), withScores: true})
+		offset: 0, limit: int64(txn.Config.Redis.ScanMaxCount), withScores: true})
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -1312,7 +1312,7 @@ func (c *Command) ZRemRangeByLexHandle(txn *store.Txn, args [][]byte) interface{
 		return txn.SetError(err)
 	}
 	ret, err := c.objectZrangeByLex(txn, object, args[0], min, max, includeMin, includeMax, &zRangeOption{
-		offset: 0, limit: int64(c.cfg.Key.ScanMaxCount), withScores: true})
+		offset: 0, limit: int64(txn.Config.Redis.ScanMaxCount), withScores: true})
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -1395,9 +1395,9 @@ func checkMinMaxLex(argMin, argMax []byte) (string, string, bool, bool, error) {
 func (c *Command) zrangeByLexHandle(txn *store.Txn, args [][]byte, min, max string, includeMin, includeMax, reversed bool) ([]interface{}, error) {
 	var offset int64
 	var err error
-	limit := int64(c.cfg.Key.ScanMaxCount)
+	limit := int64(txn.Config.Redis.ScanMaxCount)
 	if len(args) > 3 {
-		offset, limit, err = c.checkLimit(args[3:])
+		offset, limit, err = c.checkLimit(txn, args[3:])
 		if err != nil {
 			return nil, err
 		}

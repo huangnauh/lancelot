@@ -96,7 +96,7 @@ func (c *Command) fpubSubChannels(txn *store.Txn, args [][]byte) interface{} {
 		args = args[1:]
 	}
 
-	count := c.cfg.Key.ScanMaxCount
+	count := txn.Config.Redis.ScanMaxCount
 	var cursor []byte
 	var err error
 	for i := 0; i < len(args); i += 2 {
@@ -106,8 +106,8 @@ func (c *Command) fpubSubChannels(txn *store.Txn, args [][]byte) interface{} {
 			if err != nil {
 				return txn.SetError(xerror.ErrSyntax)
 			}
-			if count > c.cfg.Key.ScanMaxCount {
-				count = c.cfg.Key.ScanMaxCount
+			if count > txn.Config.Redis.ScanMaxCount {
+				count = txn.Config.Redis.ScanMaxCount
 			}
 		case "cursor":
 			cursor = args[i+1]

@@ -322,7 +322,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 		if counts[i] > 10*min && counts[i] > MINI_SCAN_SIZE {
 			glist[i] = o
 		} else {
-			if int(counts[i]) > c.cfg.Key.ScanMaxCount {
+			if int(counts[i]) > txn.Config.Redis.ScanMaxCount {
 				return nil, store.ReachLimit
 			}
 			llist[i] = o
@@ -335,7 +335,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 	ret := make([]interface{}, 0)
 	var iterList *store.IterList
 	var cbErr error
-	err = txn.List(start, end, c.cfg.Key.ScanMaxCount, func(key, value []byte) bool {
+	err = txn.List(start, end, txn.Config.Redis.ScanMaxCount, func(key, value []byte) bool {
 		if len(key) < len(start) {
 			return true
 		}
@@ -578,7 +578,7 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 	end := utils.PrefixNext(start)
 	ret := make([]interface{}, 0)
 	if len(args) == 1 {
-		err = txn.List(start, end, c.cfg.Key.ScanMaxCount, func(key, value []byte) bool {
+		err = txn.List(start, end, txn.Config.Redis.ScanMaxCount, func(key, value []byte) bool {
 			if len(key) < len(start) {
 				return true
 			}
@@ -595,7 +595,7 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 	if err != nil {
 		return nil, err
 	}
-	if int(count0) > c.cfg.Key.ScanMaxCount {
+	if int(count0) > txn.Config.Redis.ScanMaxCount {
 		return nil, store.ReachLimit
 	}
 
@@ -621,7 +621,7 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 		if count > 10*count0 && count > MINI_SCAN_SIZE {
 			glist[i] = o
 		} else {
-			if int(count) > c.cfg.Key.ScanMaxCount {
+			if int(count) > txn.Config.Redis.ScanMaxCount {
 				return nil, store.ReachLimit
 			}
 			llist[i] = o
@@ -632,7 +632,7 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 
 	var iterList *store.IterList
 	var cbErr error
-	err = txn.List(start, end, c.cfg.Key.ScanMaxCount, func(key, value []byte) bool {
+	err = txn.List(start, end, txn.Config.Redis.ScanMaxCount, func(key, value []byte) bool {
 		if len(key) < len(start) {
 			return true
 		}
@@ -809,7 +809,7 @@ func (c *Command) SMembersHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(SMEMBERS_COMMAND)
 	}
-	ret, err := c.smembers(txn, args, c.cfg.Key.ScanMaxCount)
+	ret, err := c.smembers(txn, args, txn.Config.Redis.ScanMaxCount)
 	if err != nil {
 		return txn.SetError(err)
 	}

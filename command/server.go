@@ -149,10 +149,10 @@ func (c *Command) InfoHandle(txn *store.Txn, args [][]byte) interface{} {
 		b.WriteString("\r\n")
 
 		b.WriteString("tcp_port:")
-		b.WriteString(strconv.Itoa(c.cfg.RedisPort))
+		b.WriteString(strconv.Itoa(txn.Config.RedisPort))
 		b.WriteString("\r\n")
 
-		since := time.Since(c.cfg.StartAt)
+		since := time.Since(txn.Config.StartAt)
 		b.WriteString("uptime_in_seconds:")
 		b.WriteString(strconv.Itoa(int(since / time.Second)))
 		b.WriteString("\r\n")

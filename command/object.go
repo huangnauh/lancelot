@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/tikv/client-go/v2/oracle"
-	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -391,13 +390,12 @@ func setTxnObject(txn *store.Txn, key []byte, o *Object, change ChangeType) erro
 		return err
 	}
 
-	cfg := config.GetConfig()
-	if cfg.Key.DbSizeHash != 0 && delta != 0 {
+	if txn.Config.Redis.DbSizeHash != 0 && delta != 0 {
 		var count *Count
 		if change&GCChange == 0 {
-			count, err = GetCount(txn, o.UserId, o.Db, cfg.Key.DbSizeHash-1, CountGeneral, KEYSIZE, o.Key)
+			count, err = GetCount(txn, o.UserId, o.Db, txn.Config.Redis.DbSizeHash-1, CountGeneral, KEYSIZE, o.Key)
 		} else {
-			count, err = GetCount(txn, o.UserId, o.Db, cfg.Key.DbSizeHash, CountGeneral, KEYSIZE, nil)
+			count, err = GetCount(txn, o.UserId, o.Db, txn.Config.Redis.DbSizeHash, CountGeneral, KEYSIZE, nil)
 		}
 		if err == store.KeyNotFound {
 		} else if err != nil {

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -9,78 +10,79 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+const (
+	ALIST = "a"
+	BLIST = "b"
+)
+
 type Store struct {
-	PDAddrs            []string      `yaml:"pd-addrs"`
-	Level              string        `yaml:"level"`
-	UUID               string        `yaml:"uuid"`
-	GCEnable           bool          `yaml:"gc-enable"`
-	GCConcurrency      int           `yaml:"gc-concurrency"`
-	SlowRequest        time.Duration `yaml:"slow-request"`
-	ReadTimeout        time.Duration `yaml:"read-timeout"`
-	ListTimeout        time.Duration `yaml:"list-timeout"`
-	WriteTimeout       time.Duration `yaml:"write-timeout"`
-	BatchPutTimeout    time.Duration `yaml:"batch-put-timeout"`
-	BatchDeleteTimeout time.Duration `yaml:"batch-delete-timeout"`
-	TsoSlowThreshold   time.Duration `yaml:"tso-slow-threshold"`
-	DisableLockBackOff bool          `yaml:"disable-lock-back-off"`
-	BatchLimit         int           `yaml:"batch-limit"`
+	PDAddrs            []string      `yaml:"pd-addrs" json:"-"`
+	Level              string        `yaml:"level" json:"-"`
+	UUID               string        `yaml:"uuid" json:"-"`
+	GCEnable           bool          `yaml:"gc-enable" json:"-"`
+	GCConcurrency      int           `yaml:"gc-concurrency" json:"gc-concurrency,omitempty"`
+	SlowRequest        time.Duration `yaml:"slow-request" json:"slow-request,omitempty"`
+	ReadTimeout        time.Duration `yaml:"read-timeout" json:"read-timeout,omitempty"`
+	ListTimeout        time.Duration `yaml:"list-timeout" json:"list-timeout,omitempty"`
+	WriteTimeout       time.Duration `yaml:"write-timeout" json:"write-timeout,omitempty"`
+	BatchPutTimeout    time.Duration `yaml:"batch-put-timeout" json:"batch-put-timeout,omitempty"`
+	BatchDeleteTimeout time.Duration `yaml:"batch-delete-timeout" json:"batch-delete-timeout,omitempty"`
+	TsoSlowThreshold   time.Duration `yaml:"tso-slow-threshold" json:"tso-slow-threshold,omitempty"`
+	DisableLockBackOff bool          `yaml:"disable-lock-back-off" json:"disable-lock-back-off,omitempty"`
+	BatchLimit         int           `yaml:"batch-limit" json:"batch-limit,omitempty"`
 }
 
 type Lua struct {
-	InitPoolSize int           `yaml:"init-pool-size"`
-	MaxPoolSize  int           `yaml:"max-pool-size"`
-	Timeout      time.Duration `yaml:"timeout"`
+	InitPoolSize int           `yaml:"init-pool-size" json:"init-pool-size,omitempty"`
+	MaxPoolSize  int           `yaml:"max-pool-size" json:"max-pool-size,omitempty"`
+	Timeout      time.Duration `yaml:"timeout" json:"timeout,omitempty"`
 }
 
 type Auth struct {
-	Root                string `yaml:"root"`
-	Pass                string `yaml:"pass"`
-	MaxUsers            int    `yaml:"max-users"`
-	MaxPasswordsPerUser int    `yaml:"max-passwords-per-user"`
-	MaxDBPerUser        uint8  `yaml:"max-db-per-user"`
-}
-
-type Key struct {
-	ScanMaxCount       int    `yaml:"scan-max-count"`
-	CursorExpireSecond int    `yaml:"cursor-expirate-second"`
-	DbSizeHash         uint64 `yaml:"db-size-hash"`
+	Root                string `yaml:"root" json:"-"`
+	Pass                string `yaml:"pass" json:"-"`
+	MaxUsers            int    `yaml:"max-users" json:"max-users,omitempty"`
+	MaxPasswordsPerUser int    `yaml:"max-passwords-per-user" json:"max-passwords-per-user,omitempty"`
+	MaxDBPerUser        uint8  `yaml:"max-db-per-user" json:"max-db-per-user,omitempty"`
 }
 
 type Rpc struct {
-	Timeout    time.Duration `yaml:"timeout"`
-	MaxStream  uint32        `yaml:"max_stream"`
-	MaxMsgSize int           `yaml:"max_msg_size"`
-	Compress   bool          `yaml:"compress"`
+	Timeout    time.Duration `yaml:"timeout" json:"timeout,omitempty"`
+	MaxStream  uint32        `yaml:"max_stream" json:"max_stream,omitempty"`
+	MaxMsgSize int           `yaml:"max_msg_size" json:"max_msg_size,omitempty"`
+	Compress   bool          `yaml:"compress" json:"-"`
 }
 
 type GC struct {
-	TickInterval  time.Duration `yaml:"tick-interval"`
-	TTLWorkers    int           `yaml:"ttl-workers"`
-	TTLBatchLimit int           `yaml:"ttl-batch-limit"`
+	TickInterval  time.Duration `yaml:"tick-interval" json:"tick-interval,omitempty"`
+	TTLWorkers    int           `yaml:"ttl-workers" json:"ttl-workers,omitempty"`
+	TTLBatchLimit int           `yaml:"ttl-batch-limit" json:"ttl-batch-limit,omitempty"`
 }
-
-type PubSub struct {
-	MaxSlowMessagePerSubscribe int `yaml:"max-slow-message-per-subscribe"`
+type Redis struct {
+	ScanMaxCount               int    `yaml:"scan-max-count" json:"scan-max-count,omitempty"`
+	DbSizeHash                 uint64 `yaml:"db-size-hash" json:"db-size-hash,omitempty"`
+	ListType                   string `yaml:"list-type" json:"list-type,omitempty"`
+	CursorExpireSecond         int    `yaml:"cursor-expirate-second" json:"cursor-expirate-second,omitempty"`
+	MaxSlowMessagePerSubscribe int    `yaml:"max-slow-msg-per-sub" json:"max-slow-msg-per-sub,omitempty"`
 }
 
 type Config struct {
-	StartAt       time.Time `yaml:"-"`
-	LogLevel      string    `yaml:"log-level"`
-	PIDFile       string    `yaml:"pid-file"`
-	Host          string    `yaml:"host"`
-	RedisPort     int       `yaml:"redis-port"`
-	HttpPort      int       `yaml:"http-port"`
-	RpcPort       int       `yaml:"rpc-port"`
-	CacheSize     int       `yaml:"cache-size"`
-	AclPermission bool      `yaml:"acl-permission"`
-	Store         Store     `yaml:"store"`
-	GC            GC        `yaml:"gc"`
-	Lua           Lua       `yaml:"lua"`
-	Auth          Auth      `yaml:"auth"`
-	Key           Key       `yaml:"key"`
-	Rpc           Rpc       `yaml:"rpc"`
-	PubSub        PubSub    `yaml:"pubsub"`
-	List          string    `yaml:"list"`
+	StartAt       time.Time `yaml:"-" json:"-"`
+	Version       int64     `yaml:"version" json:"version,omitempty"`
+	LogLevel      string    `yaml:"log-level" json:"-"`
+	PIDFile       string    `yaml:"pid-file" json:"-"`
+	Host          string    `yaml:"host" json:"-"`
+	RedisPort     int       `yaml:"redis-port" json:"-"`
+	HttpPort      int       `yaml:"http-port" json:"-"`
+	RpcPort       int       `yaml:"rpc-port" json:"-"`
+	CacheSize     int       `yaml:"cache-size" json:"cache-size,omitempty"`
+	AclPermission bool      `yaml:"acl-permission" json:"acl-permission,omitempty"`
+	Store         Store     `yaml:"store" json:"store,omitempty"`
+	GC            GC        `yaml:"gc" json:"gc,omitempty"`
+	Lua           Lua       `yaml:"lua" json:"lua,omitempty"`
+	Auth          Auth      `yaml:"auth" json:"auth,omitempty"`
+	Rpc           Rpc       `yaml:"rpc" json:"rpc,omitempty"`
+	Redis         Redis     `yaml:"redis" json:"redis,omitempty"`
 }
 
 func Hostname() string {
@@ -91,7 +93,8 @@ func Hostname() string {
 	return hostname
 }
 
-var cfg = &Config{
+var cfgData []byte
+var cfg = Config{
 	LogLevel:  "debug",
 	PIDFile:   "redis.pid",
 	Host:      "127.0.0.1",
@@ -130,19 +133,17 @@ var cfg = &Config{
 		MaxPasswordsPerUser: 10,
 		MaxDBPerUser:        64,
 	},
-	Key: Key{
-		ScanMaxCount:       10000,
-		CursorExpireSecond: 10 * 60,
-	},
 	Rpc: Rpc{
 		Timeout:    time.Second * 10,
 		MaxStream:  1000,
 		MaxMsgSize: 1024 * 1024,
 	},
-	PubSub: PubSub{
+	Redis: Redis{
 		MaxSlowMessagePerSubscribe: 1000,
+		ListType:                   ALIST,
+		ScanMaxCount:               10000,
+		CursorExpireSecond:         10 * 60,
 	},
-	List: "a",
 }
 
 func LoadYAMLConfig(filename string) error {
@@ -150,13 +151,21 @@ func LoadYAMLConfig(filename string) error {
 	if err != nil {
 		return fmt.Errorf("ReadFile: %v", err)
 	}
-	err = yaml.Unmarshal(data, cfg)
+	err = yaml.Unmarshal(data, &cfg)
+	if err != nil {
+		return fmt.Errorf("Unmarshal: %v", err)
+	}
 	cfg.StartAt = time.Now()
+	cfgData, err = json.Marshal(cfg)
 	return err
 }
 
-func GetConfig() *Config {
+func GetDefaultConfig() Config {
 	return cfg
+}
+
+func GetDefaultConfigData() []byte {
+	return cfgData
 }
 
 func SaveYAMLConfig(savePath string) {

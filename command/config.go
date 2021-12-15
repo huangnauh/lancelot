@@ -1,12 +1,16 @@
 package command
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
+	"gitlab.s.upyun.com/platform/lancelot/config"
+	"gitlab.s.upyun.com/platform/lancelot/member"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"go.uber.org/zap"
 )
 
 const (
@@ -50,7 +54,7 @@ func (c *Command) ConfigSet(txn *store.Txn, args [][]byte) interface{} {
 		if err != nil {
 			return txn.SetError(xerror.ErrNotInteger)
 		}
-		c.cfg.Lua.Timeout = time.Second * time.Duration(second)
+		txn.Config.Lua.Timeout = time.Second * time.Duration(second)
 		return OK
 	default:
 		return txn.SetWrongSubArgs(SET_COMMAND, ConfigHelpCommand)
@@ -63,4 +67,50 @@ func (c *Command) ConfigResetStat(txn *store.Txn, args [][]byte) interface{} {
 
 func (c *Command) ScriptRewrite(txn *store.Txn, args [][]byte) interface{} {
 	return nil
+}
+
+func (c *Command) GetConfig(userID uint16) *config.Config {
+	c.cfgLock.RLock()
+	cfg, ok := c.cfgs[userID]
+	c.cfgLock.RUnlock()
+	create := !ok
+
+	var rcfg, ucfg *member.Config
+	if c.memberlist != nil {
+		rcfg = c.memberlist.GetConfig(c.Root.ID)
+		if rcfg != nil && rcfg.Version > cfg.Version {
+			create = true
+		}
+		if userID != c.Root.ID {
+			ucfg = c.memberlist.GetConfig(userID)
+			if ucfg != nil && ucfg.Version > cfg.Version {
+				create = true
+			}
+		}
+	}
+
+	if !create {
+		return cfg
+	}
+
+	conf := config.GetDefaultConfig()
+	if rcfg != nil {
+		err := json.Unmarshal(rcfg.Value, &conf)
+		if err != nil {
+			utils.ZapLog.Error("get config failed", zap.Uint16("id", c.Root.ID),
+				zap.ByteString("value", rcfg.Value), zap.Error(err))
+		}
+		conf.Version = rcfg.Version
+	}
+	if ucfg != nil {
+		err := json.Unmarshal(ucfg.Value, &conf)
+		if err != nil {
+			utils.ZapLog.Error("get config failed", zap.Uint16("id", userID),
+				zap.ByteString("value", rcfg.Value), zap.Error(err))
+		}
+	}
+	c.cfgLock.Lock()
+	c.cfgs[userID] = &conf
+	c.cfgLock.Unlock()
+	return &conf
 }

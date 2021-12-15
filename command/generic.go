@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -419,10 +420,10 @@ type scanOptions struct {
 	cursor CursorType
 }
 
-func (c *Command) getObjectType(typo ObjectType) ObjectType {
+func (c *Command) getObjectType(txn *store.Txn, typo ObjectType) ObjectType {
 	switch typo {
 	case LListType:
-		if c.cfg.List == "b" {
+		if txn.Config.Redis.ListType == config.BLIST {
 			return BListType
 		} else {
 			return AListType
@@ -432,7 +433,7 @@ func (c *Command) getObjectType(typo ObjectType) ObjectType {
 	}
 }
 
-func (c *Command) getType(typo string) ObjectType {
+func (c *Command) getType(txn *store.Txn, typo string) ObjectType {
 	typo = strings.ToLower(typo)
 	switch typo {
 	case "string":
@@ -442,7 +443,7 @@ func (c *Command) getType(typo string) ObjectType {
 	case "hash":
 		return HashType
 	case "list":
-		if c.cfg.List == "b" {
+		if txn.Config.Redis.ListType == config.BLIST {
 			return BListType
 		} else {
 			return AListType
@@ -458,13 +459,14 @@ func (c *Command) getType(typo string) ObjectType {
 	}
 }
 
-func (c *Command) getScanOptions(opts [][]byte) (*scanOptions, error) {
+func (c *Command) getScanOptions(txn *store.Txn, opts [][]byte) (*scanOptions, error) {
 	scanOptions := &scanOptions{
 		count:  10,
 		match:  "*",
 		typo:   GeneralType,
 		cursor: ServerCursor,
 	}
+
 	for i := 0; i < len(opts); i += 2 {
 		if len(opts) < i+2 {
 			return nil, xerror.WrongArgsError(SCAN_COMMAND)
@@ -483,12 +485,12 @@ func (c *Command) getScanOptions(opts [][]byte) (*scanOptions, error) {
 				return nil, xerror.ErrSyntax
 			}
 
-			if count > c.cfg.Key.ScanMaxCount {
-				count = c.cfg.Key.ScanMaxCount
+			if count > txn.Config.Redis.ScanMaxCount {
+				count = txn.Config.Redis.ScanMaxCount
 			}
 			scanOptions.count = count
 		case "type":
-			scanOptions.typo = c.getType(utils.B2S(opts[i+1]))
+			scanOptions.typo = c.getType(txn, utils.B2S(opts[i+1]))
 		case "cursor":
 			name := strings.ToLower(utils.B2S(opts[i+1]))
 			cursor, ok := CursorMap[name]
@@ -553,7 +555,7 @@ func (c *Command) KeysHandle(txn *store.Txn, args [][]byte) interface{} {
 	end := utils.PrefixNext(start)
 	retKeys, _, err := c.scan(txn, start, end, &scanOptions{
 		match:  match,
-		count:  c.cfg.Key.ScanMaxCount,
+		count:  txn.Config.Redis.ScanMaxCount,
 		typo:   GeneralType,
 		cursor: ServerCursor,
 	})
@@ -584,7 +586,7 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	cursor := args[0]
 	opts := args[1:]
-	scanOpt, err := c.getScanOptions(opts)
+	scanOpt, err := c.getScanOptions(txn, opts)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -662,7 +664,7 @@ func (c *Command) scan(txn *store.Txn, start, end []byte, scanOpt *scanOptions) 
 	}
 	utils.ZapLog.Debug("scan result", zap.String("remote", txn.RemoteAddr()),
 		zap.Uint64("timestamp", txn.Timestamp), zap.ByteStrings("result", retKeys), zap.ByteString("last", lastKey))
-	err := txn.List(start, end, c.cfg.Key.ScanMaxCount, callback)
+	err := txn.List(start, end, txn.Config.Redis.ScanMaxCount, callback)
 	if callbackErr != nil {
 		return nil, lastKey, callbackErr
 	}

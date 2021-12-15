@@ -30,7 +30,6 @@ const (
 
 type Server struct {
 	sync.RWMutex
-	cfg     *config.Config
 	http    *http.Server
 	red     *redcon.Server
 	rpc     *grpc.Server
@@ -67,14 +66,13 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 
 func NewServer(cfg *config.Config) *Server {
 	s := &Server{
-		cfg:    cfg,
 		http:   &http.Server{},
 		closed: make(chan bool),
 	}
 	s.rpc = grpc.NewGrpcServer(cfg)
 	lancepb.RegisterLanceServer(s.rpc.GRPCServer, s.Command)
 	s.red = redcon.NewServer("", s.ServeRESP, s.Accept, s.Close)
-	s.Command = command.NewCommand(cfg, s.red)
+	s.Command = command.NewCommand(s.red)
 	return s
 }
 

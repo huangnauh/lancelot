@@ -47,7 +47,8 @@ type testHash struct {
 
 func TestMain(m *testing.M) {
 	fmt.Println("server test begin")
-	cfg = config.GetConfig()
+	conf := config.GetDefaultConfig()
+	cfg = &conf
 	utils.SetDevelopmentLog(cfg.LogLevel)
 	ser = server.NewServer(cfg)
 	redln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort))

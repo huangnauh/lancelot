@@ -32,8 +32,7 @@ func (c *Command) checkSingle(conn *redcon.Conn, unwatch bool) (*store.Txn, bool
 		}
 
 	}
-	newTxn := c.client.NewTxn()
-	newTxn.Conn = conn
+	newTxn := c.createTransaction(conn)
 	return newTxn, true
 }
 
@@ -240,6 +239,8 @@ func (c *Command) getTransaction(conn *redcon.Conn) (*store.Txn, bool) {
 
 func (c *Command) createTransaction(conn *redcon.Conn) *store.Txn {
 	txn := c.client.NewTxn()
+	cfg := c.GetConfig(conn.UserId)
+	txn.Config = cfg
 	txn.Conn = conn
 	return txn
 }

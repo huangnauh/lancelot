@@ -132,9 +132,10 @@ func (l *LStatePool) Get() (*lua.LState, error) {
 	return x, nil
 }
 
-func (l *LStatePool) Prune() {
+func (l *LStatePool) Prune(cfg *config.Lua) {
 	l.Lock()
 	defer l.Unlock()
+	l.cfg = cfg
 	n := len(l.saved)
 	if n > l.cfg.InitPoolSize+1 {
 		dropNum := (n - l.cfg.InitPoolSize) / 2
@@ -317,7 +318,7 @@ func (c *Command) ScriptLoad(txn *store.Txn, args [][]byte) interface{} {
 	}
 	defer c.luapool.Put(luaState)
 
-	ctx, cancel := context.WithTimeout(context.Background(), c.cfg.Lua.Timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), txn.Config.Lua.Timeout)
 	defer cancel()
 	c.luapool.SetCancel(luaState, cancel)
 	defer c.luapool.RemoveCancel(luaState)
@@ -432,7 +433,7 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 		return txn.SetError(err)
 	}
 	defer c.luapool.Put(luaState)
-	ctx, cancel := context.WithTimeout(context.Background(), c.cfg.Lua.Timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), txn.Config.Lua.Timeout)
 	defer cancel()
 	c.luapool.SetCancel(luaState, cancel)
 	defer c.luapool.RemoveCancel(luaState)

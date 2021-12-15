@@ -20,6 +20,7 @@ import (
 
 const (
 	MEMBERS         = "/lancelot/members/"
+	CONFIG          = "/lancelot/config/"
 	DefaultLeaseTTL = time.Second * 5
 )
 
@@ -30,6 +31,11 @@ type Member struct {
 	Client  *grpc.Client
 }
 
+type Config struct {
+	Version int64
+	Value   []byte
+}
+
 type MemberList struct {
 	Address       string
 	Alive         bool
@@ -37,6 +43,8 @@ type MemberList struct {
 	session       *concurrency.Session
 	etcdCli       *clientv3.Client
 	Members       map[string]*Member
+	Configs       map[uint16]*Config
+	configLock    sync.RWMutex
 	sync.RWMutex
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -48,6 +56,7 @@ func NewMemberList(etcdCli *clientv3.Client, addr string) *MemberList {
 		Address:       addr,
 		etcdCli:       etcdCli,
 		Members:       make(map[string]*Member),
+		Configs:       make(map[uint16]*Config),
 		sessionChange: make(chan bool),
 		ctx:           ctx,
 		cancel:        cancel,
@@ -55,7 +64,7 @@ func NewMemberList(etcdCli *clientv3.Client, addr string) *MemberList {
 }
 
 func (m *MemberList) Start() error {
-	err := m.NewSession()
+	err := m.GetSession()
 	if err != nil {
 		return err
 	}
@@ -72,6 +81,12 @@ func (m *MemberList) GetClients() []*grpc.Client {
 		clients = append(clients, member.Client)
 	}
 	return clients
+}
+
+func (m *MemberList) GetConfig(id uint16) *Config {
+	m.configLock.RLock()
+	defer m.configLock.RUnlock()
+	return m.Configs[id]
 }
 
 func (m *MemberList) GetMemberKey() string {
@@ -137,7 +152,11 @@ func (m *MemberList) NewSession() error {
 		utils.ZapLog.Error("create member error", zap.Error(err))
 		return err
 	}
-	err = m.GetALL()
+	err = m.GetALLMember()
+	if err != nil {
+		return err
+	}
+	err = m.GetALLConfig()
 	if err != nil {
 		return err
 	}
@@ -166,7 +185,40 @@ func (m *MemberList) WaitAlive() error {
 	}
 }
 
-func (m *MemberList) SetKv(kv *mvccpb.KeyValue, version int64, deleted bool) string {
+func (m *MemberList) SetConfigKV(kv *mvccpb.KeyValue, version int64, deleted bool) int64 {
+	key := strings.TrimPrefix(utils.B2S(kv.Key), CONFIG)
+	id, err := strconv.ParseInt(key, 10, 64)
+	if err != nil {
+		utils.ZapLog.Error("etcd watch event key is not a number", zap.String("key", key))
+		return -1
+	}
+
+	uid := uint16(id)
+	m.configLock.Lock()
+	defer m.configLock.Unlock()
+	cfg, ok := m.Configs[uid]
+	//check version
+	if ok && cfg.Version > version {
+		return id
+	}
+
+	// delete
+	if deleted {
+		delete(m.Configs, uid)
+		return id
+	}
+
+	// create
+	if !ok {
+		cfg := &Config{}
+		m.Configs[uid] = cfg
+	}
+	cfg.Version = version
+	cfg.Value = kv.Value
+	return id
+}
+
+func (m *MemberList) SetMemberKV(kv *mvccpb.KeyValue, version int64, deleted bool) string {
 	key := strings.TrimPrefix(utils.B2S(kv.Key), MEMBERS)
 	id, err := strconv.ParseInt(key, 10, 64)
 	if err != nil {
@@ -219,7 +271,7 @@ func (m *MemberList) SetKv(kv *mvccpb.KeyValue, version int64, deleted bool) str
 	return addr
 }
 
-func (m *MemberList) GetALL() error {
+func (m *MemberList) GetALLMember() error {
 	ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 	resp, err := m.etcdCli.Get(ctx, MEMBERS, clientv3.WithPrefix())
 	cancel()
@@ -230,7 +282,7 @@ func (m *MemberList) GetALL() error {
 
 	addrs := make(map[string]bool)
 	for _, ev := range resp.Kvs {
-		addr := m.SetKv(ev, ev.ModRevision, false)
+		addr := m.SetMemberKV(ev, ev.ModRevision, false)
 		if addr != "" {
 			addrs[addr] = true
 		}
@@ -253,9 +305,35 @@ func (m *MemberList) GetALL() error {
 	return nil
 }
 
+func (m *MemberList) GetALLConfig() error {
+	ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
+	resp, err := m.etcdCli.Get(ctx, CONFIG, clientv3.WithPrefix())
+	cancel()
+	if err != nil {
+		utils.ZapLog.Error("get all configs error", zap.Error(err))
+		return err
+	}
+
+	ids := make(map[int64]bool)
+	for _, ev := range resp.Kvs {
+		id := m.SetConfigKV(ev, ev.ModRevision, false)
+		ids[id] = true
+	}
+
+	m.configLock.Lock()
+	for id := range m.Configs {
+		if _, ok := ids[int64(id)]; !ok {
+			delete(m.Configs, id)
+		}
+	}
+	m.configLock.Unlock()
+	return nil
+}
+
 func (m *MemberList) runWatch() {
 	utils.ZapLog.Info("start member list watch", zap.String("watch", MEMBERS))
-	watch := m.etcdCli.Watch(m.ctx, MEMBERS, clientv3.WithPrefix(), clientv3.WithPrevKV())
+	watchMember := m.etcdCli.Watch(m.ctx, MEMBERS, clientv3.WithPrefix(), clientv3.WithPrevKV())
+	watchConfig := m.etcdCli.Watch(m.ctx, CONFIG, clientv3.WithPrefix(), clientv3.WithPrevKV())
 	for {
 		select {
 		case <-m.ctx.Done():
@@ -266,20 +344,22 @@ func (m *MemberList) runWatch() {
 			if err != nil {
 				return
 			}
-		case resp, ok := <-watch:
-			if !ok || resp.Canceled {
-				utils.ZapLog.Info("watch canceled")
-				err := m.GetSession()
-				if err != nil {
-					return
-				}
+		case resp, ok := <-watchConfig:
+			if !ok {
+				utils.ZapLog.Error("watch config closed")
+				return
+			}
+			err := resp.Err()
+			if err != nil {
+				utils.ZapLog.Error("watch config error", zap.Error(err))
+				return
 			}
 
 			for _, ev := range resp.Events {
 				kv := ev.Kv
 				version := ev.Kv.ModRevision
 				deleted := ev.Type == mvccpb.DELETE
-				utils.ZapLog.Debug("watch event",
+				utils.ZapLog.Debug("watch config event",
 					zap.String("event", ev.Type.String()),
 					zap.ByteString("key", kv.Key),
 					zap.Int64("version", version),
@@ -287,12 +367,40 @@ func (m *MemberList) runWatch() {
 				if deleted {
 					utils.ZapLog.Info("etcd watch event is delete")
 					kv = ev.PrevKv
-				}
-				if kv == nil {
+				} else if kv == nil {
 					utils.ZapLog.Info("etcd watch event is nil")
 					continue
 				}
-				m.SetKv(kv, version, deleted)
+				m.SetConfigKV(kv, version, deleted)
+			}
+		case resp, ok := <-watchMember:
+			if !ok {
+				utils.ZapLog.Error("watch member closed")
+				return
+			}
+			err := resp.Err()
+			if err != nil {
+				utils.ZapLog.Error("watch member error", zap.Error(err))
+				return
+			}
+
+			for _, ev := range resp.Events {
+				kv := ev.Kv
+				version := ev.Kv.ModRevision
+				deleted := ev.Type == mvccpb.DELETE
+				utils.ZapLog.Debug("watch member event",
+					zap.String("event", ev.Type.String()),
+					zap.ByteString("key", kv.Key),
+					zap.Int64("version", version),
+				)
+				if deleted {
+					utils.ZapLog.Info("etcd watch event is delete")
+					kv = ev.PrevKv
+				} else if kv == nil {
+					utils.ZapLog.Info("etcd watch event is nil")
+					continue
+				}
+				m.SetMemberKV(kv, version, deleted)
 			}
 		}
 	}

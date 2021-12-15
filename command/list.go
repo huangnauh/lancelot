@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -12,8 +13,8 @@ import (
 	"go.uber.org/zap"
 )
 
-func (c *Command) getStartEnd(args [][]byte) (*lOpt, error) {
-	opt := &lOpt{count: 0, max: c.cfg.Key.ScanMaxCount}
+func (c *Command) getStartEnd(txn *store.Txn, args [][]byte) (*lOpt, error) {
+	opt := &lOpt{count: 0, max: txn.Config.Redis.ScanMaxCount}
 	start, err := strconv.ParseInt(utils.B2S(args[0]), 10, 64)
 	if err != nil {
 		return opt, xerror.ErrNotInteger
@@ -23,7 +24,7 @@ func (c *Command) getStartEnd(args [][]byte) (*lOpt, error) {
 		return opt, xerror.ErrNotInteger
 	}
 	opt.index = []int64{start, end}
-	opt.max, err = c.checkMaxLen(args[2:])
+	opt.max, err = c.checkMaxLen(txn, args[2:])
 	if err != nil {
 		return opt, err
 	}
@@ -97,7 +98,7 @@ func (c *Command) LRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 3 {
 		return txn.SetWrongArgs(LRANGE_COMMAND)
 	}
-	opt, err := c.getStartEnd(args[1:])
+	opt, err := c.getStartEnd(txn, args[1:])
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -133,7 +134,7 @@ func (c *Command) LTrimHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 3 {
 		return txn.SetWrongArgs(LTRIM_COMMAND)
 	}
-	opt, err := c.getStartEnd(args[1:])
+	opt, err := c.getStartEnd(txn, args[1:])
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -149,7 +150,7 @@ func (c *Command) LInfoHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 && len(args) != 3 {
 		return txn.SetWrongArgs(LINFO_COMMAND)
 	}
-	ret, err := c.ListHandle(txn, args, LINFO_COMMAND, &lOpt{exist: true, max: c.cfg.Key.ScanMaxCount})
+	ret, err := c.ListHandle(txn, args, LINFO_COMMAND, &lOpt{exist: true, max: txn.Config.Redis.ScanMaxCount})
 	if err == store.KeyNotFound {
 		return nil
 	} else if err != nil {
@@ -163,7 +164,7 @@ func (c *Command) LPosHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 || len(args)%2 != 0 {
 		return txn.SetWrongArgs(LPOS_COMMAND)
 	}
-	opt := &lOpt{count: 0, max: c.cfg.Key.ScanMaxCount, index: []int64{0}, exist: true, readonly: true}
+	opt := &lOpt{count: 0, max: txn.Config.Redis.ScanMaxCount, index: []int64{0}, exist: true, readonly: true}
 	var err error
 	for i := 2; i < len(args); i += 2 {
 		switch strings.ToLower(utils.B2S(args[i])) {
@@ -210,7 +211,7 @@ func (c *Command) LPosHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-func (c *Command) checkMaxLen(args [][]byte) (int, error) {
+func (c *Command) checkMaxLen(txn *store.Txn, args [][]byte) (int, error) {
 	if len(args) > 0 {
 		str := strings.ToLower(utils.B2S(args[4]))
 		if str != "maxlen" || len(args) != 2 {
@@ -222,7 +223,7 @@ func (c *Command) checkMaxLen(args [][]byte) (int, error) {
 		}
 		return max, nil
 	}
-	return c.cfg.Key.ScanMaxCount, nil
+	return txn.Config.Redis.ScanMaxCount, nil
 }
 
 //(list) LREM key count element [MAXLEN len]
@@ -236,7 +237,7 @@ func (c *Command) LRemHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
-	opt.max, err = c.checkMaxLen(args[3:])
+	opt.max, err = c.checkMaxLen(txn, args[3:])
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -265,7 +266,7 @@ func (c *Command) LInsertHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	var err error
-	opt.max, err = c.checkMaxLen(args[4:])
+	opt.max, err = c.checkMaxLen(txn, args[4:])
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -288,7 +289,7 @@ func (c *Command) LIndexHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
 	opt := &lOpt{index: []int64{index}, readonly: true, exist: true}
-	opt.max, err = c.checkMaxLen(args[2:])
+	opt.max, err = c.checkMaxLen(txn, args[2:])
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -312,7 +313,7 @@ func (c *Command) LSetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
 	opt := &lOpt{index: []int64{index}, exist: true}
-	opt.max, err = c.checkMaxLen(args[3:])
+	opt.max, err = c.checkMaxLen(txn, args[3:])
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -538,7 +539,7 @@ func (c *Command) pophandle(txn *store.Txn, args [][]byte, cmd string) interface
 }
 
 func (c *Command) ListHandle(txn *store.Txn, args [][]byte, cmd string, opt *lOpt) (interface{}, error) {
-	if c.cfg.List == "b" {
+	if txn.Config.Redis.ListType == config.BLIST {
 		lFunc, ok := BListFuncs[cmd]
 		if !ok {
 			return nil, xerror.UnknownCommandError(cmd)

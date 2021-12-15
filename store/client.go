@@ -34,9 +34,7 @@ type Client struct {
 	cancel  context.CancelFunc
 }
 
-func Open(c *config.Config) (*Client, error) {
-	conf := &c.Store
-
+func Open(conf *config.Store) (*Client, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	client := &Client{

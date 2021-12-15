@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/grpc"
 	"gitlab.s.upyun.com/platform/lancelot/member"
 	"gitlab.s.upyun.com/platform/lancelot/proto/lancepb"
@@ -61,7 +60,6 @@ func (p *PsConn) sendMessage() {
 type PsManager struct {
 	sync.RWMutex
 	memberList *member.MemberList
-	cfg        *config.PubSub
 	hubs       [2]map[string]*Hub
 }
 
@@ -145,14 +143,13 @@ func (p *PsManager) Close(ps *PsConn) {
 	ps.Close()
 }
 
-func NewPsManager(cfg *config.PubSub, memberList *member.MemberList) *PsManager {
+func NewPsManager(memberList *member.MemberList) *PsManager {
 	psManager := &PsManager{
 		hubs: [2]map[string]*Hub{
 			0: make(map[string]*Hub),
 			1: make(map[string]*Hub),
 		},
 		memberList: memberList,
-		cfg:        cfg,
 	}
 	return psManager
 }
@@ -366,13 +363,14 @@ func (c *Command) subscribe(conn *redcon.Conn, cmd redcon.Command, channelType i
 		return
 	}
 
+	cfg := c.GetConfig(conn.UserId)
 	ps := &PsConn{
 		dconn: conn.Detach(),
 		channels: [2]map[string]bool{
 			NormalChannel:  make(map[string]bool),
 			PatternChannel: make(map[string]bool),
 		},
-		messages: make(chan []interface{}, c.cfg.PubSub.MaxSlowMessagePerSubscribe),
+		messages: make(chan []interface{}, cfg.Redis.MaxSlowMessagePerSubscribe),
 		others:   make(chan interface{}, 2),
 		closed:   make(chan struct{}),
 	}

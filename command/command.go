@@ -40,7 +40,8 @@ type Info struct {
 }
 
 type Command struct {
-	cfg        *config.Config
+	cfgs       map[uint16]*config.Config
+	cfgLock    sync.RWMutex
 	red        *redcon.Server
 	done       chan struct{}
 	luapool    *LStatePool
@@ -82,19 +83,23 @@ func (c *Command) Shutdown(ctx context.Context) {
 
 func (c *Command) Start() error {
 	var err error
-	c.client, err = store.Open(c.cfg)
+	cfg := config.GetDefaultConfig()
+	c.client, err = store.Open(&cfg.Store)
 	if err != nil {
 		return err
 	}
 	etcdCtl := c.client.GetEtcdCtl()
 	if etcdCtl != nil {
-		c.memberlist = member.NewMemberList(etcdCtl, fmt.Sprintf("%s:%d", c.cfg.Host, c.cfg.RpcPort))
+		c.memberlist = member.NewMemberList(etcdCtl, fmt.Sprintf("%s:%d", cfg.Host, cfg.RpcPort))
 		err = c.memberlist.Start()
 		if err != nil {
 			return err
 		}
 	}
-	c.psManager = NewPsManager(&c.cfg.PubSub, c.memberlist)
+	c.psManager = NewPsManager(c.memberlist)
+	conf := c.GetConfig(c.Root.ID)
+	c.cache = freecache.NewCache(conf.CacheSize)
+	c.luapool = NewLStatePool(&conf.Lua)
 
 	go c.watchLuaStatePool()
 	go c.watchUser()
@@ -171,7 +176,8 @@ func (c *Command) watchLuaStatePool() {
 	for {
 		select {
 		case <-t.C:
-			c.luapool.Prune()
+			cfg := c.GetConfig(c.Root.ID)
+			c.luapool.Prune(&cfg.Lua)
 		case <-c.done:
 			return
 		}
@@ -192,8 +198,9 @@ func (c *Command) GetCursor(key string) ([]byte, bool) {
 }
 
 func (c *Command) SetCursor(key string, data []byte) {
+	cfg := c.GetConfig(c.Root.ID)
 	utils.ZapLog.Debug("SetCursor", zap.String("key", key), zap.ByteString("value", data))
-	_ = c.cache.Set(utils.S2B(key), data, c.cfg.Key.CursorExpireSecond)
+	_ = c.cache.Set(utils.S2B(key), data, cfg.Redis.CursorExpireSecond)
 }
 
 func (c *Command) Accept(conn *redcon.Conn) bool {
@@ -219,19 +226,17 @@ func (c *Command) Close(conn *redcon.Conn, err error) {
 	}
 }
 
-func NewCommand(cfg *config.Config, red *redcon.Server) *Command {
+func NewCommand(red *redcon.Server) *Command {
 	c := &Command{
-		cfg:     cfg,
-		red:     red,
-		done:    make(chan struct{}),
-		luapool: NewLStatePool(&cfg.Lua),
+		cfgs: make(map[uint16]*config.Config),
+		red:  red,
+		done: make(chan struct{}),
 		scriptMap: &LScriptMap{
 			scripts: make(map[string]*lua.FunctionProto),
 		},
 		users:    make(map[string]*User),
 		gcClosed: make(chan bool, 1),
 		gcWait:   &sync.WaitGroup{},
-		cache:    freecache.NewCache(cfg.CacheSize),
 		Info:     &Info{},
 	}
 	c.Root = c.rootUser()

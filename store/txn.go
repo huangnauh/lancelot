@@ -12,6 +12,7 @@ import (
 	"github.com/tikv/client-go/v2/txnkv/transaction"
 	"github.com/tikv/client-go/v2/txnkv/txnsnapshot"
 	"github.com/tikv/client-go/v2/util"
+	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
@@ -33,6 +34,7 @@ type Txn struct {
 	Now        int64
 	ListLID    uint32
 	ListRID    uint32
+	Config     *config.Config
 	PendingReq []redcon.Command
 }
 
@@ -74,6 +76,10 @@ func (t *Txn) HasTransaction() bool {
 
 func (t *Txn) NowTime() time.Time {
 	return time.Unix(t.Now/1e3, (t.Now%1e3)*1e6)
+}
+
+func (t *Txn) SetConfig(cfg *config.Config) {
+	t.Config = cfg
 }
 
 func (t *Txn) Begin() error {

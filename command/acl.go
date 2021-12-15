@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -53,12 +54,13 @@ func (u *User) NoPass() bool {
 }
 
 func (c *Command) rootUser() *User {
+	cfg := config.GetDefaultConfig()
 	root := &User{
 		ID:   1,
-		Name: c.cfg.Auth.Root,
+		Name: cfg.Auth.Root,
 		Flag: UserFlagRoot,
 		Passwords: map[string]bool{
-			utils.Sha256Sum(utils.S2B(c.cfg.Auth.Pass)): true,
+			utils.Sha256Sum(utils.S2B(cfg.Auth.Pass)): true,
 		},
 		Commands: bitmap.New(MAX_COMMANDS),
 	}
@@ -246,7 +248,7 @@ func (c *Command) AclHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	rootPermision := txn.UserId == c.Root.ID
 
-	if !rootPermision && !c.cfg.AclPermission {
+	if !rootPermision && !txn.Config.AclPermission {
 		return txn.SetError(xerror.WrongPermissionError(ACL_COMMAND))
 	}
 
@@ -270,6 +272,7 @@ func (c *Command) AclHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) ListUsers() (map[string]*User, error) {
+	cfg := c.GetConfig(c.Root.ID)
 	prefix := c.GetDataUserPrefix()
 
 	users := make(map[string]*User)
@@ -282,7 +285,7 @@ func (c *Command) ListUsers() (map[string]*User, error) {
 		users[username] = u
 		return true
 	}
-	err := c.client.List(prefix, utils.PrefixNext(prefix), c.cfg.Auth.MaxUsers, callback)
+	err := c.client.List(prefix, utils.PrefixNext(prefix), cfg.Auth.MaxUsers, callback)
 	if err == store.ReachLimit {
 		return users, nil
 	}
@@ -506,7 +509,7 @@ func (c *Command) aclSetRule(txn *store.Txn, u *User, rule string) error {
 	default:
 		if rule[0] == '>' {
 			password := utils.Sha256Sum(utils.S2B(rule[1:]))
-			if len(u.Passwords) >= c.cfg.Auth.MaxPasswordsPerUser {
+			if len(u.Passwords) >= txn.Config.Auth.MaxPasswordsPerUser {
 				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND),
 					rule, xerror.ErrTooManyPasswords)
 			}
@@ -516,7 +519,7 @@ func (c *Command) aclSetRule(txn *store.Txn, u *User, rule string) error {
 			if err != nil {
 				return err
 			}
-			if len(u.Passwords) >= c.cfg.Auth.MaxPasswordsPerUser {
+			if len(u.Passwords) >= txn.Config.Auth.MaxPasswordsPerUser {
 				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND),
 					rule, xerror.ErrTooManyPasswords)
 			}
