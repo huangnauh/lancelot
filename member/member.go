@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/tidwall/sjson"
 	"gitlab.s.upyun.com/platform/lancelot/grpc"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
@@ -87,6 +88,40 @@ func (m *MemberList) GetConfig(id uint16) *Config {
 	m.configLock.RLock()
 	defer m.configLock.RUnlock()
 	return m.Configs[id]
+}
+
+func (m *MemberList) SetConfig(id uint16, key string, value interface{}) ([]byte, error) {
+	m.configLock.Lock()
+	defer m.configLock.Unlock()
+	config := m.Configs[id]
+	if config == nil {
+		config = &Config{
+			Version: 0,
+			Value:   []byte("{}"),
+		}
+		m.Configs[id] = config
+	}
+	cvalue, err := sjson.SetBytes(config.Value, key, value)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
+	defer cancel()
+	res, err := m.etcdCli.Put(ctx, m.GetConfigKey(id), utils.B2S(cvalue))
+	if err != nil {
+		return nil, err
+	}
+	config.Value = cvalue
+	config.Version = res.Header.Revision
+	utils.ZapLog.Debug("[member] set config",
+		zap.Uint16("id", id), zap.String("key", key), zap.Any("value", value),
+		zap.Int64("version", config.Version), zap.ByteString("value", config.Value),
+	)
+	return config.Value, nil
+}
+
+func (m *MemberList) GetConfigKey(id uint16) string {
+	return fmt.Sprintf("%s%d", CONFIG, id)
 }
 
 func (m *MemberList) GetMemberKey() string {
@@ -197,6 +232,9 @@ func (m *MemberList) SetConfigKV(kv *mvccpb.KeyValue, version int64, deleted boo
 	m.configLock.Lock()
 	defer m.configLock.Unlock()
 	cfg, ok := m.Configs[uid]
+	utils.ZapLog.Debug("[member] set config",
+		zap.Uint16("id", uid), zap.String("key", key), zap.ByteString("value", kv.Value), zap.Int64("set-version", version),
+		zap.Any("cur", cfg))
 	//check version
 	if ok && cfg.Version > version {
 		return id
@@ -210,7 +248,7 @@ func (m *MemberList) SetConfigKV(kv *mvccpb.KeyValue, version int64, deleted boo
 
 	// create
 	if !ok {
-		cfg := &Config{}
+		cfg = &Config{}
 		m.Configs[uid] = cfg
 	}
 	cfg.Version = version
