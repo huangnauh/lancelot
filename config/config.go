@@ -93,7 +93,7 @@ type Redis struct {
 
 type Config struct {
 	StartAt       time.Time `yaml:"-" json:"-"`
-	Version       int64     `yaml:"version" json:"version,omitempty"`
+	Version       int64     `yaml:"-" json:"-"`
 	LogLevel      string    `yaml:"log-level" json:"-"`
 	PIDFile       string    `yaml:"pid-file" json:"-"`
 	Host          string    `yaml:"host" json:"-"`

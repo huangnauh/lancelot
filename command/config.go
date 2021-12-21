@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tidwall/gjson"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/json"
 	"gitlab.s.upyun.com/platform/lancelot/member"
@@ -108,17 +107,8 @@ func (c *Command) ConfigDel(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongSubArgs(DEL_COMMAND, ConfigHelpCommand)
 	}
 	str := strings.ToLower(utils.B2S(args[0]))
-	res := gjson.GetBytes(config.GetDefaultConfigData(), str)
-	if !res.Exists() {
-		return txn.SetWrongSubArgs(DEL_COMMAND, ConfigHelpCommand)
-	}
-	switch res.Type {
-	case gjson.String, gjson.True, gjson.Number:
-		if err := c.SetMemberConfig(txn.UserId, str, nil); err != nil {
-			return txn.SetError(err)
-		}
-	default:
-		return txn.SetWrongSubArgs(DEL_COMMAND, ConfigHelpCommand)
+	if err := c.SetMemberConfig(txn.UserId, str, nil); err != nil {
+		return txn.SetError(err)
 	}
 	txn.Config = c.GetConfig(txn.UserId)
 	return OK
@@ -137,7 +127,7 @@ func (c *Command) ConfigSet(txn *store.Txn, args [][]byte) interface{} {
 			return txn.SetError(xerror.ErrNotInteger)
 		}
 		sec := time.Duration(second) * time.Second
-		if err = c.SetMemberConfig(txn.UserId, "lua.timeout", sec); err != nil {
+		if err = c.SetMemberConfig(txn.UserId, "lua.timeout", sec.String()); err != nil {
 			return txn.SetError(err)
 		}
 	default:
