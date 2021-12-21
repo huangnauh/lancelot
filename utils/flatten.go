@@ -10,10 +10,10 @@ import (
 
 var NotValidInputError = errors.New("Not a valid input")
 
-func Flatten(nested interface{}) (map[string]interface{}, error) {
+func Flatten(nested interface{}, start string) (map[string]interface{}, error) {
 	flatmap := make(map[string]interface{})
 
-	err := flatten(true, flatmap, nested, "")
+	err := flatten(true, flatmap, nested, "", start)
 	if err != nil {
 		return nil, err
 	}
@@ -54,9 +54,12 @@ func isEmptyValue(v reflect.Value) bool {
 	return false
 }
 
-func flatten(top bool, flatMap map[string]interface{}, nested interface{}, prefix string) error {
-	assign := func(newKey string, v interface{}) error {
+func flatten(top bool, flatMap map[string]interface{}, nested interface{}, prefix, start string) error {
+	assign := func(newKey string, v interface{}, start string) error {
 		if dv, ok := v.(time.Duration); ok {
+			if start != "" {
+				return nil
+			}
 			flatMap[newKey] = dv.String()
 			return nil
 		}
@@ -65,10 +68,13 @@ func flatten(top bool, flatMap map[string]interface{}, nested interface{}, prefi
 		kind := getKind(val)
 		switch kind {
 		case reflect.Struct, reflect.Map, reflect.Slice, reflect.Ptr:
-			if err := flatten(false, flatMap, v, newKey); err != nil {
+			if err := flatten(false, flatMap, v, newKey, start); err != nil {
 				return err
 			}
 		default:
+			if start != "" {
+				return nil
+			}
 			flatMap[newKey] = v
 		}
 
@@ -93,6 +99,7 @@ func flatten(top bool, flatMap map[string]interface{}, nested interface{}, prefi
 	if !nestedVal.IsValid() {
 		return NotValidInputError
 	}
+	preStart, newStart := dekey(start)
 	kind := getKind(nestedVal)
 	switch kind {
 	case reflect.Struct:
@@ -116,26 +123,43 @@ func flatten(top bool, flatMap map[string]interface{}, nested interface{}, prefi
 				}
 				keyName = tagValue
 			}
+			if start != "" && preStart != keyName {
+				continue
+			}
 			newKey := enkey(top, prefix, keyName)
-			assign(newKey, v.Interface())
+			assign(newKey, v.Interface(), newStart)
 		}
 	case reflect.Map:
 		for _, k := range nestedVal.MapKeys() {
+			keyName := k.String()
+			if start != "" && preStart != keyName {
+				continue
+			}
 			v := nestedVal.MapIndex(k)
-			newKey := enkey(top, prefix, k.String())
-			assign(newKey, v.Interface())
+			newKey := enkey(top, prefix, keyName)
+			assign(newKey, v.Interface(), newStart)
 		}
 	case reflect.Slice:
+		if start != "" {
+			break
+		}
 		for i := 0; i < nestedVal.Len(); i++ {
 			v := nestedVal.Index(i)
 			newKey := enkey(top, prefix, strconv.Itoa(i))
-			assign(newKey, v.Interface())
+			assign(newKey, v.Interface(), "")
 		}
 	default:
 		return NotValidInputError
 	}
 
 	return nil
+}
+
+func dekey(key string) (string, string) {
+	if index := strings.Index(key, "."); index != -1 {
+		return key[:index], key[index+1:]
+	}
+	return key, ""
 }
 
 func enkey(top bool, prefix, subkey string) string {

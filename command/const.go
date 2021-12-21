@@ -123,6 +123,7 @@ const (
 	PSETEX_COMMAND           = "psetex"
 	SETXX_COMMAND            = "setxx"
 	GET_COMMAND              = "get"
+	GETLOCAL_COMMAND         = "getlocal"
 	MGET_COMMAND             = "mget"
 	GETDEL_COMMAND           = "getdel"
 	GETSET_COMMAND           = "getset"

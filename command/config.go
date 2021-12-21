@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/tidwall/gjson"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/member"
-	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
@@ -29,8 +29,12 @@ func (c *Command) ConfigHandle(txn *store.Txn, args [][]byte) interface{} {
 	switch subCommand {
 	case GET_COMMAND:
 		return c.ConfigGet(txn, args[1:])
+	case GETLOCAL_COMMAND:
+		return c.ConfigGetLocal(txn, args[1:])
 	case SET_COMMAND:
 		return c.ConfigSet(txn, args[1:])
+	case DEL_COMMAND:
+		return c.ConfigDel(txn, args[1:])
 	case RESETSTAT_COMMAND:
 		return c.ConfigResetStat(txn, args[1:])
 	case REWRITE_COMMAND:
@@ -40,50 +44,84 @@ func (c *Command) ConfigHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 }
 
+func printFlat(flatmap map[string]interface{}) []string {
+	res := make([]string, 0, len(flatmap))
+	for k, v := range flatmap {
+		switch v.(type) {
+		case string:
+			res = append(res, fmt.Sprintf("%s: %s", k, v))
+		case int64, float64:
+			res = append(res, fmt.Sprintf("%s: %d", k, v))
+		case bool:
+			res = append(res, fmt.Sprintf("%s: %t", k, v))
+		default:
+			res = append(res, fmt.Sprintf("%s: %v", k, v))
+		}
+	}
+	return res
+}
+
+func (c *Command) ConfigGetLocal(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) > 1 {
+		return txn.SetWrongSubArgs(GETLOCAL_COMMAND, ConfigHelpCommand)
+	}
+
+	ucfg := c.memberlist.GetConfig(txn.UserId)
+	if ucfg == nil {
+		return nil
+	}
+	conf := &config.Config{}
+	err := json.Unmarshal(ucfg.Value, conf)
+	if err != nil {
+		utils.ZapLog.Error("get config failed", zap.Uint16("id", txn.UserId),
+			zap.ByteString("value", ucfg.Value), zap.Error(err))
+		return txn.SetError(err)
+	}
+	return c.configGet(txn, args, conf)
+}
+
 func (c *Command) ConfigGet(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) > 1 {
 		return txn.SetWrongSubArgs(GET_COMMAND, ConfigHelpCommand)
 	}
+	return c.configGet(txn, args, txn.Config)
+}
 
-	if len(args) == 0 {
-		flatmap, err := utils.Flatten(txn.Config)
-		if err != nil {
-			return txn.SetError(err)
-		}
-		res := make([]string, 0, len(flatmap))
-		for k, v := range flatmap {
-			switch v.(type) {
-			case string:
-				res = append(res, fmt.Sprintf("%s: %s", k, v))
-			case int64, float64:
-				res = append(res, fmt.Sprintf("%s: %d", k, v))
-			case bool:
-				res = append(res, fmt.Sprintf("%s: %t", k, v))
-			default:
-				res = append(res, fmt.Sprintf("%s: %v", k, v))
-			}
-		}
-		return res
+func (c *Command) configGet(txn *store.Txn, args [][]byte, config *config.Config) interface{} {
+	var str string
+	if len(args) > 0 {
+		str = strings.ToLower(utils.B2S(args[0]))
 	}
-
-	body, err := json.Marshal(txn.Config)
+	if str == "lua-time-limit" {
+		str = "lua.timeout"
+	}
+	flatmap, err := utils.Flatten(config, str)
 	if err != nil {
 		return txn.SetError(err)
 	}
-	str := strings.ToLower(utils.B2S(args[0]))
+	utils.ZapLog.Debug("ConfigGet", zap.String("key", str), zap.Any("value", flatmap))
+	return printFlat(flatmap)
+}
 
-	res := gjson.GetBytes(body, str)
+func (c *Command) ConfigDel(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongSubArgs(DEL_COMMAND, ConfigHelpCommand)
+	}
+	str := strings.ToLower(utils.B2S(args[0]))
+	res := gjson.GetBytes(config.GetDefaultConfigData(), str)
 	if !res.Exists() {
-		return nil
+		return txn.SetWrongSubArgs(DEL_COMMAND, ConfigHelpCommand)
 	}
 	switch res.Type {
-	case gjson.String:
-		return redcon.SimpleString(res.String())
-	case gjson.Number:
-		return redcon.SimpleInt(res.Int())
+	case gjson.String, gjson.True, gjson.Number:
+		if err := c.SetMemberConfig(txn.UserId, str, nil); err != nil {
+			return txn.SetError(err)
+		}
 	default:
-		return nil
+		return txn.SetWrongSubArgs(DEL_COMMAND, ConfigHelpCommand)
 	}
+	txn.Config = c.GetConfig(txn.UserId)
+	return OK
 }
 
 func (c *Command) ConfigSet(txn *store.Txn, args [][]byte) interface{} {
@@ -98,7 +136,8 @@ func (c *Command) ConfigSet(txn *store.Txn, args [][]byte) interface{} {
 		if err != nil {
 			return txn.SetError(xerror.ErrNotInteger)
 		}
-		if err = c.SetMemberConfig(txn.UserId, "lua.timeout", second); err != nil {
+		sec := time.Duration(second) * time.Second
+		if err = c.SetMemberConfig(txn.UserId, "lua.timeout", sec); err != nil {
 			return txn.SetError(err)
 		}
 	default:

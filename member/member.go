@@ -101,7 +101,13 @@ func (m *MemberList) SetConfig(id uint16, key string, value interface{}) ([]byte
 		}
 		m.Configs[id] = config
 	}
-	cvalue, err := sjson.SetBytes(config.Value, key, value)
+	var cvalue []byte
+	var err error
+	if value == nil {
+		cvalue, err = sjson.DeleteBytes(config.Value, key)
+	} else {
+		cvalue, err = sjson.SetBytes(config.Value, key, value)
+	}
 	if err != nil {
 		return nil, err
 	}
