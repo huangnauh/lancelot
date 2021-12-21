@@ -1,7 +1,6 @@
 package command
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/tidwall/gjson"
 	"gitlab.s.upyun.com/platform/lancelot/config"
+	"gitlab.s.upyun.com/platform/lancelot/json"
 	"gitlab.s.upyun.com/platform/lancelot/member"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -141,35 +141,40 @@ func (c *Command) ConfigSet(txn *store.Txn, args [][]byte) interface{} {
 			return txn.SetError(err)
 		}
 	default:
-		res := gjson.GetBytes(config.GetDefaultConfigData(), str)
-		if !res.Exists() {
+		flatmap, err := utils.Flatten(txn.Config, str)
+		if len(flatmap) != 1 {
+			utils.ZapLog.Warn("ConfigSet", zap.String("key", str), zap.Any("value", flatmap), zap.Error(err))
 			return txn.SetWrongSubArgs(SET_COMMAND, ConfigHelpCommand)
 		}
-		switch res.Type {
-		case gjson.String:
-			if err := c.SetMemberConfig(txn.UserId, str, utils.B2S(args[1])); err != nil {
-				return txn.SetError(err)
+		for k, v := range flatmap {
+			switch v.(type) {
+			case string:
+				if err := c.SetMemberConfig(txn.UserId, k, utils.B2S(args[1])); err != nil {
+					return txn.SetError(err)
+				}
+			case bool:
+				b, err := strconv.ParseBool(utils.B2S(args[1]))
+				if err != nil {
+					return txn.SetError(err)
+				}
+				if err := c.SetMemberConfig(txn.UserId, str, b); err != nil {
+					return txn.SetError(err)
+				}
+			case int, int16, int32, int64, uint, uint16, uint32, uint64:
+				num, err := utils.GetPositiveInt(args[1])
+				if err != nil {
+					return txn.SetError(xerror.ErrNotInteger)
+				}
+				err = c.SetMemberConfig(txn.UserId, str, num)
+				if err != nil {
+					return txn.SetError(err)
+				}
+			default:
+				return txn.SetWrongSubArgs(SET_COMMAND, ConfigHelpCommand)
+
 			}
-		case gjson.True:
-			b, err := strconv.ParseBool(utils.B2S(args[1]))
-			if err != nil {
-				return txn.SetError(err)
-			}
-			if err := c.SetMemberConfig(txn.UserId, str, b); err != nil {
-				return txn.SetError(err)
-			}
-		case gjson.Number:
-			num, err := utils.GetPositiveInt(args[1])
-			if err != nil {
-				return txn.SetError(xerror.ErrNotInteger)
-			}
-			err = c.SetMemberConfig(txn.UserId, str, num)
-			if err != nil {
-				return txn.SetError(err)
-			}
-		default:
-			return txn.SetWrongSubArgs(SET_COMMAND, ConfigHelpCommand)
 		}
+
 	}
 	txn.Config = c.GetConfig(txn.UserId)
 	return OK
@@ -230,7 +235,7 @@ func (c *Command) GetConfig(userID uint16) *config.Config {
 		err := json.Unmarshal(ucfg.Value, &conf)
 		if err != nil {
 			utils.ZapLog.Error("get config failed", zap.Uint16("id", userID),
-				zap.ByteString("value", rcfg.Value), zap.Error(err))
+				zap.ByteString("value", ucfg.Value), zap.Error(err))
 		}
 		conf.Version = ucfg.Version
 	}

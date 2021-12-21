@@ -10,7 +10,9 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/tidwall/sjson"
+	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/grpc"
+	"gitlab.s.upyun.com/platform/lancelot/json"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
 	"go.etcd.io/etcd/clientv3"
@@ -93,21 +95,26 @@ func (m *MemberList) GetConfig(id uint16) *Config {
 func (m *MemberList) SetConfig(id uint16, key string, value interface{}) ([]byte, error) {
 	m.configLock.Lock()
 	defer m.configLock.Unlock()
-	config := m.Configs[id]
-	if config == nil {
-		config = &Config{
+	conf := m.Configs[id]
+	if conf == nil {
+		conf = &Config{
 			Version: 0,
 			Value:   []byte("{}"),
 		}
-		m.Configs[id] = config
+		m.Configs[id] = conf
 	}
 	var cvalue []byte
 	var err error
 	if value == nil {
-		cvalue, err = sjson.DeleteBytes(config.Value, key)
+		cvalue, err = sjson.DeleteBytes(conf.Value, key)
 	} else {
-		cvalue, err = sjson.SetBytes(config.Value, key, value)
+		cvalue, err = sjson.SetBytes(conf.Value, key, value)
 	}
+	if err != nil {
+		return nil, err
+	}
+	cfg := &config.Config{}
+	err = json.Unmarshal(cvalue, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -117,13 +124,13 @@ func (m *MemberList) SetConfig(id uint16, key string, value interface{}) ([]byte
 	if err != nil {
 		return nil, err
 	}
-	config.Value = cvalue
-	config.Version = res.Header.Revision
+	conf.Value = cvalue
+	conf.Version = res.Header.Revision
 	utils.ZapLog.Debug("[member] set config",
 		zap.Uint16("id", id), zap.String("key", key), zap.Any("value", value),
-		zap.Int64("version", config.Version), zap.ByteString("value", config.Value),
+		zap.Int64("version", conf.Version), zap.ByteString("value", conf.Value),
 	)
-	return config.Value, nil
+	return conf.Value, nil
 }
 
 func (m *MemberList) GetConfigKey(id uint16) string {

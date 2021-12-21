@@ -1,3 +1,4 @@
+version: 0
 log-level: info
 pid-file: redis.pid
 host: 0.0.0.0
@@ -36,15 +37,14 @@ auth:
   max-users: 1000
   max-passwords-per-user: 10
   max-db-per-user: 64
-key:
-  scan-max-count: 10000
-  cursor-expirate-second: 600
-  db-size-hash: 10000
 rpc:
   timeout: 10s
   max_stream: 1000
   max_msg_size: 1048576
   compress: false
-pubsub:
-  max-slow-message-per-subscribe: 1000
-list: a
+redis:
+  scan-max-count: 10000
+  db-size-hash: 0
+  list-type: a
+  cursor-expirate-second: 600
+  max-slow-msg-per-sub: 1000

@@ -1,7 +1,7 @@
 package command
 
 import (
-	"encoding/json"
+	"gitlab.s.upyun.com/platform/lancelot/json"
 
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
