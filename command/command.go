@@ -44,7 +44,8 @@ type Command struct {
 	cfgLock    sync.RWMutex
 	red        *redcon.Server
 	done       chan struct{}
-	luapool    *LStatePool
+	luapools   map[uint16]*LStatePool
+	luaLock    sync.RWMutex
 	TxnHandle  map[string]TxnHandler
 	ConnHandle map[string]ConnHandler
 	scriptMap  *LScriptMap
@@ -67,7 +68,13 @@ func (c *Command) Shutdown(ctx context.Context) {
 	if c.memberlist != nil {
 		c.memberlist.Close()
 	}
-	c.luapool.Shutdown()
+
+	c.luaLock.Lock()
+	for _, l := range c.luapools {
+		l.Shutdown()
+	}
+	c.luaLock.Unlock()
+
 	c.client.Close()
 	for {
 		select {
@@ -99,12 +106,61 @@ func (c *Command) Start() error {
 	c.psManager = NewPsManager(c.memberlist)
 	conf := c.GetConfig(c.Root.ID)
 	c.cache = freecache.NewCache(conf.CacheSize)
-	c.luapool = NewLStatePool(&conf.Lua)
+	c.luapools = make(map[uint16]*LStatePool)
 
-	go c.watchLuaStatePool()
 	go c.watchUser()
 	go c.startGC()
 	return nil
+}
+
+func (c *Command) GetLuaStatePool(txn *store.Txn) *LStatePool {
+	c.luaLock.RLock()
+	pool, ok := c.luapools[txn.UserId]
+	c.luaLock.RUnlock()
+	if ok {
+		return pool
+	}
+	c.luaLock.Lock()
+	pool, ok = c.luapools[txn.UserId]
+	if !ok {
+		pool = NewLStatePool(&txn.Config.Lua)
+		c.luapools[txn.UserId] = pool
+	}
+	c.luaLock.Unlock()
+	return pool
+}
+
+func (c *Command) SetLuaStatePool(userId uint16, conf *config.Lua) {
+	var max int
+	c.luaLock.Lock()
+	pool, ok := c.luapools[userId]
+	if !ok {
+		pool = NewLStatePool(conf)
+		c.luapools[userId] = pool
+	} else {
+		max = pool.cfg.MaxPoolSize
+	}
+	c.luaLock.Unlock()
+
+	if max != conf.MaxPoolSize {
+		pool.Prune(conf)
+	}
+}
+
+func (c *Command) GetLuaPools() map[uint16]*LStatePool {
+	pools := make(map[uint16]*LStatePool)
+	c.luaLock.RLock()
+	for k, v := range c.luapools {
+		pools[k] = v
+	}
+	c.luaLock.RUnlock()
+	return pools
+}
+
+func (c *Command) DeleteLuaPool(userId uint16) {
+	c.luaLock.Lock()
+	delete(c.luapools, userId)
+	c.luaLock.Unlock()
 }
 
 func (c *Command) GetClient() *store.Client {
@@ -153,7 +209,7 @@ func (c *Command) GetLocalUsers() []*User {
 }
 
 func (c *Command) watchUser() {
-	t := time.NewTicker(10 * time.Minute)
+	t := time.NewTicker(2 * time.Minute)
 	defer t.Stop()
 	for {
 		users, err := c.ListUsers()
@@ -162,22 +218,29 @@ func (c *Command) watchUser() {
 			continue
 		}
 		c.SetLocalUsers(users)
-		select {
-		case <-t.C:
-		case <-c.done:
-			return
-		}
-	}
-}
 
-func (c *Command) watchLuaStatePool() {
-	t := time.NewTicker(time.Minute)
-	defer t.Stop()
-	for {
+		userIds := make(map[uint16]bool, len(users))
+		for _, user := range users {
+			userIds[user.ID] = true
+		}
+		pools := c.GetLuaPools()
+		for userID, pool := range pools {
+			if _, ok := userIds[userID]; !ok {
+				c.DeleteLuaPool(userID)
+				pool.Shutdown()
+			} else {
+				cfg := c.GetConfig(userID)
+				pool.Prune(&cfg.Lua)
+			}
+		}
+		for userID := range userIds {
+			if _, ok := pools[userID]; !ok {
+				cfg := c.GetConfig(userID)
+				c.SetLuaStatePool(userID, &cfg.Lua)
+			}
+		}
 		select {
 		case <-t.C:
-			cfg := c.GetConfig(c.Root.ID)
-			c.luapool.Prune(&cfg.Lua)
 		case <-c.done:
 			return
 		}

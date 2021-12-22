@@ -312,16 +312,17 @@ func (c *Command) ScriptLoad(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongSubArgs(LOAD_COMMAND, ScriptHelpCommand)
 	}
 	utils.ZapLog.Info("script load", zap.String("script", utils.B2S(args[0])))
-	luaState, err := c.luapool.Get()
+	luapool := c.GetLuaStatePool(txn)
+	luaState, err := luapool.Get()
 	if err != nil {
 		return txn.SetError(err)
 	}
-	defer c.luapool.Put(luaState)
+	defer luapool.Put(luaState)
 
 	ctx, cancel := context.WithTimeout(context.Background(), txn.Config.Lua.Timeout)
 	defer cancel()
-	c.luapool.SetCancel(luaState, cancel)
-	defer c.luapool.RemoveCancel(luaState)
+	luapool.SetCancel(luaState, cancel)
+	defer luapool.RemoveCancel(luaState)
 	luaState.SetContext(ctx)
 	defer luaState.RemoveContext()
 	script := args[0]
@@ -376,7 +377,8 @@ func (c *Command) ScriptKill(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 0 {
 		return txn.SetWrongSubArgs(KILL_COMMAND, ScriptHelpCommand)
 	}
-	cancels := c.luapool.GetCancels()
+	luapool := c.GetLuaStatePool(txn)
+	cancels := luapool.GetCancels()
 	for _, cancel := range cancels {
 		cancel()
 	}
@@ -428,15 +430,16 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 		return txn.SetError(xerror.ErrNumberGreater)
 	}
 
-	luaState, err := c.luapool.Get()
+	luapool := c.GetLuaStatePool(txn)
+	luaState, err := luapool.Get()
 	if err != nil {
 		return txn.SetError(err)
 	}
-	defer c.luapool.Put(luaState)
+	defer luapool.Put(luaState)
 	ctx, cancel := context.WithTimeout(context.Background(), txn.Config.Lua.Timeout)
 	defer cancel()
-	c.luapool.SetCancel(luaState, cancel)
-	defer c.luapool.RemoveCancel(luaState)
+	luapool.SetCancel(luaState, cancel)
+	defer luapool.RemoveCancel(luaState)
 	luaState.SetContext(ctx)
 	defer luaState.RemoveContext()
 	go func() {
