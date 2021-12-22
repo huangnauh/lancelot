@@ -30,6 +30,7 @@ type Txn struct {
 	Exec       bool
 	Err        error
 	PendingErr bool
+	InScript   bool
 	Timestamp  uint64
 	Now        int64
 	ListLID    uint32

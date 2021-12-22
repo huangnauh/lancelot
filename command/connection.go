@@ -9,6 +9,7 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"go.uber.org/zap"
 )
 
 // (connection) AUTH [username] password
@@ -281,7 +282,8 @@ func (c *Command) PingHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	luapool := c.GetLuaStatePool(txn)
 	num := luapool.GetWorkingScript()
-	if num >= txn.Config.Lua.MaxPoolSize {
+	if num >= txn.Config.Lua.MaxPoolSize && !txn.InScript {
+		utils.ZapLog.Warn("lua pool is full", zap.Int("num", num), zap.Int("max", txn.Config.Lua.MaxPoolSize))
 		return BUSYPONG
 	}
 

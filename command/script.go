@@ -265,6 +265,10 @@ func (c *Command) callTxn(txn *store.Txn, ls *lua.LState, raiseErr bool) int {
 }
 
 func (c *Command) luaCall(txn *store.Txn, scriptCmd, cmd string, args [][]byte) (interface{}, error) {
+	txn.InScript = true
+	defer func() {
+		txn.InScript = false
+	}()
 	cmd = strings.ToLower(cmd)
 	txnHandle, ok := c.TxnHandle[cmd]
 	if !ok {
