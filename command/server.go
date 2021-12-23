@@ -13,22 +13,57 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/version"
+	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
+
+func (c *Command) getFlushUserId(txn *store.Txn, args [][]byte) (uint16, error) {
+	if txn.UserId != c.Root.ID && !txn.Config.FlushPermission {
+		return 0, xerror.WrongPermissionError(FLUSH_COMMAND)
+	}
+
+	deleteId := txn.UserId
+	if len(args) == 1 {
+		str := strings.ToLower(string(args[0]))
+		switch str {
+		case "async", "sync":
+		default:
+			if txn.UserId == c.Root.ID {
+				userId, err := strconv.Atoi(str)
+				if err == nil {
+					deleteId = uint16(userId)
+				} else {
+					user, ok := c.GetLocalUser(str)
+					if !ok {
+						return 0, xerror.WrongUsernameError(str)
+					}
+					deleteId = user.ID
+				}
+			}
+		}
+	}
+	return deleteId, nil
+}
 
 // FLUSHALL [ASYNC|SYNC]
 func (c *Command) FlushAllHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) > 1 {
 		return txn.SetWrongArgs(FLUSHALL_COMMAND)
 	}
-	start := GetUserPrefix(DataPrefix, txn.UserId)
-	end := utils.PrefixNext(start)
-	ctx := context.Background()
-	err := c.client.UnsafeDeleteRange(ctx, start, end, 2)
+
+	deleteId, err := c.getFlushUserId(txn, args)
 	if err != nil {
 		return txn.SetError(err)
 	}
 
-	start = GetUserPrefix(CountPrefix, txn.UserId)
+	start := GetUserPrefix(DataPrefix, deleteId)
+	end := utils.PrefixNext(start)
+	ctx := context.Background()
+	err = c.client.UnsafeDeleteRange(ctx, start, end, 2)
+	if err != nil {
+		return txn.SetError(err)
+	}
+
+	start = GetUserPrefix(CountPrefix, deleteId)
 	end = utils.PrefixNext(start)
 	ctx = context.Background()
 	err = c.client.UnsafeDeleteRange(ctx, start, end, 2)
@@ -36,7 +71,7 @@ func (c *Command) FlushAllHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 
-	start = GetUserPrefix(TTLPrefix, txn.UserId)
+	start = GetUserPrefix(TTLPrefix, deleteId)
 	end = utils.PrefixNext(start)
 	err = c.client.UnsafeDeleteRange(ctx, start, end, 2)
 	if err != nil {
@@ -50,15 +85,21 @@ func (c *Command) FlushDBHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) > 1 {
 		return txn.SetWrongArgs(FLUSHDB_COMMAND)
 	}
-	start := GetUserDBPrefix(DataPrefix, txn.UserId, txn.DBId)
-	end := utils.PrefixNext(start)
-	ctx := context.Background()
-	err := c.client.UnsafeDeleteRange(ctx, start, end, 2)
+
+	deleteId, err := c.getFlushUserId(txn, args)
 	if err != nil {
 		return txn.SetError(err)
 	}
 
-	start = GetUserDBPrefix(CountPrefix, txn.UserId, txn.DBId)
+	start := GetUserDBPrefix(DataPrefix, deleteId, txn.DBId)
+	end := utils.PrefixNext(start)
+	ctx := context.Background()
+	err = c.client.UnsafeDeleteRange(ctx, start, end, 2)
+	if err != nil {
+		return txn.SetError(err)
+	}
+
+	start = GetUserDBPrefix(CountPrefix, deleteId, txn.DBId)
 	end = utils.PrefixNext(start)
 	ctx = context.Background()
 	err = c.client.UnsafeDeleteRange(ctx, start, end, 2)
@@ -66,7 +107,7 @@ func (c *Command) FlushDBHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 
-	start = GetUserDBPrefix(TTLPrefix, txn.UserId, txn.DBId)
+	start = GetUserDBPrefix(TTLPrefix, deleteId, txn.DBId)
 	end = utils.PrefixNext(start)
 	err = c.client.UnsafeDeleteRange(ctx, start, end, 2)
 	if err != nil {

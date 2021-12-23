@@ -6,6 +6,7 @@ http-port: 6380
 rpc-port: 6381
 cache-size: 10485760
 acl-permission: true
+flush-permission: true
 store:
   pd-addrs:
   - 10.0.5.137:2379

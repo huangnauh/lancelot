@@ -92,22 +92,23 @@ type Redis struct {
 }
 
 type Config struct {
-	StartAt       time.Time `yaml:"-" json:"-"`
-	Version       int64     `yaml:"-" json:"-"`
-	LogLevel      string    `yaml:"log-level" json:"-"`
-	PIDFile       string    `yaml:"pid-file" json:"-"`
-	Host          string    `yaml:"host" json:"-"`
-	RedisPort     int       `yaml:"redis-port" json:"-"`
-	HttpPort      int       `yaml:"http-port" json:"-"`
-	RpcPort       int       `yaml:"rpc-port" json:"-"`
-	CacheSize     int       `yaml:"cache-size" json:"cache-size,omitempty"`
-	AclPermission bool      `yaml:"acl-permission" json:"acl-permission,omitempty"`
-	Store         Store     `yaml:"store" json:"store,omitempty"`
-	GC            GC        `yaml:"gc" json:"gc,omitempty"`
-	Lua           Lua       `yaml:"lua" json:"lua,omitempty"`
-	Auth          Auth      `yaml:"auth" json:"auth,omitempty"`
-	Rpc           Rpc       `yaml:"rpc" json:"rpc,omitempty"`
-	Redis         Redis     `yaml:"redis" json:"redis,omitempty"`
+	StartAt         time.Time `yaml:"-" json:"-"`
+	Version         int64     `yaml:"-" json:"-"`
+	LogLevel        string    `yaml:"log-level" json:"-"`
+	PIDFile         string    `yaml:"pid-file" json:"-"`
+	Host            string    `yaml:"host" json:"-"`
+	RedisPort       int       `yaml:"redis-port" json:"-"`
+	HttpPort        int       `yaml:"http-port" json:"-"`
+	RpcPort         int       `yaml:"rpc-port" json:"-"`
+	CacheSize       int       `yaml:"cache-size" json:"cache-size,omitempty"`
+	AclPermission   bool      `yaml:"acl-permission" json:"acl-permission,omitempty"`
+	FlushPermission bool      `yaml:"flush-permission" json:"flush-permission,omitempty"`
+	Store           Store     `yaml:"store" json:"store,omitempty"`
+	GC              GC        `yaml:"gc" json:"gc,omitempty"`
+	Lua             Lua       `yaml:"lua" json:"lua,omitempty"`
+	Auth            Auth      `yaml:"auth" json:"auth,omitempty"`
+	Rpc             Rpc       `yaml:"rpc" json:"rpc,omitempty"`
+	Redis           Redis     `yaml:"redis" json:"redis,omitempty"`
 }
 
 func Hostname() string {

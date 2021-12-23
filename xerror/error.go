@@ -202,6 +202,14 @@ func WrongPermissionError(command string) error {
 	return RedisNew(WrongPermissionString(command))
 }
 
+func WrongUsernameString(username string) string {
+	return fmt.Sprintf("invalid username '%s'", username)
+}
+
+func WrongUsernameError(username string) error {
+	return RedisNew(WrongUsernameString(username))
+}
+
 func MakeSafeErr(err error) error {
 	msg := strings.Replace(err.Error(), "\n", ` `, -1)
 	return RedisNew(msg)
