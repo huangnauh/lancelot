@@ -109,8 +109,9 @@ func (s *Server) RedisServe(ln net.Listener) {
 }
 
 func (s *Server) Shutdown(ctx context.Context) {
-	close(s.closed)
+	s.Command.Info.Health = false
 	_ = s.red.Close(ctx)
+	close(s.closed)
 	_ = s.http.Shutdown(ctx)
 	s.Command.Shutdown(ctx)
 }

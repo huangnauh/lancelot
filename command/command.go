@@ -37,6 +37,7 @@ type ConnHandler struct {
 type Info struct {
 	ConnectedClients int64
 	BlockClients     int64
+	Health           bool
 }
 
 type Command struct {
@@ -110,6 +111,7 @@ func (c *Command) Start() error {
 
 	go c.watchUser()
 	go c.startGC()
+	c.Info.Health = true
 	return nil
 }
 

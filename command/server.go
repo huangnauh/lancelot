@@ -224,5 +224,12 @@ func (c *Command) InfoHandle(txn *store.Txn, args [][]byte) interface{} {
 		b.WriteString(strconv.Itoa(num))
 		b.WriteString("\r\n")
 	}
+
+	if subcommand == "" || subcommand == "health" {
+		b.WriteString("# Health\r\n")
+		b.WriteString("health:")
+		b.WriteString(strconv.FormatBool(c.Info.Health))
+		b.WriteString("\r\n")
+	}
 	return b.String()
 }
