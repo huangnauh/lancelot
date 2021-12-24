@@ -47,6 +47,7 @@ type testHash struct {
 
 func TestMain(m *testing.M) {
 	fmt.Println("server test begin")
+	config.SetDefaultConfigPermission()
 	conf := config.GetDefaultConfig()
 	cfg = &conf
 	utils.SetDevelopmentLog(cfg.LogLevel)

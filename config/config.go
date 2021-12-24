@@ -190,6 +190,11 @@ func GetDefaultConfig() Config {
 	return cfg
 }
 
+func SetDefaultConfigPermission() {
+	cfg.AclPermission = true
+	cfg.FlushPermission = true
+}
+
 func GetDefaultConfigData() []byte {
 	return cfgData
 }

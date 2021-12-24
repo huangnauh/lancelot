@@ -14,6 +14,7 @@ var cmd *command.Command
 
 func TestMain(m *testing.M) {
 	fmt.Println("command test begin")
+	config.SetDefaultConfigPermission()
 	cfg := config.GetDefaultConfig()
 	cmd = command.NewCommand(nil)
 	err := cmd.Start()
