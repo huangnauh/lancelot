@@ -1,8 +1,8 @@
 stages:
   - test
-  - build
+  - release
 
-compile-alpine:
+compile:
   stage: test
   image: golang:1.17-alpine
   script:
@@ -15,3 +15,15 @@ compile-alpine:
   artifacts:
     paths:
       - bin
+
+release:
+  stage: release
+  script:
+    - tar zcvf lancelot.tar.gz bin/lancelot
+    - upload lancelot.tar.gz lancelot lancelot-$CI_BUILD_TAG
+  tags:
+    - upload_to_pkgs
+  dependencies:
+    - compile
+  only:
+    - tags
