@@ -2,6 +2,7 @@
 /lancelot-client
 lancelot
 /tikv-client
+/tidb-*
 /redis.pid*
 /miniredis
 .vscode
