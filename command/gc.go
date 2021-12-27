@@ -186,6 +186,7 @@ func (c *Command) doGC(start, end []byte, now int64, cfg *config.Config) ([]byte
 				zap.ByteString("ttl key", lastKey), zap.ByteString("key", object.Key))
 			break
 		}
+		uconf := c.GetConfig(object.UserId)
 		if len(object.Value) > 0 {
 			p := object.GetValueBytes(nil)
 			utils.ZapLog.Debug("[gc] delete value", zap.ByteString("value", object.Value), zap.ByteString("key", object.Key))
@@ -198,6 +199,7 @@ func (c *Command) doGC(start, end []byte, now int64, cfg *config.Config) ([]byte
 				if err != nil {
 					return
 				}
+				txn.Config = uconf
 				defer txn.Rollback()
 				if len(object.Key) == 0 {
 					err = CleanKey(txn, nil, ttlKey, object, 0, MinusCount|GCChange)
@@ -215,6 +217,7 @@ func (c *Command) doGC(start, end []byte, now int64, cfg *config.Config) ([]byte
 				break
 			}
 		} else if len(object.Key) > 0 {
+			txn.Config = uconf
 			count++
 			utils.ZapLog.Debug("[gc] del key", zap.ByteString("ttl key", lastKey), zap.ByteString("key", object.Key))
 			err = CleanKey(txn, object.GetKeyBytes(), lastKey, object, 0, MinusCount|GCChange)
