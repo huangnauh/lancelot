@@ -341,7 +341,7 @@ func (c *Command) GetUserCount(txn *store.Txn) (uint16, error) {
 	key := GetGeneralBytes(CountGeneral, UserPrefix)
 	b, err := txn.Get(key)
 	if err == store.KeyNotFound {
-		return 0, nil
+		return 2, nil
 	} else if err != nil {
 		return 0, err
 	}
@@ -401,15 +401,12 @@ func (c *Command) AclDelUser(txn *store.Txn, args [][]byte) interface{} {
 	count := 0
 	for _, arg := range args {
 		username := utils.B2S(arg)
-		u, err := c.GetUser(txn, username)
+		_, err := c.GetUser(txn, username)
 		if err == store.KeyNotFound {
 			continue
 		}
 		if err != nil {
 			return txn.SetError(err)
-		}
-		if u.ID == txn.UserId {
-			return txn.SetError(xerror.WrongPermissionError(DELUSER_COMMAND))
 		}
 		if err := c.DelUser(txn, username); err != nil {
 			return txn.SetError(err)
@@ -436,7 +433,6 @@ func (c *Command) AclSetUser(txn *store.Txn, args [][]byte) interface{} {
 		if err != nil {
 			return txn.SetError(err)
 		}
-		count++
 		u = &User{
 			ID:        count,
 			Name:      username,
@@ -463,6 +459,7 @@ func (c *Command) AclSetUser(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 	if newUser {
+		count++
 		err = c.SetUserCount(txn, count)
 		if err != nil {
 			return txn.SetError(err)

@@ -42,6 +42,7 @@ func (c *Command) AuthHandle(txn *store.Txn, args [][]byte) interface{} {
 					txn.Auth = true
 					txn.UserId = user.ID
 					txn.UserName = user.Name
+					txn.Config = c.GetConfig(user.ID)
 					return OK
 				}
 			}
