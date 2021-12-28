@@ -12,6 +12,7 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/utils/bitmap"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"go.uber.org/zap"
 )
 
 const (
@@ -207,6 +208,7 @@ func UserEncode(u *User) []byte {
 	k[3] = byte(len(u.Passwords))
 	i := 0
 	for password := range u.Passwords {
+		utils.ZapLog.Debug("password", zap.String("password", password))
 		_ = utils.HexDecode(utils.S2B(password), k[4+i*32:])
 		i++
 	}
@@ -230,6 +232,7 @@ func UserDecode(b []byte, u *User) error {
 	u.Passwords = make(map[string]bool, n)
 	for i := 0; i < n; i++ {
 		password := utils.B2S(utils.HexEncode(b[4+i*32 : 4+i*32+32]))
+		utils.ZapLog.Debug("password", zap.String("password", password))
 		u.Passwords[password] = true
 	}
 	segments := make([]uint64, MAX_COMMANDS/64)
@@ -448,7 +451,7 @@ func (c *Command) AclSetUser(txn *store.Txn, args [][]byte) interface{} {
 
 	rules := args[1:]
 	for i := range rules {
-		err = c.aclSetRule(txn, u, strings.ToLower(utils.B2S(rules[i])))
+		err = c.aclSetRule(txn, u, utils.B2S(rules[i]))
 		if err != nil {
 			return txn.SetError(err)
 		}
@@ -482,7 +485,8 @@ func getPassword(rule string) (string, error) {
 	return password, nil
 }
 
-func (c *Command) aclSetRule(txn *store.Txn, u *User, rule string) error {
+func (c *Command) aclSetRule(txn *store.Txn, u *User, r string) error {
+	rule := strings.ToLower(r)
 	switch rule {
 	case "on":
 		u.Flag |= USER_FLAG_ENABLED
@@ -508,14 +512,15 @@ func (c *Command) aclSetRule(txn *store.Txn, u *User, rule string) error {
 		u.Flag &= ^USER_FLAG_NOPASS
 	default:
 		if rule[0] == '>' {
-			password := utils.Sha256Sum(utils.S2B(rule[1:]))
+			password := utils.Sha256Sum(utils.S2B(r[1:]))
+			utils.ZapLog.Debug("set-user-password", zap.String("password", r[1:]), zap.String("sha256", password))
 			if len(u.Passwords) >= txn.Config.Auth.MaxPasswordsPerUser {
 				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND),
 					rule, xerror.ErrTooManyPasswords)
 			}
 			u.Passwords[password] = true
 		} else if rule[0] == '#' {
-			password, err := getPassword(rule)
+			password, err := getPassword(r)
 			if err != nil {
 				return err
 			}
@@ -525,7 +530,7 @@ func (c *Command) aclSetRule(txn *store.Txn, u *User, rule string) error {
 			}
 			u.Passwords[password] = true
 		} else if rule[0] == '<' {
-			password := utils.Sha256Sum(utils.S2B(rule[1:]))
+			password := utils.Sha256Sum(utils.S2B(r[1:]))
 			ok := u.Passwords[password]
 			if ok {
 				delete(u.Passwords, password)
@@ -534,7 +539,7 @@ func (c *Command) aclSetRule(txn *store.Txn, u *User, rule string) error {
 					rule, xerror.ErrNotExistPassword)
 			}
 		} else if rule[0] == '!' {
-			password, err := getPassword(rule)
+			password, err := getPassword(r)
 			if err != nil {
 				return err
 			}
