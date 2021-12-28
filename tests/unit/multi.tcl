@@ -211,7 +211,7 @@ start_server {tags {"multi"}} {
         r multi
         r ping
         r exec
-    } {ping}
+    } {PONG}
 
     test {FLUSHDB does not touch non affected keys} {
         r del x
