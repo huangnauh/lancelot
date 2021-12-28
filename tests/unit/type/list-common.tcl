@@ -3,3 +3,9 @@
 array set largevalue {}
 set largevalue(ziplist) "hello"
 set largevalue(linkedlist) [string repeat "hello" 4]
+
+proc create_list {key entries} {
+        r del $key
+        foreach entry $entries { r rpush $key $entry }
+        assert_encoding quicklist $key
+}

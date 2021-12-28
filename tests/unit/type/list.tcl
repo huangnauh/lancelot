@@ -137,12 +137,6 @@ start_server {
         assert_equal 0 [r llen mylist2]
     }
 
-    proc create_list {key entries} {
-        r del $key
-        foreach entry $entries { r rpush $key $entry }
-        assert_encoding quicklist $key
-    }
-
     foreach {type large} [array get largevalue] {
         test "BLPOP, BRPOP: single existing list - $type" {
             wait_for_blocked_clients_count 0
