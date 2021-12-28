@@ -349,6 +349,10 @@ func (c *Command) GetUserCount(txn *store.Txn) (uint16, error) {
 		return 0, err
 	}
 	count := binary.BigEndian.Uint16(b)
+	utils.ZapLog.Debug("user count", zap.Uint16("count", count))
+	if count <= 1 {
+		count = 2
+	}
 	return count, nil
 }
 
