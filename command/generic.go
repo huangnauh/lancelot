@@ -40,7 +40,7 @@ func (c *Command) ExpireTimeHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(EXPIRETIME_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
+	object := c.NewObject(txn, UnknownType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -59,7 +59,7 @@ func (c *Command) PExpireTimeHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(PEXPIRETIME_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
+	object := c.NewObject(txn, UnknownType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -151,7 +151,7 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 		}
 	}
 
-	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
+	object := c.NewObject(txn, UnknownType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
@@ -245,7 +245,7 @@ func (c *Command) ExistsHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	count := 0
 	for _, arg := range args {
-		object := NewObject(txn.UserId, txn.DBId, UnknownType, arg)
+		object := c.NewObject(txn, UnknownType, arg)
 		key := object.GetKeyBytes()
 		err := getTxnObject(txn, key, object, false)
 		if err == store.KeyNotFound {
@@ -259,7 +259,7 @@ func (c *Command) ExistsHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) ttl(txn *store.Txn, args [][]byte) (int64, error) {
-	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
+	object := c.NewObject(txn, UnknownType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -382,7 +382,7 @@ func (c *Command) UnlinkHandle(txn *store.Txn, args [][]byte) interface{} {
 func (c *Command) touchORDelete(txn *store.Txn, args [][]byte, delete bool) interface{} {
 	var count int64
 	for i := range args {
-		object := NewObject(txn.UserId, txn.DBId, UnknownType, args[i])
+		object := c.NewObject(txn, UnknownType, args[i])
 		key := object.GetKeyBytes()
 		err := getTxnObject(txn, key, object, false)
 		if err == store.KeyNotFound {
@@ -570,7 +570,7 @@ func (c *Command) TypeHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(TYPE_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[0])
+	object := c.NewObject(txn, UnknownType, args[0])
 	err := getTxnObject(txn, object.GetKeyBytes(), object, false)
 	if err != nil {
 		return txn.SetError(err)

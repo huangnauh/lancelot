@@ -28,7 +28,7 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(JSONDEL_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, JsonType, args[0])
+	object := c.NewObject(txn, JsonType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
@@ -88,7 +88,7 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 
-	object := NewObject(txn.UserId, txn.DBId, JsonType, args[0])
+	object := c.NewObject(txn, JsonType, args[0])
 	object.TTL = setOption.Expire
 	object.Timestamp = txn.Timestamp
 
@@ -146,7 +146,7 @@ func (c *Command) JsonGetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(JSONGET_COMMAND)
 	}
 
-	object := NewObject(txn.UserId, txn.DBId, JsonType, args[0])
+	object := c.NewObject(txn, JsonType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {

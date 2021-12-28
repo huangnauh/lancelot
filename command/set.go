@@ -20,7 +20,7 @@ func (c *Command) SMIsMemberHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(SMISMEMBER_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, SetType, args[0])
+	object := c.NewObject(txn, SetType, args[0])
 	key := object.GetKeyBytes()
 	ret := make([]redcon.SimpleInt, len(args)-1)
 	err := getTxnObject(txn, key, object, false)
@@ -48,7 +48,7 @@ func (c *Command) SIsMemberHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 {
 		return txn.SetWrongArgs(SISMEMBER_COMMAND)
 	}
-	object := NewObject(txn.UserId, txn.DBId, SetType, args[0])
+	object := c.NewObject(txn, SetType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -120,7 +120,7 @@ func (c *Command) SRemHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) srem(txn *store.Txn, arg []byte, args [][]byte) (int64, error) {
-	object := NewObject(txn.UserId, txn.DBId, SetType, arg)
+	object := c.NewObject(txn, SetType, arg)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -170,7 +170,7 @@ func (c *Command) SCardHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(SCARD_COMMAND)
 	}
-	ret, err := GetCountByKey(txn, args[0], SetType)
+	ret, err := c.GetCountByKey(txn, args[0], SetType)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -280,7 +280,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 	counts := make([]int64, len(args))
 	alist := make([]*Object, len(args))
 	for i := 0; i < len(args); i++ {
-		o := NewObject(txn.UserId, txn.DBId, typo, args[i])
+		o := c.NewObject(txn, typo, args[i])
 		k := o.GetKeyBytes()
 		err = getTxnObject(txn, k, o, false)
 		if err == store.KeyNotFound {
@@ -453,7 +453,7 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 	iterList := store.NewIterList()
 	for i := 0; i < len(args); i++ {
 		var p []byte
-		object := NewObject(txn.UserId, txn.DBId, typo, args[i])
+		object := c.NewObject(txn, typo, args[i])
 		k := object.GetKeyBytes()
 		err = getTxnObject(txn, k, object, false)
 		if err == store.KeyNotFound {
@@ -540,7 +540,7 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 func (c *Command) checkValidObjectArgs(txn *store.Txn, args [][]byte, typo ObjectType) error {
 	var err error
 	for i := 0; i < len(args); i++ {
-		o := NewObject(txn.UserId, txn.DBId, typo, args[i])
+		o := c.NewObject(txn, typo, args[i])
 		k := o.GetKeyBytes()
 		utils.ZapLog.Debug("diff", zap.String("key", string(args[i])), zap.ByteString("k", k))
 		err = getTxnObject(txn, k, o, false)
@@ -552,7 +552,7 @@ func (c *Command) checkValidObjectArgs(txn *store.Txn, args [][]byte, typo Objec
 }
 
 func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType int, weight []float64) ([]interface{}, error) {
-	object := NewObject(txn.UserId, txn.DBId, typo, args[0])
+	object := c.NewObject(txn, typo, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -602,7 +602,7 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 	glist := make(map[int]*Object)
 	llist := make(map[int]*Object)
 	for i := 1; i < len(args); i++ {
-		o := NewObject(txn.UserId, txn.DBId, typo, args[i])
+		o := c.NewObject(txn, typo, args[i])
 		k := o.GetKeyBytes()
 		utils.ZapLog.Debug("diff", zap.String("key", string(args[i])), zap.ByteString("k", k))
 		err = getTxnObject(txn, k, o, false)
@@ -727,7 +727,7 @@ func (c *Command) SPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	} else {
 		count = 1
 	}
-	object := NewObject(txn.UserId, txn.DBId, SetType, args[0])
+	object := c.NewObject(txn, SetType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -817,7 +817,7 @@ func (c *Command) SMembersHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) smembers(txn *store.Txn, args [][]byte, limit int) ([][]byte, error) {
-	object := NewObject(txn.UserId, txn.DBId, SetType, args[0])
+	object := c.NewObject(txn, SetType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {

@@ -86,6 +86,7 @@ type GC struct {
 type Redis struct {
 	ScanMaxCount               int    `yaml:"scan-max-count" json:"scan-max-count,omitempty"`
 	DbSizeHash                 uint64 `yaml:"db-size-hash" json:"db-size-hash,omitempty"`
+	ObjectHash                 uint16 `yaml:"object-hash" json:"object-hash,omitempty"`
 	ListType                   string `yaml:"list-type" json:"list-type,omitempty"`
 	CursorExpireSecond         int    `yaml:"cursor-expirate-second" json:"cursor-expirate-second,omitempty"`
 	MaxSlowMessagePerSubscribe int    `yaml:"max-slow-msg-per-sub" json:"max-slow-msg-per-sub,omitempty"`
@@ -169,6 +170,7 @@ var cfg = Config{
 		ListType:                   ALIST,
 		ScanMaxCount:               10000,
 		CursorExpireSecond:         10 * 60,
+		ObjectHash:                 1<<4 - 1,
 	},
 }
 

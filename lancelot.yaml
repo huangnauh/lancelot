@@ -45,6 +45,7 @@ rpc:
 redis:
   scan-max-count: 10000
   db-size-hash: 1000
+  object-hash: 15
   list-type: a
   cursor-expirate-second: 600
   max-slow-msg-per-sub: 1000

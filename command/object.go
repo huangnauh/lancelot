@@ -165,13 +165,17 @@ type Object struct {
 	Extra     []byte
 }
 
-func NewObject(user uint16, db uint8, typo ObjectType, key []byte) *Object {
+func (c *Command) NewObject(txn *store.Txn, typo ObjectType, key []byte) *Object {
+	hash := txn.Config.Redis.ObjectHash
+	if hash == 0 {
+		hash = DefaultHashMark
+	}
 	return &Object{
-		UserId: user,
-		Db:     db,
+		UserId: txn.UserId,
+		Db:     txn.DBId,
 		Key:    key,
 		Type:   typo,
-		Hash:   DefaultHashMark,
+		Hash:   hash,
 	}
 }
 
@@ -343,11 +347,14 @@ func ObjectEncode(o *Object) []byte {
 	return b
 }
 
-func (o *Object) CleanValue(typo ObjectType) {
+func (o *Object) CleanValue(hash uint16, typo ObjectType) {
+	if hash == 0 {
+		hash = DefaultHashMark
+	}
 	o.Type = typo
 	o.TTL = 0
 	o.Timestamp = 0
-	o.Hash = DefaultHashMark
+	o.Hash = hash
 	o.Value = nil
 	o.Extra = nil
 }
@@ -428,7 +435,7 @@ func getTxnObject(txn *store.Txn, key []byte, object *Object, clear bool) error 
 				return err
 			}
 		}
-		object.CleanValue(getType)
+		object.CleanValue(txn.Config.Redis.ObjectHash, getType)
 		return store.KeyNotFound
 	}
 
@@ -452,7 +459,7 @@ func (c *Command) ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongSubArgs(subcommand, ObjectHelpCommand)
 	}
 
-	object := NewObject(txn.UserId, txn.DBId, UnknownType, args[1])
+	object := c.NewObject(txn, UnknownType, args[1])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err != nil {
@@ -524,8 +531,8 @@ func PutOrDeleteKV(txn *store.Txn, object *Object, k, v []byte, delta int64) (in
 	return count.Value, err
 }
 
-func GetCountByKey(txn *store.Txn, arg []byte, typo ObjectType) (int64, error) {
-	object := NewObject(txn.UserId, txn.DBId, typo, arg)
+func (c *Command) GetCountByKey(txn *store.Txn, arg []byte, typo ObjectType) (int64, error) {
+	object := c.NewObject(txn, typo, arg)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {

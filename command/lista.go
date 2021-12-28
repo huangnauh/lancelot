@@ -739,7 +739,7 @@ func (c *Command) AListHandle(txn *store.Txn, args [][]byte, lFunc ListFunc, opt
 		msgs = nil
 	}
 
-	object := NewObject(txn.UserId, txn.DBId, AListType, args[0])
+	object := c.NewObject(txn, AListType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	create := false
