@@ -80,8 +80,11 @@ func (c *Command) defaultUser() *User {
 	return user
 }
 
-func (c *Command) ListResp(u *User) string {
+func (c *Command) ListResp(u *User, all bool) string {
 	var builder strings.Builder
+	if all {
+		builder.WriteString(fmt.Sprintf("%d ", u.ID))
+	}
 	builder.WriteString("user ")
 	builder.WriteString(u.Name)
 	if u.Flag&USER_FLAG_ENABLED != 0 {
@@ -366,14 +369,18 @@ func (c *Command) AclUsers(txn *store.Txn, args [][]byte) interface{} {
 	return b
 }
 
-// (server) ACL LIST
+// (server) ACL LIST [all]
 func (c *Command) AclList(txn *store.Txn, args [][]byte) interface{} {
 	users := c.GetLocalUsers()
 	sort.Sort(ByName(users))
 	b := make([]string, len(users))
 	i := 0
+	all := false
+	if len(args) > 0 {
+		all = strings.ToLower(utils.B2S(args[0])) == "all"
+	}
 	for _, user := range users {
-		b[i] = c.ListResp(user)
+		b[i] = c.ListResp(user, all)
 		i++
 	}
 	return b
