@@ -8,6 +8,7 @@ require (
 	github.com/cloudflare/tableflip v1.2.2
 	github.com/coocood/freecache v1.1.1
 	github.com/go-redis/redis/v8 v8.11.4
+	github.com/gocraft/work v0.5.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.2
 	github.com/gomodule/redigo v1.8.5
@@ -22,6 +23,7 @@ require (
 	github.com/pingcap/tidb v1.1.0-beta.0.20211025024448-36e694bfc536
 	github.com/pingcap/tidb/parser v0.0.0-20211025024448-36e694bfc536 // indirect
 	github.com/prometheus/client_golang v1.11.0
+	github.com/robfig/cron v1.2.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/cobra v1.2.1
 	github.com/stretchr/testify v1.7.0

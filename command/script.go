@@ -101,6 +101,7 @@ type LStatePool struct {
 	cancels map[*lua.LState]context.CancelFunc
 	cfg     *config.Lua
 	total   int
+	exists  chan struct{}
 }
 
 func NewLStatePool(cfg *config.Lua) *LStatePool {
@@ -109,6 +110,7 @@ func NewLStatePool(cfg *config.Lua) *LStatePool {
 		cancels: make(map[*lua.LState]context.CancelFunc),
 		cfg:     cfg,
 		total:   cfg.InitPoolSize,
+		exists:  make(chan struct{}, 1),
 	}
 	for i := 0; i < cfg.InitPoolSize; i++ {
 		l.saved[i] = l.New()
@@ -116,25 +118,46 @@ func NewLStatePool(cfg *config.Lua) *LStatePool {
 	return l
 }
 
-func (l *LStatePool) Get() (*lua.LState, error) {
+func (l *LStatePool) Get(ctx context.Context, wait time.Duration) (*lua.LState, error) {
 	l.Lock()
-	defer l.Unlock()
 	n := len(l.saved)
 	if n == 0 {
 		if l.total >= l.cfg.MaxPoolSize {
+			l.Unlock()
+			if wait > 0 {
+				tick := time.NewTicker(wait)
+				defer tick.Stop()
+				for {
+					select {
+					case <-l.exists:
+						s, err := l.Get(ctx, 0)
+						if err != nil {
+							continue
+						}
+						return s, nil
+					case <-ctx.Done():
+						return nil, xerror.ErrNoLuasAvailable
+					case <-tick.C:
+						return nil, xerror.ErrNoLuasAvailable
+					}
+				}
+			}
 			return nil, xerror.ErrNoLuasAvailable
 		}
 		l.total++
+		l.Unlock()
 		return l.New(), nil
 	}
 	x := l.saved[n-1]
 	l.saved = l.saved[0 : n-1]
+	l.Unlock()
 	return x, nil
 }
 
 func (l *LStatePool) Prune(cfg *config.Lua) {
 	l.Lock()
 	defer l.Unlock()
+	originMax := l.cfg.MaxPoolSize
 	l.cfg = cfg
 	n := len(l.saved)
 	if n > l.cfg.InitPoolSize+1 {
@@ -143,6 +166,9 @@ func (l *LStatePool) Prune(cfg *config.Lua) {
 		copy(newSaved, l.saved[dropNum:])
 		l.saved = newSaved
 		l.total -= dropNum
+	}
+	if l.total == originMax && l.cfg.MaxPoolSize > l.total {
+		l.setExist()
 	}
 }
 
@@ -216,10 +242,18 @@ func (l *LStatePool) GetCancels() []context.CancelFunc {
 	return val
 }
 
+func (l *LStatePool) setExist() {
+	select {
+	case l.exists <- struct{}{}:
+	default:
+	}
+}
+
 func (l *LStatePool) Put(L *lua.LState) {
 	l.Lock()
 	l.saved = append(l.saved, L)
 	l.Unlock()
+	l.setExist()
 }
 
 func (l *LStatePool) Shutdown() {
@@ -236,6 +270,7 @@ func (l *LStatePool) Shutdown() {
 		L.Close()
 	}
 	l.Unlock()
+	close(l.exists)
 }
 
 func errResult(ls *lua.LState, err error, raiseErr bool) int {
@@ -316,15 +351,16 @@ func (c *Command) ScriptLoad(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongSubArgs(LOAD_COMMAND, ScriptHelpCommand)
 	}
 	utils.ZapLog.Info("script load", zap.String("script", utils.B2S(args[0])))
+	ctx, cancel := context.WithTimeout(context.Background(), txn.Config.Lua.Timeout)
+	defer cancel()
+
 	luapool := c.GetLuaStatePool(txn)
-	luaState, err := luapool.Get()
+	luaState, err := luapool.Get(ctx, txn.Config.Lua.Timeout)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	defer luapool.Put(luaState)
 
-	ctx, cancel := context.WithTimeout(context.Background(), txn.Config.Lua.Timeout)
-	defer cancel()
 	luapool.SetCancel(luaState, cancel)
 	defer luapool.RemoveCancel(luaState)
 	luaState.SetContext(ctx)
@@ -434,18 +470,8 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 		return txn.SetError(xerror.ErrNumberGreater)
 	}
 
-	luapool := c.GetLuaStatePool(txn)
-	luaState, err := luapool.Get()
-	if err != nil {
-		return txn.SetError(err)
-	}
-	defer luapool.Put(luaState)
 	ctx, cancel := context.WithTimeout(context.Background(), txn.Config.Lua.Timeout)
 	defer cancel()
-	luapool.SetCancel(luaState, cancel)
-	defer luapool.RemoveCancel(luaState)
-	luaState.SetContext(ctx)
-	defer luaState.RemoveContext()
 	go func() {
 		tick := time.NewTicker(time.Second)
 		defer tick.Stop()
@@ -464,6 +490,19 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 			}
 		}
 	}()
+
+	luapool := c.GetLuaStatePool(txn)
+	luaState, err := luapool.Get(ctx, txn.Config.Lua.Timeout)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	defer luapool.Put(luaState)
+
+	luapool.SetCancel(luaState, cancel)
+	defer luapool.RemoveCancel(luaState)
+	luaState.SetContext(ctx)
+	defer luaState.RemoveContext()
+
 	keysTable := luaState.CreateTable(int(numkeys), 0)
 	for i := 0; i < numkeys; i++ {
 		key := args[2+i]
