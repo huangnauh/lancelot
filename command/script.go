@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -212,14 +213,14 @@ func (l *LStatePool) New() *lua.LState {
 }
 
 func (l *LStatePool) SetCancel(ls *lua.LState, cancel context.CancelFunc) {
-	utils.ZapLog.Info("set script cancel")
+	utils.ZapLog.Debug("set script cancel", zap.String("script", fmt.Sprintf("%p", ls)))
 	l.clock.Lock()
 	l.cancels[ls] = cancel
 	l.clock.Unlock()
 }
 
 func (l *LStatePool) RemoveCancel(ls *lua.LState) {
-	utils.ZapLog.Info("remove script cancel")
+	utils.ZapLog.Debug("remove script cancel", zap.String("script", fmt.Sprintf("%p", ls)))
 	l.clock.Lock()
 	delete(l.cancels, ls)
 	l.clock.Unlock()

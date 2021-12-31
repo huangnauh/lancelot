@@ -61,6 +61,7 @@ func ListCount(txn *store.Txn, userID uint16, dbID uint8, prefix PrefixType, key
 	err := txn.List(start, end, math.MaxInt16, func(k []byte, v []byte) bool {
 		count := &Count{Key: k}
 		DecodeCount(count, v)
+		utils.ZapLog.Debug("list count", zap.ByteString("key", k), zap.Int64("count", count.Value))
 		counts = append(counts, count)
 		return true
 	})
