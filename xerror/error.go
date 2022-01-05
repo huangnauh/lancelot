@@ -126,6 +126,7 @@ var (
 	InvalidWeight              = RedisNew("weight value is not a float")
 	ErrClientClosed            = RedisNew("client closed")
 	ErrUnBlocked               = RedisNew("UNBLOCKED client unblocked via CLIENT UNBLOCK")
+	ErrNoSuchMaster            = RedisNew("No such master with that name")
 
 	InvalidOffset = RedisNew("invalid offset")
 	InvalidLimit  = RedisNew("invalid limit")

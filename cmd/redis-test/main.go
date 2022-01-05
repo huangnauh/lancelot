@@ -65,6 +65,12 @@ func Example_JSONSet(rh *rejson.Handler) {
 }
 
 func main() {
+	_ = goredis.NewSentinelClient(&goredis.Options{
+		Addr: "10.0.5.135:4000",
+	})
+}
+
+func main2() {
 	client := goredis.NewClient(&goredis.Options{})
 	ctx := context.Background()
 	pubsub := client.Subscribe(ctx, "mychannel")
@@ -105,7 +111,7 @@ func main() {
 }
 
 func main1() {
-	var addr = flag.String("Server", "10.0.5.137:16379", "Redis server address")
+	var addr = flag.String("Server", "10.0.5.137:6379", "Redis server address")
 
 	rh := rejson.NewReJSONHandler()
 	flag.Parse()
@@ -120,6 +126,7 @@ func main1() {
 			log.Fatalf("redis - failed to communicate to redis-server: %v", err)
 		}
 	}()
+
 	rh.SetRedigoClient(conn)
 	fmt.Println("Executing Example_JSONSET for Redigo Client")
 	Example_JSONSet(rh)

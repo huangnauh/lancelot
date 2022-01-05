@@ -103,6 +103,11 @@ type Log struct {
 	MaxAge    int           `yaml:"max-age" json:"max-age,omitempty"`
 }
 
+type Sentinel struct {
+	MasterName string `yaml:"master-name" json:"master-name,omitempty"`
+	RunID      string `yaml:"run-id" json:"run-id,omitempty"`
+}
+
 type Config struct {
 	StartAt         time.Time `yaml:"-" json:"-"`
 	Version         int64     `yaml:"-" json:"-"`
@@ -121,6 +126,7 @@ type Config struct {
 	Auth            Auth      `yaml:"auth" json:"auth,omitempty"`
 	Rpc             Rpc       `yaml:"rpc" json:"rpc,omitempty"`
 	Redis           Redis     `yaml:"redis" json:"redis,omitempty"`
+	Sentinel        Sentinel  `yaml:"sentinel" json:"sentinel,omitempty"`
 	Log             Log       `yaml:"log" json:"log,omitempty"`
 }
 
@@ -182,6 +188,10 @@ var cfg = Config{
 		ScanMaxCount:               10000,
 		CursorExpireSecond:         10 * 60,
 		ObjectHash:                 1<<4 - 1,
+	},
+	Sentinel: Sentinel{
+		MasterName: "mymaster",
+		RunID:      "ba74de3a-1528-49eb-8178-60529af9f35e",
 	},
 	Log: Log{
 		Enable:    true,

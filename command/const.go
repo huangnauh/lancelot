@@ -225,6 +225,9 @@ const (
 	EXEC_COMMAND             = "exec"
 	MULTI_COMMAND            = "multi"
 	DISCARD_COMMAND          = "discard"
+	SENTINEL_COMMAND         = "sentinel"
+	MASTER_COMMAND           = "master"
+	MASTERBYNAME_COMMAND     = "get-master-addr-by-name"
 
 	MAX_COMMANDS   = 1024
 	MINI_SCAN_SIZE = 256

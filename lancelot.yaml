@@ -49,6 +49,9 @@ redis:
   list-type: a
   cursor-expirate-second: 600
   max-slow-msg-per-sub: 1000
+sentinel:
+  master-name: mymaster
+  run-id: ba74de3a-1528-49eb-8178-60529af9f35e
 log:
   enable: true
   slow-log: 25ms
