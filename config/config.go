@@ -93,12 +93,13 @@ type Redis struct {
 }
 
 type Log struct {
-	Enable    bool   `yaml:"enable" json:"enable,omitempty"`
-	Filename  string `yaml:"filename" json:"filename,omitempty"`
-	LineLimit int    `yaml:"line-limit" json:"line-limit,omitempty"`
-	MaxSize   int    `yaml:"max-size" json:"max-size,omitempty"`
-	MaxNum    int    `yaml:"max-num" json:"max-num,omitempty"`
-	MaxAge    int    `yaml:"max-age" json:"max-age,omitempty"`
+	Enable    bool          `yaml:"enable" json:"enable,omitempty"`
+	SlowLog   time.Duration `yaml:"slow-log" json:"slow-log,omitempty"`
+	Filename  string        `yaml:"filename" json:"filename,omitempty"`
+	LineLimit int           `yaml:"line-limit" json:"line-limit,omitempty"`
+	MaxSize   int           `yaml:"max-size" json:"max-size,omitempty"`
+	MaxNum    int           `yaml:"max-num" json:"max-num,omitempty"`
+	MaxAge    int           `yaml:"max-age" json:"max-age,omitempty"`
 }
 
 type Config struct {
@@ -183,6 +184,7 @@ var cfg = Config{
 	},
 	Log: Log{
 		Enable:    true,
+		SlowLog:   20 * time.Millisecond,
 		MaxSize:   1024 * 1024 * 1024,
 		LineLimit: 1024,
 		MaxNum:    10,

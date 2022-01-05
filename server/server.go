@@ -64,7 +64,7 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 	}
 
 	spent := time.Since(start)
-	if s.cfg.Log.Enable {
+	if s.cfg.Log.Enable && (err != nil || spent >= s.cfg.Log.SlowLog) {
 		msg := "OK"
 		if err != nil {
 			msg = err.Error()
