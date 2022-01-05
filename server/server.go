@@ -31,6 +31,7 @@ const (
 
 type Server struct {
 	sync.RWMutex
+	cfg     *config.Config
 	http    *http.Server
 	red     *redcon.Server
 	rpc     *grpc.Server
@@ -67,7 +68,7 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 	if err != nil {
 		msg = err.Error()
 	}
-	log.Printf("%s, %s, %s, %s\n", conn.RemoteAddr(), cmd.All(), spent, msg)
+	log.Printf("%s, %s, %s, %s\n", conn.RemoteAddr(), cmd.All(s.cfg.Log.LineLimit), spent, msg)
 	metric.Metric.RequestDuration.WithLabelValues(comma).Observe(spent.Seconds())
 	metric.Metric.RequestTotal.WithLabelValues(comma).Inc()
 }
@@ -76,6 +77,7 @@ func NewServer(cfg *config.Config) *Server {
 	s := &Server{
 		http:   &http.Server{},
 		closed: make(chan bool),
+		cfg:    cfg,
 	}
 	s.rpc = grpc.NewGrpcServer(cfg)
 	lancepb.RegisterLanceServer(s.rpc.GRPCServer, s.Command)

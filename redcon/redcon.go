@@ -602,11 +602,16 @@ func (c Command) String() string {
 	return string(c.Args[0])
 }
 
-func (c Command) All() string {
+func (c Command) All(n int) string {
+	i := 0
 	var b strings.Builder
 	for _, arg := range c.Args {
 		b.Write(arg)
 		b.WriteByte(' ')
+		i += len(arg) + 1
+		if i >= n {
+			break
+		}
 	}
 	return b.String()
 }

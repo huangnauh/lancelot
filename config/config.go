@@ -93,10 +93,11 @@ type Redis struct {
 }
 
 type Log struct {
-	Filename string `yaml:"filename" json:"filename,omitempty"`
-	MaxSize  int    `yaml:"max-size" json:"max-size,omitempty"`
-	MaxNum   int    `yaml:"max-num" json:"max-num,omitempty"`
-	MaxAge   int    `yaml:"max-age" json:"max-age,omitempty"`
+	Filename  string `yaml:"filename" json:"filename,omitempty"`
+	LineLimit int    `yaml:"line-limit" json:"line-limit,omitempty"`
+	MaxSize   int    `yaml:"max-size" json:"max-size,omitempty"`
+	MaxNum    int    `yaml:"max-num" json:"max-num,omitempty"`
+	MaxAge    int    `yaml:"max-age" json:"max-age,omitempty"`
 }
 
 type Config struct {
@@ -180,9 +181,10 @@ var cfg = Config{
 		ObjectHash:                 1<<4 - 1,
 	},
 	Log: Log{
-		MaxSize: 1024 * 1024 * 1024,
-		MaxNum:  10,
-		MaxAge:  30,
+		MaxSize:   1024 * 1024 * 1024,
+		LineLimit: 1024,
+		MaxNum:    10,
+		MaxAge:    30,
 	},
 }
 
