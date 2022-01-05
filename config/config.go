@@ -128,7 +128,6 @@ func Hostname() string {
 	return hostname
 }
 
-var cfgData []byte
 var cfg = Config{
 	LogLevel:  "debug",
 	PIDFile:   "redis.pid",
@@ -197,7 +196,6 @@ func LoadYAMLConfig(filename string) error {
 		return fmt.Errorf("Unmarshal: %v", err)
 	}
 	cfg.StartAt = time.Now()
-	cfgData, err = json.Marshal(cfg)
 	return err
 }
 
@@ -208,10 +206,6 @@ func GetDefaultConfig() Config {
 func SetDefaultConfigPermission() {
 	cfg.AclPermission = true
 	cfg.FlushPermission = true
-}
-
-func GetDefaultConfigData() []byte {
-	return cfgData
 }
 
 func SaveYAMLConfig(savePath string) {

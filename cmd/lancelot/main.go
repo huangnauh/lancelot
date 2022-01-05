@@ -32,14 +32,14 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "log debug level")
 	flag.Parse()
 
-	err := config.LoadYAMLConfig(configFile)
-	if err != nil {
-		panic(err)
-	}
-
 	if showVersion {
 		fmt.Println(version.Version())
 		return
+	}
+
+	err := config.LoadYAMLConfig(configFile)
+	if err != nil {
+		panic(err)
 	}
 
 	if save {
