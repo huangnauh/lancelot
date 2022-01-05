@@ -57,7 +57,7 @@ const (
 	EncodingStream
 
 	ObjectHelpCommand = "OBJECT HELP"
-	DefaultHashMark   = 1<<4 - 1
+	DefaultHashMark   = 1<<5 - 1
 
 	MinusCount    ChangeType = 0x01
 	PlusCount     ChangeType = 0x02
