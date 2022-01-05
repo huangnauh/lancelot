@@ -96,6 +96,7 @@ type Log struct {
 	Enable    bool          `yaml:"enable" json:"enable,omitempty"`
 	SlowLog   time.Duration `yaml:"slow-log" json:"slow-log,omitempty"`
 	Filename  string        `yaml:"filename" json:"filename,omitempty"`
+	ArgLimit  int           `yaml:"arg-limit" json:"arg-limit,omitempty"`
 	LineLimit int           `yaml:"line-limit" json:"line-limit,omitempty"`
 	MaxSize   int           `yaml:"max-size" json:"max-size,omitempty"`
 	MaxNum    int           `yaml:"max-num" json:"max-num,omitempty"`
@@ -184,8 +185,9 @@ var cfg = Config{
 	},
 	Log: Log{
 		Enable:    true,
-		SlowLog:   20 * time.Millisecond,
+		SlowLog:   25 * time.Millisecond,
 		MaxSize:   1024 * 1024 * 1024,
+		ArgLimit:  10,
 		LineLimit: 1024,
 		MaxNum:    10,
 		MaxAge:    30,

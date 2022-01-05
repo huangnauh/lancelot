@@ -602,21 +602,21 @@ func (c Command) String() string {
 	return string(c.Args[0])
 }
 
-func (c Command) All(n int) string {
+func (c Command) All(per, max int) string {
 	i := 0
 	var b strings.Builder
 	for _, arg := range c.Args {
-		if i >= n {
+		if i >= max {
 			break
 		}
-		if len(arg) > n-i {
-			b.Write(arg[:n-i])
-			b.WriteString("...")
-			break
+		if len(arg) > per {
+			b.WriteString("... ")
+			i += 4
+		} else {
+			b.Write(arg)
+			b.WriteByte(' ')
+			i += len(arg) + 1
 		}
-		b.Write(arg)
-		b.WriteByte(' ')
-		i += len(arg) + 1
 	}
 	return b.String()
 }

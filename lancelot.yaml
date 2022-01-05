@@ -51,9 +51,10 @@ redis:
   max-slow-msg-per-sub: 1000
 log:
   enable: true
-  slow-log: 20ms
+  slow-log: 25ms
   filename: ""
-  line-limit: 10
+  arg-limit: 10
+  line-limit: 256
   max-size: 1073741824
   max-num: 10
   max-age: 30
