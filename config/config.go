@@ -93,6 +93,7 @@ type Redis struct {
 }
 
 type Log struct {
+	Enable    bool   `yaml:"enable" json:"enable,omitempty"`
 	Filename  string `yaml:"filename" json:"filename,omitempty"`
 	LineLimit int    `yaml:"line-limit" json:"line-limit,omitempty"`
 	MaxSize   int    `yaml:"max-size" json:"max-size,omitempty"`
@@ -181,6 +182,7 @@ var cfg = Config{
 		ObjectHash:                 1<<4 - 1,
 	},
 	Log: Log{
+		Enable:    true,
 		MaxSize:   1024 * 1024 * 1024,
 		LineLimit: 1024,
 		MaxNum:    10,

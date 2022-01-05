@@ -50,8 +50,9 @@ redis:
   cursor-expirate-second: 600
   max-slow-msg-per-sub: 1000
 log:
+  enable: true
   filename: ""
-  line: 1024
+  line-limit: 10
   max-size: 1073741824
   max-num: 10
   max-age: 30

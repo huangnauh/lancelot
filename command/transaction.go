@@ -82,7 +82,7 @@ func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command
 		for i := 0; i < 3; i++ {
 			err = c.SingleHandler(conn, txn, txnHandle, comma, args)
 			if err == nil {
-				return nil
+				return txn.Err
 			}
 			time.Sleep(time.Millisecond * time.Duration(i+1))
 		}

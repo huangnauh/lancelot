@@ -64,11 +64,16 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 	}
 
 	spent := time.Since(start)
-	msg := "OK"
-	if err != nil {
-		msg = err.Error()
+	if s.cfg.Log.Enable {
+		msg := "OK"
+		if err != nil {
+			msg = err.Error()
+			if len(msg) > s.cfg.Log.LineLimit {
+				msg = msg[:s.cfg.Log.LineLimit]
+			}
+		}
+		log.Printf("%s, %s, %s, %s\n", conn.RemoteAddr(), cmd.All(s.cfg.Log.LineLimit), spent, msg)
 	}
-	log.Printf("%s, %s, %s, %s\n", conn.RemoteAddr(), cmd.All(s.cfg.Log.LineLimit), spent, msg)
 	metric.Metric.RequestDuration.WithLabelValues(comma).Observe(spent.Seconds())
 	metric.Metric.RequestTotal.WithLabelValues(comma).Inc()
 }
