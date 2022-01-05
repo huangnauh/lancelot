@@ -1,10 +1,11 @@
 /redis-server
-/lancelot-client
-lancelot
+/lancelot*
 /tikv-client
 /tidb-*
+/bin
 /redis.pid*
 /miniredis
 .vscode
 *.log
+*.pid
 __debug_bin
