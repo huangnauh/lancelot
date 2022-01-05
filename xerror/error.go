@@ -45,13 +45,17 @@ func BusyNew(text string) *RedisError {
 	return &RedisError{Prefix: "BUSY", Name: text}
 }
 
+func ExecAbortNew(text string) *RedisError {
+	return &RedisError{Prefix: "EXECABORT", Name: text}
+}
+
 var (
-	ErrWatchInsideMulti     = "ERR WATCH inside MULTI is not allowed"
-	ErrMultiNested          = "ERR MULTI calls can not be nested"
-	ErrEXECErr              = "ERR EXEC without MULTI"
-	ErrDISCARDErr           = "ERR DISCARD without MULTI"
-	ErrMultiErr             = "ERR without MULTI"
-	ErrTransactionDiscarded = "EXECABORT Transaction discarded because of previous errors."
+	ErrWatchInsideMulti     = RedisNew("WATCH inside MULTI is not allowed")
+	ErrMultiNested          = RedisNew("MULTI calls can not be nested")
+	ErrEXECErr              = RedisNew("EXEC without MULTI")
+	ErrDISCARDErr           = RedisNew("DISCARD without MULTI")
+	ErrMultiErr             = RedisNew("without MULTI")
+	ErrTransactionDiscarded = ExecAbortNew("Transaction discarded because of previous errors.")
 
 	ErrNotInteger          = RedisNew("value is not an integer or out of range")
 	ErrGTLTCompat          = RedisNew("GT and LT options at the same time are not compatible")

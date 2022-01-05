@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log"
 	"net"
 	"net/http"
 	_ "net/http/pprof" // pprof
@@ -41,7 +42,7 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 	comma := strings.ToLower(utils.B2S(cmd.Args[0]))
 	if comma != command.AUTH_COMMAND && !conn.Auth {
 		if !s.Command.Default.NoPass() {
-			conn.WriteError(xerror.ErrAuthentication.Error())
+			command.WriteConnError(conn, comma, xerror.ErrAuthentication)
 			return
 		}
 		conn.UserName = s.Command.Default.Name
@@ -52,15 +53,22 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 	defer metric.Metric.InFlight.Dec()
 	start := time.Now()
 
+	var err error
 	if handler, ok := s.Command.ConnHandle[comma]; ok {
 		utils.ZapLog.Debug("ConnHandle", zap.String("remote", conn.RemoteAddr()),
 			zap.ByteStrings("args", cmd.Args))
-		handler.Func(conn, cmd)
+		err = handler.Func(conn, cmd)
 	} else {
-		s.Command.TxnHandler(conn, comma, cmd)
+		err = s.Command.TxnHandler(conn, comma, cmd)
 	}
 
-	metric.Metric.RequestDuration.WithLabelValues(comma).Observe(time.Since(start).Seconds())
+	spent := time.Since(start)
+	msg := "OK"
+	if err != nil {
+		msg = err.Error()
+	}
+	log.Printf("%s, %s, %s, %s\n", conn.RemoteAddr(), cmd.All(), spent, msg)
+	metric.Metric.RequestDuration.WithLabelValues(comma).Observe(spent.Seconds())
 	metric.Metric.RequestTotal.WithLabelValues(comma).Inc()
 }
 

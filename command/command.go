@@ -18,7 +18,7 @@ import (
 )
 
 type TxnHandle func(txn *store.Txn, args [][]byte) interface{}
-type ConnHandle func(conn *redcon.Conn, cmd redcon.Command)
+type ConnHandle func(conn *redcon.Conn, cmd redcon.Command) error
 
 type TxnHandler struct {
 	Name            string

@@ -308,13 +308,13 @@ func (p *PsManager) publish(channel string, messages [][]byte) int {
 }
 
 // UNSUBSCRIBE channel [channel ...]
-func (c *Command) UnsubscribeHandle(conn *redcon.Conn, cmd redcon.Command) {
+func (c *Command) UnsubscribeHandle(conn *redcon.Conn, cmd redcon.Command) error {
 	if len(cmd.Args) == 1 {
 		conn.WriteArray(3)
 		conn.WriteBulkString("unsubscribe")
 		conn.WriteBulkString("all")
 		conn.WriteInt(0)
-		return
+		return nil
 	}
 	for _, resp := range cmd.Args[1:] {
 		conn.WriteArray(3)
@@ -322,16 +322,17 @@ func (c *Command) UnsubscribeHandle(conn *redcon.Conn, cmd redcon.Command) {
 		conn.WriteBulk(resp)
 		conn.WriteInt(0)
 	}
+	return nil
 }
 
 // PUNSUBSCRIBE channel [channel ...]
-func (c *Command) PUnsubscribeHandle(conn *redcon.Conn, cmd redcon.Command) {
+func (c *Command) PUnsubscribeHandle(conn *redcon.Conn, cmd redcon.Command) error {
 	if len(cmd.Args) == 1 {
 		conn.WriteArray(3)
 		conn.WriteBulkString("punsubscribe")
 		conn.WriteBulkString("all")
 		conn.WriteInt(0)
-		return
+		return nil
 	}
 	for _, resp := range cmd.Args[1:] {
 		conn.WriteArray(3)
@@ -339,28 +340,30 @@ func (c *Command) PUnsubscribeHandle(conn *redcon.Conn, cmd redcon.Command) {
 		conn.WriteBulk(resp)
 		conn.WriteInt(0)
 	}
+	return nil
 }
 
 // SUBSCRIBE channel [channel ...]
-func (c *Command) SubscribeHandle(conn *redcon.Conn, cmd redcon.Command) {
-	c.subscribe(conn, cmd, NormalChannel)
+func (c *Command) SubscribeHandle(conn *redcon.Conn, cmd redcon.Command) error {
+	return c.subscribe(conn, cmd, NormalChannel)
 }
 
 // PSUBSCRIBE channel [channel ...]
-func (c *Command) PSubscribeHandle(conn *redcon.Conn, cmd redcon.Command) {
-	c.subscribe(conn, cmd, PatternChannel)
+func (c *Command) PSubscribeHandle(conn *redcon.Conn, cmd redcon.Command) error {
+	return c.subscribe(conn, cmd, PatternChannel)
 }
 
-func (c *Command) subscribe(conn *redcon.Conn, cmd redcon.Command, channelType int) {
+func (c *Command) subscribe(conn *redcon.Conn, cmd redcon.Command, channelType int) error {
 	if len(cmd.Args) < 2 {
-		conn.WriteError(xerror.WrongArgsString(SUBSCRIBE_COMMAND))
-		return
+		err := xerror.WrongArgsError(SUBSCRIBE_COMMAND)
+		WriteConnError(conn, SUBSCRIBE_COMMAND, err)
+		return err
 	}
 
 	err := c.psManager.WaitAlive()
 	if err != nil {
-		conn.WriteError(err.Error())
-		return
+		WriteConnError(conn, SUBSCRIBE_COMMAND, err)
+		return err
 	}
 
 	cfg := c.GetConfig(conn.UserId)
@@ -377,6 +380,7 @@ func (c *Command) subscribe(conn *redcon.Conn, cmd redcon.Command, channelType i
 	go ps.sendMessage()
 	c.psManager.subscribe(ps, cmd.Args[1:], channelType)
 	go c.psManager.runDetach(ps)
+	return nil
 }
 
 func (p *PsManager) unsubscribeChannel(ps *PsConn, channel string, channelType int) {

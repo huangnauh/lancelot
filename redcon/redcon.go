@@ -602,6 +602,15 @@ func (c Command) String() string {
 	return string(c.Args[0])
 }
 
+func (c Command) All() string {
+	var b strings.Builder
+	for _, arg := range c.Args {
+		b.Write(arg)
+		b.WriteByte(' ')
+	}
+	return b.String()
+}
+
 // Server defines a server for clients for managing client connections.
 type Server struct {
 	mu        sync.RWMutex

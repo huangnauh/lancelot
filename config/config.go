@@ -92,6 +92,13 @@ type Redis struct {
 	MaxSlowMessagePerSubscribe int    `yaml:"max-slow-msg-per-sub" json:"max-slow-msg-per-sub,omitempty"`
 }
 
+type Log struct {
+	Filename string `yaml:"filename" json:"filename,omitempty"`
+	MaxSize  int    `yaml:"max-size" json:"max-size,omitempty"`
+	MaxNum   int    `yaml:"max-num" json:"max-num,omitempty"`
+	MaxAge   int    `yaml:"max-age" json:"max-age,omitempty"`
+}
+
 type Config struct {
 	StartAt         time.Time `yaml:"-" json:"-"`
 	Version         int64     `yaml:"-" json:"-"`
@@ -110,6 +117,7 @@ type Config struct {
 	Auth            Auth      `yaml:"auth" json:"auth,omitempty"`
 	Rpc             Rpc       `yaml:"rpc" json:"rpc,omitempty"`
 	Redis           Redis     `yaml:"redis" json:"redis,omitempty"`
+	Log             Log       `yaml:"log" json:"log,omitempty"`
 }
 
 func Hostname() string {
@@ -171,6 +179,11 @@ var cfg = Config{
 		ScanMaxCount:               10000,
 		CursorExpireSecond:         10 * 60,
 		ObjectHash:                 1<<4 - 1,
+	},
+	Log: Log{
+		MaxSize: 1024 * 1024 * 1024,
+		MaxNum:  10,
+		MaxAge:  30,
 	},
 }
 

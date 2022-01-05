@@ -9,6 +9,7 @@ type metric struct {
 	InFlight        prometheus.Gauge
 	RequestTotal    *prometheus.CounterVec
 	RequestDuration *prometheus.HistogramVec
+	ErrorTotal      *prometheus.CounterVec
 }
 
 func newMetric() *metric {
@@ -32,6 +33,14 @@ func newMetric() *metric {
 				Name:      "request_duration",
 				Help:      "Bucketed histogram of request latencies.",
 				Buckets:   prometheus.ExponentialBuckets(0.0001, 2, 20), // 0.1ms ~ 52s
+			},
+			[]string{"command"},
+		),
+		ErrorTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Subsystem: version.APP,
+				Name:      "errors_total",
+				Help:      "A counter for errors.",
 			},
 			[]string{"command"},
 		),

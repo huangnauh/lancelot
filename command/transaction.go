@@ -1,11 +1,10 @@
 package command
 
 import (
-	"fmt"
-	"reflect"
 	"strings"
 	"time"
 
+	"gitlab.s.upyun.com/platform/lancelot/metric"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -47,7 +46,7 @@ func (c *Command) SingleHandler(conn *redcon.Conn, txn *store.Txn, txnHandle Txn
 	if txn.Err != nil {
 		err, ok := resp.(error)
 		if ok {
-			writerConnError(conn, err)
+			WriteConnError(conn, comma, err)
 		} else {
 			txn.WriteAny(resp)
 		}
@@ -61,15 +60,16 @@ func (c *Command) SingleHandler(conn *redcon.Conn, txn *store.Txn, txnHandle Txn
 	return nil
 }
 
-func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command) {
+func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command) error {
 	handler, ok := c.TxnHandle[comma]
 	if !ok {
 		txn, exist := c.getTransaction(conn)
 		if exist && txn != nil && txn.Multi {
 			txn.PendingErr = true
 		}
-		conn.WriteError(fmt.Sprintf("ERR unknown command '%s'", comma))
-		return
+		err := xerror.UnknownCommandError(comma)
+		WriteConnError(conn, DISCARD_COMMAND, err)
+		return err
 	}
 	txnHandle := handler.Func
 	args := cmd.Args[1:]
@@ -82,12 +82,12 @@ func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command
 		for i := 0; i < 3; i++ {
 			err = c.SingleHandler(conn, txn, txnHandle, comma, args)
 			if err == nil {
-				return
+				return nil
 			}
 			time.Sleep(time.Millisecond * time.Duration(i+1))
 		}
-		writerConnError(conn, err)
-		return
+		WriteConnError(conn, comma, err)
+		return err
 	}
 
 	txn.PendingReq = append(txn.PendingReq, cmd)
@@ -96,7 +96,7 @@ func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command
 	// if txn.Exec {
 	// 	if !txn.HasTransaction() {
 	// 		txn.Err = xerror.InvalidTxn
-	// 		writerConnError(conn, xerror.InvalidTxn)
+	// 		WriteConnError(conn, xerror.InvalidTxn)
 	// 		return
 	// 	}
 	// 	resp := txnHandle(txn, args)
@@ -106,56 +106,60 @@ func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command
 	// } else {
 
 	// }
+	return nil
 }
 
-func (c *Command) discard(conn *redcon.Conn, cmd redcon.Command) {
+func (c *Command) discard(conn *redcon.Conn, cmd redcon.Command) error {
 	utils.ZapLog.Debug("discard", zap.String("remote", conn.RemoteAddr()),
 		zap.ByteStrings("args", cmd.Args))
 	args := cmd.Args[1:]
 	if len(args) != 0 {
-		conn.WriteError(xerror.WrongArgsString(string(cmd.Args[0])))
-		return
+		err := xerror.WrongArgsError(string(cmd.Args[0]))
+		WriteConnError(conn, DISCARD_COMMAND, err)
+		return err
 	}
 	txn, _ := c.getTransaction(conn)
 	if txn == nil {
-		conn.WriteError(xerror.ErrDISCARDErr)
-		return
+		WriteConnError(conn, DISCARD_COMMAND, xerror.ErrDISCARDErr)
+		return xerror.ErrDISCARDErr
 	}
 	defer conn.SetTransaction(nil)
 	if !txn.Multi {
-		conn.WriteError(xerror.ErrDISCARDErr)
-		return
+		WriteConnError(conn, DISCARD_COMMAND, xerror.ErrDISCARDErr)
+		return xerror.ErrDISCARDErr
 	}
 	txn.Rollback()
 	conn.WriteAny(OK)
+	return nil
 }
 
-func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) {
+func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) error {
 	utils.ZapLog.Debug("Exec", zap.String("remote", conn.RemoteAddr()),
 		zap.ByteStrings("args", cmd.Args))
 	args := cmd.Args[1:]
 	if len(args) != 0 {
-		conn.WriteError(xerror.WrongArgsString(string(cmd.Args[0])))
-		return
+		err := xerror.WrongArgsError(string(cmd.Args[0]))
+		WriteConnError(conn, EXEC_COMMAND, err)
+		return err
 	}
 
 	defer conn.SetTransaction(nil)
 	txn, exist := c.getTransaction(conn)
 	if !exist || !txn.Multi {
-		conn.WriteError(xerror.ErrEXECErr)
-		return
+		WriteConnError(conn, EXEC_COMMAND, xerror.ErrEXECErr)
+		return xerror.ErrEXECErr
 	}
 	if txn.PendingErr {
-		conn.WriteError(xerror.ErrTransactionDiscarded)
-		return
+		WriteConnError(conn, EXEC_COMMAND, xerror.ErrTransactionDiscarded)
+		return xerror.ErrTransactionDiscarded
 	}
 
 	// not watch
 	if !txn.HasTransaction() {
 		err := txn.Begin()
 		if err != nil {
-			writerConnError(conn, err)
-			return
+			WriteConnError(conn, EXEC_COMMAND, err)
+			return err
 		}
 	}
 
@@ -169,14 +173,15 @@ func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) {
 		txnHandler, ok := c.TxnHandle[command]
 		if !ok {
 			txn.Rollback()
-			conn.WriteError(fmt.Sprintf("ERR unknown command '%s'", command))
-			return
+			err := xerror.UnknownCommandError(command)
+			WriteConnError(conn, EXEC_COMMAND, err)
+			return err
 		}
 		resp := txnHandler.Func(txn, cmd.Args[1:])
 		if txn.Err != nil {
 			txn.Rollback()
-			writerConnError(conn, txn.Err)
-			return
+			WriteConnError(conn, EXEC_COMMAND, txn.Err)
+			return txn.Err
 		}
 		if command == PUBLISH_COMMAND {
 			if pubindex == nil {
@@ -195,8 +200,8 @@ func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) {
 		err := c.psManager.WaitAlive()
 		if err != nil {
 			txn.Rollback()
-			writerConnError(conn, err)
-			return
+			WriteConnError(conn, EXEC_COMMAND, err)
+			return err
 		}
 	}
 
@@ -205,12 +210,12 @@ func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) {
 	if err != nil {
 		if txn.Watch {
 			conn.WriteNull()
-			return
+			return err
 		}
 
 		txn.Rollback()
-		writerConnError(conn, err)
-		return
+		WriteConnError(conn, EXEC_COMMAND, err)
+		return err
 	}
 
 	if len(pubMessage) > 0 {
@@ -222,6 +227,7 @@ func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) {
 
 	// response
 	txn.WriteAny(ret)
+	return nil
 }
 
 func (c *Command) getTransaction(conn *redcon.Conn) (*store.Txn, bool) {
@@ -254,18 +260,19 @@ func (c *Command) getOrCreateTransaction(conn *redcon.Conn) (*store.Txn, bool) {
 	return txn, false
 }
 
-func (c *Command) multi(conn *redcon.Conn, cmd redcon.Command) {
+func (c *Command) multi(conn *redcon.Conn, cmd redcon.Command) error {
 	utils.ZapLog.Debug("Multi", zap.String("remote", conn.RemoteAddr()),
 		zap.ByteStrings("args", cmd.Args))
 	args := cmd.Args[1:]
 	if len(args) != 0 {
-		conn.WriteError(xerror.WrongArgsString(string(cmd.Args[0])))
-		return
+		err := xerror.WrongArgsError(string(cmd.Args[0]))
+		WriteConnError(conn, MULTI_COMMAND, err)
+		return err
 	}
 	txn, alreadyExist := c.getOrCreateTransaction(conn)
 	if txn.Multi {
-		conn.WriteError(xerror.ErrMultiNested)
-		return
+		WriteConnError(conn, MULTI_COMMAND, xerror.ErrMultiNested)
+		return xerror.ErrMultiNested
 	}
 	txn.PendingReq = make([]redcon.Command, 0)
 	txn.Multi = true
@@ -273,28 +280,30 @@ func (c *Command) multi(conn *redcon.Conn, cmd redcon.Command) {
 		conn.SetTransaction(txn)
 	}
 	conn.WriteAny(OK)
+	return nil
 }
 
-func (c *Command) watch(conn *redcon.Conn, cmd redcon.Command) {
+func (c *Command) watch(conn *redcon.Conn, cmd redcon.Command) error {
 	utils.ZapLog.Debug("Watch", zap.String("remote", conn.RemoteAddr()),
 		zap.ByteStrings("args", cmd.Args))
 	args := cmd.Args[1:]
 	if len(args) == 0 {
-		conn.WriteError(xerror.WrongArgsString(string(cmd.Args[0])))
-		return
+		err := xerror.WrongArgsError(string(cmd.Args[0]))
+		WriteConnError(conn, WATCH_COMMAND, err)
+		return err
 	}
 
 	txn, alreadyExist := c.getOrCreateTransaction(conn)
 	if txn.Multi {
-		conn.WriteError(xerror.ErrWatchInsideMulti)
-		return
+		WriteConnError(conn, WATCH_COMMAND, xerror.ErrWatchInsideMulti)
+		return xerror.ErrWatchInsideMulti
 	}
 
 	if !txn.HasTransaction() {
 		err := txn.Begin()
 		if err != nil {
-			writerConnError(conn, err)
-			return
+			WriteConnError(conn, WATCH_COMMAND, err)
+			return err
 		}
 	}
 
@@ -305,14 +314,15 @@ func (c *Command) watch(conn *redcon.Conn, cmd redcon.Command) {
 	err := txn.LockKeys(keys)
 	if err != nil {
 		txn.Rollback()
-		writerConnError(conn, err)
-		return
+		WriteConnError(conn, WATCH_COMMAND, err)
+		return err
 	}
 	txn.Watch = true
 	if !alreadyExist {
 		conn.SetTransaction(txn)
 	}
 	conn.WriteAny(OK)
+	return nil
 }
 
 // UNWATCH
@@ -324,8 +334,15 @@ func (c *Command) UnWatchHandle(txn *store.Txn, args [][]byte) interface{} {
 	return OK
 }
 
-func writerConnError(conn *redcon.Conn, err error) {
-	utils.ZapLog.Debug("writerConnError", zap.Any("error", err), zap.Any("type", reflect.TypeOf(err)))
+// func WriteConnStringErr(conn *redcon.Conn, cmd, err string) {
+// 	utils.ZapLog.Error("WriteConnError", zap.String("cmd", cmd), zap.String("error", err))
+// 	metric.Metric.ErrorTotal.WithLabelValues(cmd).Inc()
+// 	conn.WriteError(err)
+// }
+
+func WriteConnError(conn *redcon.Conn, cmd string, err error) {
+	utils.ZapLog.Error("WriteConnError", zap.Error(err))
+	metric.Metric.ErrorTotal.WithLabelValues(cmd).Inc()
 	switch e := err.(type) {
 	case *xerror.RedisError:
 		conn.WriteError(e.StructError())
