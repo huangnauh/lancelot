@@ -229,6 +229,7 @@ const (
 	SENTINEL_COMMAND         = "sentinel"
 	MASTER_COMMAND           = "master"
 	MASTERS_COMMAND          = "masters"
+	SLAVES_COMMAND           = "slaves"
 	MASTERBYNAME_COMMAND     = "get-master-addr-by-name"
 	SENTINELS_COMMAND        = "sentinels"
 

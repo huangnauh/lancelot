@@ -65,8 +65,11 @@ func Example_JSONSet(rh *rejson.Handler) {
 }
 
 func main() {
-	_ = goredis.NewSentinelClient(&goredis.Options{
-		Addr: "10.0.5.135:4000",
+	_ = goredis.NewFailoverClient(&goredis.FailoverOptions{
+		MasterName:    "mymaster",
+		SentinelAddrs: []string{"10.0.5.137:6379"},
+		Username:      "root",
+		Password:      "root",
 	})
 }
 

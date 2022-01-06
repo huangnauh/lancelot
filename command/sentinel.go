@@ -23,6 +23,8 @@ func (c *Command) SentinelHandle(txn *store.Txn, args [][]byte) interface{} {
 	switch subCommand {
 	case MASTER_COMMAND:
 		return c.MasterHandle(txn, args[1:])
+	case SLAVES_COMMAND:
+		return c.SlavesHandle(txn, args[1:])
 	case MASTERS_COMMAND:
 		return c.MastersHandle(txn, args[1:])
 	case MASTERBYNAME_COMMAND:
@@ -32,6 +34,18 @@ func (c *Command) SentinelHandle(txn *store.Txn, args [][]byte) interface{} {
 	default:
 		return txn.SetWrongSubArgs(subCommand, SentinelHelpCommand)
 	}
+}
+
+func (c *Command) SlavesHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongArgs(SLAVES_COMMAND)
+	}
+	master := strings.ToLower(utils.B2S(args[0]))
+	cfg := config.GetDefaultConfig()
+	if master != cfg.Sentinel.MasterName {
+		return txn.SetError(xerror.ErrNoSuchMaster)
+	}
+	return EmptySlice
 }
 
 func (c *Command) MasterByNameHandle(txn *store.Txn, args [][]byte) interface{} {
