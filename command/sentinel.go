@@ -27,6 +27,8 @@ func (c *Command) SentinelHandle(txn *store.Txn, args [][]byte) interface{} {
 		return c.MastersHandle(txn, args[1:])
 	case MASTERBYNAME_COMMAND:
 		return c.MasterByNameHandle(txn, args[1:])
+	case SENTINELS_COMMAND:
+		return c.SentinelsHandle(txn, args[1:])
 	default:
 		return txn.SetWrongSubArgs(subCommand, SentinelHelpCommand)
 	}
@@ -44,8 +46,53 @@ func (c *Command) MasterByNameHandle(txn *store.Txn, args [][]byte) interface{} 
 	return []string{cfg.Host, strconv.Itoa(cfg.RedisPort)}
 }
 
+func (c *Command) SentinelsHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongArgs(SENTINELS_COMMAND)
+	}
+	master := strings.ToLower(utils.B2S(args[0]))
+	cfg := config.GetDefaultConfig()
+	if master != cfg.Sentinel.MasterName {
+		return txn.SetError(xerror.ErrNoSuchMaster)
+	}
+	return EmptySlice
+}
+
+func (c *Command) GetSentinel(cfg *config.Config) []string {
+	slices := make([]string, 28)
+	slices[0] = "name"
+	slices[1] = cfg.Sentinel.RunID
+	slices[2] = "ip"
+	slices[3] = cfg.Host
+	slices[4] = "port"
+	slices[5] = strconv.Itoa(cfg.RedisPort)
+	slices[6] = "runid"
+	slices[7] = cfg.Sentinel.RunID
+	slices[8] = "flags"
+	slices[9] = "sentinel"
+	slices[10] = "link-pending-commands"
+	slices[11] = "0"
+	slices[12] = "link-refcount"
+	slices[13] = "1"
+	slices[14] = "last-ping-sent"
+	slices[15] = "0"
+	slices[16] = "last-ok-ping-reply"
+	slices[17] = "583"
+	slices[18] = "last-ping-reply"
+	slices[19] = "583"
+	slices[20] = "down-after-milliseconds"
+	slices[21] = "30000"
+	slices[22] = "last-hello-message"
+	slices[23] = "1222"
+	slices[24] = "voted-leader"
+	slices[25] = "?"
+	slices[26] = "voted-leader-epoch"
+	slices[27] = "0"
+	return slices
+}
+
 func (c *Command) GetMaster(cfg *config.Config) []string {
-	slices := make([]string, 40, 40)
+	slices := make([]string, 40)
 	slices[0] = "name"
 	slices[1] = cfg.Sentinel.MasterName
 	slices[2] = "ip"

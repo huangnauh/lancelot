@@ -1300,6 +1300,12 @@ func NewCommand(red *redcon.Server) *Command {
 			ID:       262,
 			Typo:     ServerType,
 		},
+		ROLE_COMMAND: {
+			Func:     c.RoleHandle,
+			ReadOnly: true,
+			ID:       263,
+			Typo:     ServerType,
+		},
 		SENTINEL_COMMAND: {
 			Func:     c.SentinelHandle,
 			ReadOnly: true,

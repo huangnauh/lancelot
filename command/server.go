@@ -155,6 +155,10 @@ func (c *Command) DBSizeHandle(txn *store.Txn, args [][]byte) interface{} {
 
 // DEBUG OBJECT key
 
+func (c *Command) RoleHandle(txn *store.Txn, args [][]byte) interface{} {
+	return []interface{}{"master", "21625300", []string{}}
+}
+
 func (c *Command) InfoHandle(txn *store.Txn, args [][]byte) interface{} {
 	exe, err := os.Executable()
 	if err != nil {

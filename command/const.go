@@ -201,6 +201,7 @@ const (
 	FLUSHALL_COMMAND         = "flushall"
 	FLUSHDB_COMMAND          = "flushdb"
 	DBSIZE_COMMAND           = "dbsize"
+	ROLE_COMMAND             = "role"
 	TIME_COMMAND             = "time"
 	ACL_COMMAND              = "acl"
 	CONFIG_COMMAND           = "config"
@@ -229,6 +230,7 @@ const (
 	MASTER_COMMAND           = "master"
 	MASTERS_COMMAND          = "masters"
 	MASTERBYNAME_COMMAND     = "get-master-addr-by-name"
+	SENTINELS_COMMAND        = "sentinels"
 
 	MAX_COMMANDS   = 1024
 	MINI_SCAN_SIZE = 256
