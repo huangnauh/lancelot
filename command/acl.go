@@ -526,6 +526,10 @@ func (c *Command) aclSetRule(txn *store.Txn, u *User, r string) error {
 				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND),
 					rule, xerror.ErrTooManyPasswords)
 			}
+			if c.IsPassExist(password) {
+				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND),
+					rule, xerror.ErrInvalidPassword)
+			}
 			u.Passwords[password] = true
 		} else if rule[0] == '#' {
 			password, err := getPassword(r)
@@ -535,6 +539,10 @@ func (c *Command) aclSetRule(txn *store.Txn, u *User, r string) error {
 			if len(u.Passwords) >= txn.Config.Auth.MaxPasswordsPerUser {
 				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND),
 					rule, xerror.ErrTooManyPasswords)
+			}
+			if c.IsPassExist(password) {
+				return xerror.WrongModifier(fmt.Sprintf("%s %s", ACL_COMMAND, SETUSER_COMMAND),
+					rule, xerror.ErrInvalidPassword)
 			}
 			u.Passwords[password] = true
 		} else if rule[0] == '<' {

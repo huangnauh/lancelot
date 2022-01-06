@@ -105,6 +105,7 @@ var (
 	InvalidPassword            = RedisNew("The password hash must be exactly 64 characters and contain only lowercase hexadecimal characters")
 	ErrNotExistPassword        = RedisNew("The password you are trying to remove from the user does not exist")
 	ErrTooManyPasswords        = RedisNew("Too many passwords")
+	ErrInvalidPassword         = RedisNew("invalid password")
 	ErrSubscribeMessageTooSlow = RedisNew("subscribe message too slow")
 	UnknownCommandInACL        = RedisNew("Unknown command or category name in ACL")
 	ErrCheckFailed             = RedisNew("check failed")

@@ -210,6 +210,19 @@ func (c *Command) GetLocalUsers() []*User {
 	return users
 }
 
+func (c *Command) IsPassExist(pass string) bool {
+	c.ulock.RLock()
+	defer c.ulock.RUnlock()
+	for _, user := range c.users {
+		for p := range user.Passwords {
+			if p == pass {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (c *Command) watchUser() {
 	t := time.NewTicker(2 * time.Minute)
 	defer t.Stop()
