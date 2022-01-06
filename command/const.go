@@ -227,6 +227,7 @@ const (
 	DISCARD_COMMAND          = "discard"
 	SENTINEL_COMMAND         = "sentinel"
 	MASTER_COMMAND           = "master"
+	MASTERS_COMMAND          = "masters"
 	MASTERBYNAME_COMMAND     = "get-master-addr-by-name"
 
 	MAX_COMMANDS   = 1024

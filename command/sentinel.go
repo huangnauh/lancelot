@@ -23,6 +23,8 @@ func (c *Command) SentinelHandle(txn *store.Txn, args [][]byte) interface{} {
 	switch subCommand {
 	case MASTER_COMMAND:
 		return c.MasterHandle(txn, args[1:])
+	case MASTERS_COMMAND:
+		return c.MastersHandle(txn, args[1:])
 	case MASTERBYNAME_COMMAND:
 		return c.MasterByNameHandle(txn, args[1:])
 	default:
@@ -42,15 +44,7 @@ func (c *Command) MasterByNameHandle(txn *store.Txn, args [][]byte) interface{} 
 	return []string{cfg.Host, strconv.Itoa(cfg.RedisPort)}
 }
 
-func (c *Command) MasterHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 1 {
-		return txn.SetWrongArgs(MASTER_COMMAND)
-	}
-	master := strings.ToLower(utils.B2S(args[0]))
-	cfg := config.GetDefaultConfig()
-	if master != cfg.Sentinel.MasterName {
-		return txn.SetError(xerror.ErrNoSuchMaster)
-	}
+func (c *Command) GetMaster(cfg *config.Config) []string {
 	slices := make([]string, 40, 40)
 	slices[0] = "name"
 	slices[1] = cfg.Sentinel.MasterName
@@ -93,4 +87,24 @@ func (c *Command) MasterHandle(txn *store.Txn, args [][]byte) interface{} {
 	slices[38] = "parallel-syncs"
 	slices[39] = "1"
 	return slices
+}
+
+func (c *Command) MastersHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 0 {
+		return txn.SetWrongArgs(MASTER_COMMAND)
+	}
+	cfg := config.GetDefaultConfig()
+	return [][]string{c.GetMaster(&cfg)}
+}
+
+func (c *Command) MasterHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 {
+		return txn.SetWrongArgs(MASTER_COMMAND)
+	}
+	master := strings.ToLower(utils.B2S(args[0]))
+	cfg := config.GetDefaultConfig()
+	if master != cfg.Sentinel.MasterName {
+		return txn.SetError(xerror.ErrNoSuchMaster)
+	}
+	return c.GetMaster(&cfg)
 }
