@@ -129,10 +129,11 @@ var (
 	ErrUnBlocked               = RedisNew("UNBLOCKED client unblocked via CLIENT UNBLOCK")
 	ErrNoSuchMaster            = RedisNew("No such master with that name")
 
-	InvalidOffset = RedisNew("invalid offset")
-	InvalidLimit  = RedisNew("invalid limit")
-	ErrClosed     = RedisNew("closed")
-	ErrEmpty      = RedisNew("emtpy")
+	InvalidOffset     = RedisNew("invalid offset")
+	InvalidLimit      = RedisNew("invalid limit")
+	ErrClosed         = RedisNew("closed")
+	ErrEmpty          = RedisNew("emtpy")
+	ErrInternalServer = RedisNew("internal server error")
 )
 
 func WrongArgsString(command string) string {

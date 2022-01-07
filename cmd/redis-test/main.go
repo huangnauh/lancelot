@@ -48,12 +48,18 @@ func Example_JSONSet(rh *rejson.Handler) {
 		fmt.Println("Failed to Set: ")
 	}
 
+	rank, err := redis.Int(rh.JSONGet("student", ".rank"))
+	if err != nil {
+		log.Fatalf("Failed to JSONGet")
+		return
+	}
+	fmt.Printf("rank read from redis : %d\n", rank)
+
 	studentJSON, err := redis.Bytes(rh.JSONGet("student", "."))
 	if err != nil {
 		log.Fatalf("Failed to JSONGet")
 		return
 	}
-
 	readStudent := Student{}
 	err = json.Unmarshal(studentJSON, &readStudent)
 	if err != nil {
@@ -64,7 +70,7 @@ func Example_JSONSet(rh *rejson.Handler) {
 	fmt.Printf("Student read from redis : %#v\n", readStudent)
 }
 
-func main() {
+func main1() {
 	_ = goredis.NewFailoverClient(&goredis.FailoverOptions{
 		MasterName:    "mymaster",
 		SentinelAddrs: []string{"10.0.5.137:6379"},
@@ -113,7 +119,7 @@ func main2() {
 	}
 }
 
-func main1() {
+func main() {
 	var addr = flag.String("Server", "10.0.5.137:6379", "Redis server address")
 
 	rh := rejson.NewReJSONHandler()

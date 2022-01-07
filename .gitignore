@@ -3,7 +3,7 @@
 /tikv-client
 /tidb-*
 /bin
-/redis.pid*
+/redis*
 /miniredis
 .vscode
 *.log
