@@ -18,7 +18,7 @@ debug:
 	go build -gcflags=all="-N -l" -o bin/lancelot ./cmd/lancelot
 
 app:
-	go build -ldflags '$(GOLDFLAGS)' -o bin/lancelot ./cmd/lancelot
+	CGO_ENABLED=0 go build -ldflags '$(GOLDFLAGS)' -o bin/lancelot ./cmd/lancelot
 
 lint:
 	revive -config ./revive.toml -formatter friendly ./...
