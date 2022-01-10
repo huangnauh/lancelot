@@ -25,7 +25,7 @@ func newMetric() *metric {
 				Name:      "requests_total",
 				Help:      "A counter for requests.",
 			},
-			[]string{"command"},
+			[]string{"user", "db", "command"},
 		),
 		RequestDuration: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -34,7 +34,7 @@ func newMetric() *metric {
 				Help:      "Bucketed histogram of request latencies.",
 				Buckets:   prometheus.ExponentialBuckets(0.0001, 2, 20), // 0.1ms ~ 52s
 			},
-			[]string{"command"},
+			[]string{"user", "db", "command"},
 		),
 		ErrorTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
@@ -42,7 +42,7 @@ func newMetric() *metric {
 				Name:      "errors_total",
 				Help:      "A counter for errors.",
 			},
-			[]string{"command"},
+			[]string{"user", "db", "command"},
 		),
 	}
 }
@@ -50,7 +50,7 @@ func newMetric() *metric {
 var Metric = newMetric()
 
 func init() {
-	prometheus.MustRegister(Metric.InFlight, Metric.RequestTotal, Metric.RequestDuration)
+	prometheus.MustRegister(Metric.InFlight, Metric.RequestTotal, Metric.RequestDuration, Metric.ErrorTotal)
 }
 
 // func MetricsHandle() {

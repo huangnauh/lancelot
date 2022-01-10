@@ -11,6 +11,7 @@ import (
 	_ "net/http/pprof" // pprof
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -167,8 +168,8 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 		log.Printf("%s, %d %s, %s, %s, %s\n", conn.RemoteAddr(), conn.UserId, conn.UserName,
 			cmd.All(s.cfg.Log.ArgLimit, s.cfg.Log.LineLimit), spent, msg)
 	}
-	metric.Metric.RequestDuration.WithLabelValues(comma).Observe(spent.Seconds())
-	metric.Metric.RequestTotal.WithLabelValues(comma).Inc()
+	metric.Metric.RequestDuration.WithLabelValues(conn.UserName, strconv.Itoa(int(conn.DBId)), comma).Observe(spent.Seconds())
+	metric.Metric.RequestTotal.WithLabelValues(conn.UserName, strconv.Itoa(int(conn.DBId)), comma).Inc()
 }
 
 func NewServer(cfg *config.Config) *Server {

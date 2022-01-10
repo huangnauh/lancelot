@@ -1,6 +1,7 @@
 package command
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -342,7 +343,7 @@ func (c *Command) UnWatchHandle(txn *store.Txn, args [][]byte) interface{} {
 
 func WriteConnError(conn *redcon.Conn, cmd string, err error) {
 	utils.ZapLog.Error("WriteConnError", zap.Error(err))
-	metric.Metric.ErrorTotal.WithLabelValues(cmd).Inc()
+	metric.Metric.ErrorTotal.WithLabelValues(conn.UserName, strconv.Itoa(int(conn.DBId)), cmd).Inc()
 	switch e := err.(type) {
 	case *xerror.RedisError:
 		conn.WriteError(e.StructError())
