@@ -117,6 +117,13 @@ func (c *Command) quit(conn *redcon.Conn, cmd redcon.Command) error {
 	return conn.Close()
 }
 
+func (c *Command) command(conn *redcon.Conn, cmd redcon.Command) error {
+	utils.ZapLog.Debug("quit", zap.String("remote", conn.RemoteAddr()),
+		zap.ByteStrings("args", cmd.Args))
+	conn.WriteRaw(COMMANDS)
+	return nil
+}
+
 func (c *Command) discard(conn *redcon.Conn, cmd redcon.Command) error {
 	utils.ZapLog.Debug("discard", zap.String("remote", conn.RemoteAddr()),
 		zap.ByteStrings("args", cmd.Args))

@@ -8,6 +8,7 @@ compile:
   script:
     - apk add --no-cache --virtual .build-deps git make gcc musl-dev bash tcl
     - go install github.com/mgechev/revive@v1.1.2
+    - go install github.com/go-bindata/go-bindata/...@latest
     - go mod tidy
     - make app
     - make test

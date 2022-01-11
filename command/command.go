@@ -359,6 +359,10 @@ func NewCommand(red *redcon.Server) *Command {
 			Func: c.quit,
 			ID:   1019,
 		},
+		COMMAND_COMMAND: {
+			Func: c.command,
+			ID:   1018,
+		},
 		SUBSCRIBE_COMMAND: {
 			Func: c.SubscribeHandle,
 			ID:   352,

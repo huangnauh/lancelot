@@ -275,3 +275,15 @@ func SimpleInt(n int64) redcon.SimpleInt {
 func SimpleString(n string) redcon.SimpleString {
 	return redcon.SimpleString(n)
 }
+
+// Got from redis 6.2.4 with
+// echo 'COMMAND' | nc redis_addr redis_port
+var COMMANDS []byte
+
+func init() {
+	var err error
+	COMMANDS, err = Asset("asset/commands.log")
+	if err != nil {
+		panic(err)
+	}
+}

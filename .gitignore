@@ -6,6 +6,6 @@
 /redis*
 /miniredis
 .vscode
-*.log
+/*.log
 *.pid
 __debug_bin
