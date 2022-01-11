@@ -196,7 +196,7 @@ var cfg = Config{
 	Log: Log{
 		Enable:    true,
 		SlowLog:   25 * time.Millisecond,
-		MaxSize:   1024 * 1024 * 1024,
+		MaxSize:   1024,
 		ArgLimit:  10,
 		LineLimit: 1024,
 		MaxNum:    10,

@@ -53,10 +53,13 @@ func main() {
 		cfg.Store.Level = "debug"
 	}
 
-	log.InitAccessLog(&cfg.Log)
+	err = log.InitAccessLog(&cfg.Log)
+	if err != nil {
+		utils.ZapLog.Fatal("init access log", zap.Error(err))
+	}
 	if cfg.Store.Level != "" {
 		l := zap.NewAtomicLevel()
-		if err := l.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
+		if err = l.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
 			utils.ZapLog.Fatal("invalid log level", zap.Error(err))
 		}
 	}
