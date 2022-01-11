@@ -651,25 +651,38 @@ func covertLuaValue(val lua.LValue) interface{} {
 		table := val.(*lua.LTable)
 		count := table.Len()
 		if count != 0 {
+			c := 0
 			var values []interface{}
-			table.ForEach(func(lk, lv lua.LValue) {
+			for lk := lua.LNil; ; {
+				c++
+				var lv lua.LValue
+				lk, lv = table.Next(lk)
+				cc, ok := lk.(lua.LNumber)
+				if !ok {
+					break
+				}
+				if c != int(cc) {
+					break
+				}
 				values = append(values, covertLuaValue(lv))
-			})
+			}
 			return values
 		}
-		var singleValue interface{}
-		table.ForEach(func(lk, lv lua.LValue) {
-			if lk.Type() == lua.LTString {
-				lks := lk.String()
-				switch lks {
-				case "ok":
-					singleValue = SimpleString(lv.String())
-				case "err":
-					singleValue = xerror.MakeSafe(lv.String())
-				}
+		for lk := lua.LNil; ; {
+			var lv lua.LValue
+			lk, lv = table.Next(lk)
+			if _, ok := lk.(lua.LString); !ok {
+				break
 			}
-		})
-		return singleValue
+			lks := lk.String()
+			switch lks {
+			case "ok":
+				return SimpleString(lv.String())
+			case "err":
+				return xerror.MakeSafe(lv.String())
+			}
+		}
+		return EmptySlice
 	default:
 		return xerror.ErrLuaInvalidType
 	}

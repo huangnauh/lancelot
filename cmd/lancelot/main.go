@@ -116,7 +116,9 @@ func main() {
 	<-upg.Exit()
 
 	utils.ZapLog.Info("Shutdown...")
-	time.Sleep(2 * time.Second)
+	if debug {
+		time.Sleep(2 * time.Second)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	serv.Shutdown(ctx)
