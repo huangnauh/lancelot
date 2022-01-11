@@ -242,9 +242,8 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 
 	cur := lastKey[len(prefix):]
 	if scanOpt.cursor == ServerCursor {
-		c.SetCursor(fmt.Sprintf("%s:%s:%s:%d", string(typo),
-			args[0], scanOpt.match, txn.Timestamp), cur)
-		return []interface{}{txn.Timestamp, ret}
+		o := c.SetCursorByTimestamp(typo, string(args[0]), scanOpt.match, txn.Timestamp, cur)
+		return []interface{}{o, ret}
 	} else {
 		cur := base64.StdEncoding.EncodeToString(cur)
 		return []interface{}{cur, ret}

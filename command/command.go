@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/coocood/freecache"
+	"github.com/tikv/client-go/v2/oracle"
 	lua "github.com/yuin/gopher-lua"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/member"
@@ -275,10 +276,25 @@ func (c *Command) GetCursor(key string) ([]byte, bool) {
 	return v, true
 }
 
+func (c *Command) SetCursorByTimestamp(typo ObjectType, key, match string, timestamp uint64, data []byte) uint64 {
+	physical := oracle.ExtractPhysical(timestamp)
+	logical := oracle.ExtractLogical(timestamp)
+	physical = physical & 0xfff
+	o := oracle.ComposeTS(physical, logical)
+	c.SetCursor(fmt.Sprintf("%s:%s:%s:%d", string(typo), key, match, o), data)
+	return o
+}
+
 func (c *Command) SetCursor(key string, data []byte) {
 	cfg := c.GetConfig(c.Root.ID)
 	utils.ZapLog.Debug("SetCursor", zap.String("key", key), zap.ByteString("value", data))
-	_ = c.cache.Set(utils.S2B(key), data, cfg.Redis.CursorExpireSecond)
+	expireSecond := cfg.Redis.CursorExpireSecond
+	if expireSecond == 0 {
+		expireSecond = 10 * 60
+	} else if expireSecond > 60*60 {
+		expireSecond = 60 * 60
+	}
+	_ = c.cache.Set(utils.S2B(key), data, expireSecond)
 }
 
 func (c *Command) Accept(conn *redcon.Conn) bool {

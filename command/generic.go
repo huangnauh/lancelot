@@ -619,9 +619,8 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	cur := lastKey[prefixLen:]
 	if scanOpt.cursor == ServerCursor {
-		c.SetCursor(fmt.Sprintf("%s:%s:%s:%d", string(GeneralType),
-			string(scanOpt.typo), scanOpt.match, txn.Timestamp), cur)
-		return []interface{}{txn.Timestamp, retKeys}
+		o := c.SetCursorByTimestamp(GeneralType, string(scanOpt.typo), scanOpt.match, txn.Timestamp, cur)
+		return []interface{}{o, retKeys}
 	} else {
 		cur := base64.StdEncoding.EncodeToString(cur)
 		return []interface{}{cur, retKeys}
@@ -634,7 +633,9 @@ func (c *Command) scan(txn *store.Txn, start, end []byte, scanOpt *scanOptions) 
 	retKeys := make([][]byte, 0)
 	var lastKey []byte
 	var callbackErr error
+	count := 0
 	callback := func(key, value []byte) bool {
+		count++
 		lastKey = key
 		object, err := GetObjectFromKV(key, value)
 		if err != nil {
@@ -674,6 +675,10 @@ func (c *Command) scan(txn *store.Txn, start, end []byte, scanOpt *scanOptions) 
 	}
 	if err != nil && err != store.ReachLimit {
 		return nil, lastKey, err
+	}
+
+	if len(retKeys) < scanOpt.count && err == nil {
+		lastKey = nil
 	}
 	return retKeys, lastKey, nil
 }
