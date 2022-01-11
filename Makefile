@@ -18,7 +18,6 @@ debug:
 	go build -gcflags=all="-N -l" -o bin/lancelot ./cmd/lancelot
 
 app:
-	go-bindata -o command/commands.go -pkg=command asset
 	CGO_ENABLED=0 go build -ldflags '$(GOLDFLAGS)' -o bin/lancelot ./cmd/lancelot
 
 lint:

@@ -1,6 +1,10 @@
 package command
 
-import "gitlab.s.upyun.com/platform/lancelot/redcon"
+import (
+	_ "embed"
+
+	"gitlab.s.upyun.com/platform/lancelot/redcon"
+)
 
 const (
 	KEYSPACE_CATEGORY    = "keyspace"
@@ -278,12 +282,5 @@ func SimpleString(n string) redcon.SimpleString {
 
 // Got from redis 6.2.4 with
 // echo 'COMMAND' | nc redis_addr redis_port
+//go:embed commands.data
 var COMMANDS []byte
-
-func init() {
-	var err error
-	COMMANDS, err = Asset("asset/commands.log")
-	if err != nil {
-		panic(err)
-	}
-}
