@@ -112,6 +112,7 @@ var (
 	InvalidJsonError           = RedisNew("invalid json")
 	InvalidJsonPathError       = RedisNew("invalid json path")
 	InvalidCursor              = RedisNew("invalid cursor")
+	NotFoundCursor             = RedisNew("not found cursor")
 	InvalidChannel             = RedisNew("invalid channel name")
 	InvalidPartition           = RedisNew("invalid partition")
 	ErrOutOfRange              = RedisNew("index out of range")

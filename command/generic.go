@@ -526,6 +526,8 @@ func (c *Command) checkCursor(scanOpt *scanOptions, cursor []byte,
 			if ok {
 				cur := utils.NextKey(cur)
 				start = append(start, cur...)
+			} else {
+				return nil, xerror.NotFoundCursor
 			}
 		}
 	} else {
@@ -601,7 +603,9 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	end := utils.PrefixNext(start)
 	start, err = c.checkCursor(scanOpt, cursor, fmt.Sprintf("%s:%s:%s", string(GeneralType),
 		string(scanOpt.typo), scanOpt.match), start)
-	if err != nil {
+	if err == xerror.NotFoundCursor {
+		return []interface{}{0, EmptySlice}
+	} else if err != nil {
 		return txn.SetError(err)
 	}
 

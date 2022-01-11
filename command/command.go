@@ -339,6 +339,10 @@ func NewCommand(red *redcon.Server) *Command {
 			Func: c.discard,
 			ID:   1020,
 		},
+		QUIT_COMMAND: {
+			Func: c.quit,
+			ID:   1019,
+		},
 		SUBSCRIBE_COMMAND: {
 			Func: c.SubscribeHandle,
 			ID:   352,
@@ -1353,6 +1357,7 @@ func NewCommand(red *redcon.Server) *Command {
 		AUTH_COMMAND: {
 			Func:            c.AuthHandle,
 			ID:              292,
+			ReadOnly:        true,
 			NoSupportScript: true,
 			Typo:            UserType,
 		},

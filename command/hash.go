@@ -189,7 +189,9 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 	end := utils.PrefixNext(prefix)
 	start, err := c.checkCursor(scanOpt, cursor, fmt.Sprintf("%s:%s:%s",
 		string(typo), args[0], scanOpt.match), prefix)
-	if err != nil {
+	if err == xerror.NotFoundCursor {
+		return []interface{}{0, EmptySlice}
+	} else if err != nil {
 		return txn.SetError(err)
 	}
 	ret := make([]interface{}, 0)

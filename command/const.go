@@ -220,6 +220,7 @@ const (
 	SAVE_COMMAND             = "save"
 	PING_COMMAND             = "ping"
 	ECHO_COMMAND             = "echo"
+	QUIT_COMMAND             = "quit"
 	SHUTDONW_COMMAND         = "shutdown"
 	WATCH_COMMAND            = "watch"
 	UNWATCH_COMMAND          = "unwatch"

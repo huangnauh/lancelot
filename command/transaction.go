@@ -110,6 +110,13 @@ func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command
 	return nil
 }
 
+func (c *Command) quit(conn *redcon.Conn, cmd redcon.Command) error {
+	utils.ZapLog.Debug("quit", zap.String("remote", conn.RemoteAddr()),
+		zap.ByteStrings("args", cmd.Args))
+	conn.WriteAny(OK)
+	return conn.Close()
+}
+
 func (c *Command) discard(conn *redcon.Conn, cmd redcon.Command) error {
 	utils.ZapLog.Debug("discard", zap.String("remote", conn.RemoteAddr()),
 		zap.ByteStrings("args", cmd.Args))
