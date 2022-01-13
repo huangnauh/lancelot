@@ -235,5 +235,11 @@ func (c *Command) InfoHandle(txn *store.Txn, args [][]byte) interface{} {
 		b.WriteString(strconv.FormatBool(c.Info.Health))
 		b.WriteString("\r\n")
 	}
+	if subcommand == "" || subcommand == "lancelot" {
+		b.WriteString("# Lancelot\r\n")
+		b.WriteString("lancelot_version:")
+		b.WriteString(version.RedisVersion())
+		b.WriteString("\r\n")
+	}
 	return b.String()
 }

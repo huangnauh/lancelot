@@ -116,6 +116,7 @@ var (
 	InvalidChannel             = RedisNew("invalid channel name")
 	InvalidPartition           = RedisNew("invalid partition")
 	ErrOutOfRange              = RedisNew("index out of range")
+	ErrDBIndexOutOfRange       = RedisNew("DB index is out of range")
 	ErrOverflow                = RedisNew("increment or decrement would overflow")
 	ErrNotFound                = RedisNew("value not found")
 	TimeOut                    = RedisNew("time out")

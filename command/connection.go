@@ -62,6 +62,10 @@ func (c *Command) SelectHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
 
+	cfg := c.GetConfig(txn.UserId)
+	if index >= int64(cfg.Auth.MaxDBPerUser) {
+		return txn.SetError(xerror.ErrDBIndexOutOfRange)
+	}
 	txn.DBId = uint8(index)
 	return OK
 }
