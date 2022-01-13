@@ -633,9 +633,7 @@ func (c *Command) scan(txn *store.Txn, start, end []byte, scanOpt *scanOptions) 
 	retKeys := make([][]byte, 0)
 	var lastKey []byte
 	var callbackErr error
-	count := 0
 	callback := func(key, value []byte) bool {
-		count++
 		lastKey = key
 		object, err := GetObjectFromKV(key, value)
 		if err != nil {

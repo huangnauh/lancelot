@@ -236,7 +236,13 @@ func (c *Command) TypeScan(txn *store.Txn, typo ObjectType, args [][]byte, getTy
 
 	if err != nil && err != store.ReachLimit {
 		return txn.SetError(err)
-	} else if len(lastKey) <= len(prefix) {
+	}
+
+	if count < scanOpt.count && err == nil {
+		lastKey = nil
+	}
+
+	if len(lastKey) <= len(prefix) {
 		return []interface{}{0, ret}
 	}
 
