@@ -257,8 +257,8 @@ func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
 			return nil
 		}
 		val := it.Value()
-		utils.ZapLog.Debug("[txn] list ", zap.String("remote", t.RemoteAddr()),
-			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.ByteString("value", val))
+		// utils.ZapLog.Debug("[txn] list ", zap.String("remote", t.RemoteAddr()),
+		// 	zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.ByteString("value", val))
 
 		if callback != nil {
 			ok := callback(key, val)

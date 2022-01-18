@@ -1290,8 +1290,20 @@ func NewCommand(red *redcon.Server) *Command {
 			Name:     TOUCH_COMMAND,
 			Func:     c.TouchHandle,
 			ID:       241,
-			Typo:     UnknownType,
+			Typo:     GeneralType,
 			ReadOnly: true,
+		},
+		RENAME_COMMAND: {
+			Name: RENAME_COMMAND,
+			Func: c.RenameHandle,
+			ID:   242,
+			Typo: GeneralType,
+		},
+		RENAMENX_COMMAND: {
+			Name: RENAMENX_COMMAND,
+			Func: c.RenameNXHandle,
+			ID:   243,
+			Typo: GeneralType,
 		},
 		// ------------------- keys end 255 ---------------------------
 

@@ -147,6 +147,8 @@ const (
 	SETBIT_COMMAND           = "setbit"
 	BITFIELD_COMMAND         = "bitfield"
 	DEL_COMMAND              = "del"
+	RENAME_COMMAND           = "rename"
+	RENAMENX_COMMAND         = "renamenx"
 	UNLINK_COMMAND           = "unlink"
 	TYPE_COMMAND             = "type"
 	SCAN_COMMAND             = "scan"

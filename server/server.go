@@ -113,6 +113,9 @@ func function(pc uintptr) []byte {
 }
 
 func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
+	if conn.Closed() {
+		return
+	}
 	comma := strings.ToLower(utils.B2S(cmd.Args[0]))
 	defer func() {
 		if err := recover(); err != nil {

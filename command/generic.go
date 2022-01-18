@@ -371,6 +371,87 @@ func (c *Command) DELHandle(txn *store.Txn, args [][]byte) interface{} {
 	return c.touchORDelete(txn, args, true)
 }
 
+// (generic) RENAMENX key newkey
+func (c *Command) RenameNXHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 2 {
+		return txn.SetWrongArgs(RENAMENX_COMMAND)
+	}
+	ret, err := c.rename(txn, args, true)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return redcon.SimpleInt(ret)
+}
+
+// (generic) RENAME key newkey
+func (c *Command) RenameHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 2 {
+		return txn.SetWrongArgs(RENAME_COMMAND)
+	}
+	_, err := c.rename(txn, args, false)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return OK
+}
+
+func (c *Command) rename(txn *store.Txn, args [][]byte, checkExist bool) (int, error) {
+	fromObject := c.NewObject(txn, UnknownType, args[0])
+	fromKey := fromObject.GetKeyBytes()
+	err := getTxnObject(txn, fromKey, fromObject, false)
+	if err == store.KeyNotFound {
+		return 0, xerror.ErrNoSuchKey
+	}
+	if err != nil {
+		return 0, err
+	}
+
+	if bytes.Equal(args[0], args[1]) {
+		return 0, nil
+	}
+
+	toObject := c.NewObject(txn, UnknownType, args[1])
+	toKey := toObject.GetKeyBytes()
+	err = getTxnObject(txn, toKey, toObject, false)
+	if err == store.KeyNotFound {
+	} else if err != nil {
+		return 0, err
+	} else {
+		if checkExist {
+			return 0, nil
+		}
+		if fromObject.Type != toObject.Type {
+			return 0, xerror.WrongTypeErr
+		}
+		err = setTxnObject(txn, toKey, toObject, DeleteKeyType|MinusCount)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	err = setTxnObject(txn, fromKey, fromObject, DeleteKeyType)
+	if err != nil {
+		return 0, err
+	}
+
+	if fromObject.TTL > 0 {
+		err = txn.Del(fromObject.GetTTLKeyBytes())
+		if err != nil {
+			return 0, err
+		}
+		fromObject.Key = toObject.Key
+		err = txn.Put(fromObject.GetTTLKeyBytes(), []byte{1})
+		if err != nil {
+			return 0, err
+		}
+	}
+	err = setTxnObject(txn, toKey, fromObject, 0)
+	if err != nil {
+		return 0, err
+	}
+	return 1, nil
+}
+
 // (generic) UNLINK key [key ...]
 func (c *Command) UnlinkHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) == 0 {

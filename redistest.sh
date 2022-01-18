@@ -1,6 +1,8 @@
 #!/bin/bash
 
-TAGS="-needs:repl -needs:debug -needs:stralgo -needs:rand -needs:bitfield -large-memory -needs:config -needs:config-maxmemory -needs:stream -needs:dump -needs:client -needs:encoding -needs:resp3 -needs:blmpop -needs:resp3 -needs:aof -needs:info -needs:sort -cluster:skip"
+TAGS="-needs:repl -needs:copy -needs:debug -needs:stralgo -needs:rand -needs:bitfield -large-memory -needs:config -needs:config-maxmemory -needs:stream -needs:dump -needs:client -needs:encoding -needs:resp3 -needs:blmpop -needs:resp3 -needs:aof -needs:info -needs:sort -cluster:skip"
+./runtest --host 127.0.0.1 --port 6379 --single unit/printver --tags "$TAGS" --ignore-encoding || exit 1
+./runtest --host 127.0.0.1 --port 6379 --single unit/quit --tags "$TAGS" --ignore-encoding || exit 1
 ./runtest --host 127.0.0.1 --port 6379 --single unit/type/string --tags "$TAGS" --ignore-encoding || exit 1
 # sleep 2
 ./runtest --host 127.0.0.1 --port 6379 --single unit/type/incr --tags "$TAGS" --ignore-encoding  || exit 1
@@ -26,5 +28,6 @@ TAGS="-needs:repl -needs:debug -needs:stralgo -needs:rand -needs:bitfield -large
 ./runtest --host 127.0.0.1 --port 6379 --single unit/multi --tags "$TAGS" --ignore-encoding  || exit 1
 # sleep 2
 ./runtest --host 127.0.0.1 --port 6379 --single unit/expire --tags "$TAGS" --ignore-encoding  || exit 1
+./runtest --host 127.0.0.1 --port 6379 --single unit/keyspace --tags "$TAGS" --ignore-encoding  || exit 1
 # sleep 2
 ./runtest --host 127.0.0.1 --port 6379 --single unit/scripting --tags "$TAGS" --ignore-encoding  || exit 1
