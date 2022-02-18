@@ -234,7 +234,11 @@ func (c *Command) ZAddHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 		members[utils.B2S(args[i+1])] = score
 	}
-	object, err := c.GetOrCreateUUIDObject(txn, ZsetType, args[0])
+	return c.zaddMembers(txn, args[0], ZsetType, members, opt)
+}
+
+func (c *Command) zaddMembers(txn *store.Txn, key []byte, typo ObjectType, members map[string]float64, opt *checkOption) interface{} {
+	object, err := c.GetOrCreateUUIDObject(txn, typo, key)
 	if err != nil {
 		return txn.SetError(err)
 	}

@@ -35,6 +35,7 @@ const (
 	StringType  ObjectType = 'k'
 	LListType   ObjectType = 'l'
 	MessageType ObjectType = 'm'
+	GeoType     ObjectType = 'o'
 	StreamType  ObjectType = 'p'
 	PubSubType  ObjectType = 'q'
 	ScriptType  ObjectType = 'r'

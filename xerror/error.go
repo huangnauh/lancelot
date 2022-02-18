@@ -207,6 +207,14 @@ func WrongPermissionString(command string) string {
 		command)
 }
 
+func InvalidGEO(longitude, latitude float64) string {
+	return fmt.Sprintf("ERR invalid longitude,latitude pair %.6f,%.6f", longitude, latitude)
+}
+
+func InvalidGEOError(longitude, latitude float64) error {
+	return RedisNew(InvalidGEO(longitude, latitude))
+}
+
 func WrongPermissionError(command string) error {
 	return RedisNew(WrongPermissionString(command))
 }
