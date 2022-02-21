@@ -220,10 +220,14 @@ func WrongUsernameError(username string) error {
 }
 
 func MakeSafeErr(err error) error {
-	msg := strings.Replace(err.Error(), "\n", ` `, -1)
+	msg := MakeSafeString(err.Error())
 	return RedisNew(msg)
 }
 
+func MakeSafeString(msg string) string {
+	return strings.Replace(msg, "\n", ` `, -1)
+}
+
 func MakeSafe(err string) error {
-	return errors.New(strings.Replace(err, "\n", ` `, -1))
+	return errors.New(MakeSafeString(err))
 }

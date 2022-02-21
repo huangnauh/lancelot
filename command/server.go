@@ -229,6 +229,20 @@ func (c *Command) InfoHandle(txn *store.Txn, args [][]byte) interface{} {
 		b.WriteString("\r\n")
 	}
 
+	if subcommand == "" || subcommand == "gc" {
+		b.WriteString("# GC\r\n")
+		info, err := c.GetGCInfo()
+		if err != nil {
+			b.WriteString(xerror.MakeSafeString(err.Error()))
+		} else {
+			b.WriteString("gc_last_time:")
+			b.WriteString(info.LastTime.String())
+			b.WriteString("\r\n")
+		}
+
+		b.WriteString("\r\n")
+	}
+
 	if subcommand == "" || subcommand == "health" {
 		b.WriteString("# Health\r\n")
 		b.WriteString("health:")
@@ -239,6 +253,17 @@ func (c *Command) InfoHandle(txn *store.Txn, args [][]byte) interface{} {
 		b.WriteString("# Lancelot\r\n")
 		b.WriteString("lancelot_version:")
 		b.WriteString(version.RedisVersion())
+		b.WriteString("\r\n")
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		leader := c.client.GetLeader(ctx)
+		b.WriteString("leader:")
+		b.WriteString(leader)
+		b.WriteString("\r\n")
+		serverId := c.client.ID()
+		b.WriteString("id:")
+		b.WriteString(serverId)
 		b.WriteString("\r\n")
 	}
 	return b.String()

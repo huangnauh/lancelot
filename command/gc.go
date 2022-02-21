@@ -61,6 +61,21 @@ func (c *Command) touchGC(cfg *config.Config) {
 	}
 }
 
+type GCInfo struct {
+	LastTime time.Time
+}
+
+func (c *Command) GetGCInfo() (GCInfo, error) {
+	info := GCInfo{}
+	loadTS, err := c.client.LoadTS(GcSavedTs)
+	if err != nil {
+		utils.ZapLog.Error("[gc] load ts", zap.Error(err))
+		return info, err
+	}
+	info.LastTime = oracle.GetTimeFromTS(loadTS)
+	return info, nil
+}
+
 func (c *Command) tickGC(cfg *config.Config) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
