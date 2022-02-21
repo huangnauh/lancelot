@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"gitlab.s.upyun.com/platform/lancelot/metric"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
@@ -114,6 +115,11 @@ func (m *Manager) setLeader(id string) {
 	}
 
 	m.leader = id
+	if id == m.id {
+		metric.Metric.Leader.Set(1)
+	} else {
+		metric.Metric.Leader.Set(0)
+	}
 	select {
 	case m.leaderChan <- true:
 	default:

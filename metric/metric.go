@@ -6,6 +6,7 @@ import (
 )
 
 type metric struct {
+	Leader          prometheus.Gauge
 	InFlight        prometheus.Gauge
 	RequestTotal    *prometheus.CounterVec
 	RequestDuration *prometheus.HistogramVec
@@ -14,6 +15,11 @@ type metric struct {
 
 func newMetric() *metric {
 	return &metric{
+		Leader: prometheus.NewGauge(prometheus.GaugeOpts{
+			Subsystem: version.APP,
+			Name:      "leader",
+			Help:      "The leader of the cluster.",
+		}),
 		InFlight: prometheus.NewGauge(prometheus.GaugeOpts{
 			Subsystem: version.APP,
 			Name:      "in_flight_requests",
@@ -50,7 +56,8 @@ func newMetric() *metric {
 var Metric = newMetric()
 
 func init() {
-	prometheus.MustRegister(Metric.InFlight, Metric.RequestTotal, Metric.RequestDuration, Metric.ErrorTotal)
+	prometheus.MustRegister(Metric.Leader, Metric.InFlight, Metric.RequestTotal, Metric.RequestDuration, Metric.ErrorTotal)
+	Metric.Leader.Set(0)
 }
 
 // func MetricsHandle() {
