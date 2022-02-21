@@ -1,48 +1,79 @@
 package geo
 
 import (
-	"math"
+	"github.com/golang/geo/s1"
+	"github.com/golang/geo/s2"
+	"github.com/mmcloughlin/geohash"
 )
 
 const (
-	REDIS_GEO_MAX          = 52
+	ENC_LAT                = 90.0 //85.05112878
+	ENC_LONG               = 180.0
+	REDIS_GEO_MAX          = 64
 	EARTH_RADIUS_IN_METERS = 6372797.560856
 )
 
-func EncodeGeohash(lng, lat float64) uint64 {
-	return EncodeIntWithPrecision(lat, lng, REDIS_GEO_MAX)
+type Location struct {
+	Lat float64
+	Lng float64
 }
 
-func DecodeGeohash(score uint64) (float64, float64) {
-	lat, lng := DecodeIntWithPrecision(score, REDIS_GEO_MAX)
-	return lng, lat
+func (l Location) EncodeGeohashString() string {
+	return geohash.EncodeWithPrecision(l.Lat, l.Lng, 11)
 }
 
-// haversin(θ) function
-func hsin(theta float64) float64 {
-	return math.Pow(math.Sin(theta/2), 2)
+func (l Location) EncodeGeohash(bits uint) uint64 {
+	return geohash.EncodeIntWithPrecision(l.Lat, l.Lng, bits)
 }
 
-// Distance function returns the distance (in meters) between two points of
-//     a given longitude and latitude relatively accurately (using a spherical
-//     approximation of the Earth) through the Haversin Distance Formula for
-//     great arc distance on a sphere with accuracy for small distances
-//
-// point coordinates are supplied in degrees and converted into rad. in the func
-//
-// distance returned is METERS!!!!!!
-// http://en.wikipedia.org/wiki/Haversine_formula
-func Distance(lat1, lon1, lat2, lon2 float64) float64 {
-	// convert to radians
-	// must cast radius as float to multiply later
-	var la1, lo1, la2, lo2 float64
-	la1 = lat1 * math.Pi / 180
-	lo1 = lon1 * math.Pi / 180
-	la2 = lat2 * math.Pi / 180
-	lo2 = lon2 * math.Pi / 180
+func DecodeGeohash(score uint64, bits uint) Location {
+	lat, lng := geohash.DecodeIntWithPrecision(score, bits)
+	return Location{Lat: lat, Lng: lng}
+}
 
-	// calculate
-	h := hsin(la2-la1) + math.Cos(la1)*math.Cos(la2)*hsin(lo2-lo1)
+func (l Location) ToLatLng() s2.LatLng {
+	return s2.LatLngFromDegrees(l.Lat, l.Lng)
+}
 
-	return 2 * EARTH_RADIUS_IN_METERS * math.Asin(math.Sqrt(h))
+func (l Location) Distance(other Location) float64 {
+	return l.ToLatLng().Distance(other.ToLatLng()).Radians() * EARTH_RADIUS_IN_METERS
+}
+
+func (l Location) EncodeCellID() uint64 {
+	return uint64(s2.CellIDFromLatLng(l.ToLatLng()))
+}
+
+func DecodeCellID(score uint64) Location {
+	cellID := s2.CellID(score)
+	latLng := cellID.LatLng()
+	return Location{Lat: latLng.Lat.Degrees(), Lng: latLng.Lng.Degrees()}
+}
+
+type Range struct {
+	Min uint64
+	Max uint64
+}
+
+func (l Location) RectRegion(width, height float64) s2.Region {
+	return s2.RectFromCenterSize(l.ToLatLng(), s2.LatLng{
+		Lat: s1.Angle(width / 2 / EARTH_RADIUS_IN_METERS),
+		Lng: s1.Angle(height / 2 / EARTH_RADIUS_IN_METERS),
+	})
+}
+
+func (l Location) CapRegion(meters float64) s2.Region {
+	return s2.CapFromCenterAngle(s2.PointFromLatLng(l.ToLatLng()),
+		s1.Angle(meters/EARTH_RADIUS_IN_METERS))
+}
+
+func RegionRange(region s2.Region) []Range {
+	bound := region.CellUnionBound()
+	ranges := make([]Range, len(bound))
+	for i, cellID := range bound {
+		ranges[i] = Range{
+			Min: uint64(cellID.RangeMin()),
+			Max: uint64(cellID.RangeMax()),
+		}
+	}
+	return ranges
 }

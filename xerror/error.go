@@ -89,6 +89,7 @@ var (
 	ErrScriptKilled        = RedisNew("Script killed by user with SCRIPT KILL...")
 	ErrScriptTimeout       = RedisNew("Script timeout")
 	ErrResultNan           = RedisNew("resulting score is not a number (NaN)")
+	ErrStoreOption         = RedisNew("STORE option in GEORADIUS is not compatible with WITHDIST, WITHHASH and WITHCOORDS options")
 
 	MissingTxn        = RedisNew("missing transcation")
 	InvalidTxn        = RedisNew("invalid transcation")

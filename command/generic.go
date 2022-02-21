@@ -576,7 +576,7 @@ func (c *Command) getScanOptions(txn *store.Txn, opts [][]byte) (*scanOptions, e
 			}
 
 			if count <= 0 {
-				return nil, xerror.ErrSyntax
+				return nil, xerror.ErrCountNegative
 			}
 
 			if count > txn.Config.Redis.ScanMaxCount {

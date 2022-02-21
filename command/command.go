@@ -1449,6 +1449,24 @@ func NewCommand(red *redcon.Server) *Command {
 			ID:       388,
 			Typo:     GeoType,
 		},
+		GEORADIUSBYMEMBER_COMMAND: {
+			Func:     c.GeoRadiusByMemberHandle,
+			ReadOnly: true,
+			ID:       389,
+			Typo:     GeoType,
+		},
+		GEORADIUS_RO_COMMAND: {
+			Func:     c.GeoRadiusHandle,
+			ReadOnly: true,
+			ID:       390,
+			Typo:     GeoType,
+		},
+		GEORADIUSBYMEMBER_RO_COMMAND: {
+			Func:     c.GeoRadiusByMemberHandle,
+			ReadOnly: true,
+			ID:       391,
+			Typo:     GeoType,
+		},
 		// ------------------- geo end 415 ---------------------------
 		// ------------------- translate start 992 ---------------------------
 		UNWATCH_COMMAND: {
