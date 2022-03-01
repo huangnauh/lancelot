@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/golang/geo/s2"
 	"gitlab.s.upyun.com/platform/lancelot/geo"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -205,21 +206,84 @@ const (
 	Desc     = 2
 )
 
+type ByRadius struct {
+	Radius float64
+}
+
+type ByBox struct {
+	Width  float64
+	Height float64
+}
+
 type geoOption struct {
 	Coord        bool
 	Dist         bool
 	Hash         bool
 	CellID       bool
+	FromMember   bool
+	FromLonLat   bool
 	Count        int
 	Direction    int
+	Center       geo.Location
+	Unit         float64
+	ByRadius     *ByRadius
+	ByBox        *ByBox
 	StoreKey     []byte
 	StoreDistKey []byte
 }
 
-func checkGeoOption(args [][]byte) (*geoOption, error) {
+func checkGeoOption(args [][]byte, key []byte) (*geoOption, []byte, error) {
 	opt := &geoOption{}
+	var member []byte
 	for i := 0; i < len(args); i++ {
 		switch strings.ToLower(string(args[i])) {
+		case "frommember":
+			if opt.FromLonLat || i+1 >= len(args) {
+				return nil, member, xerror.ErrSyntax
+			}
+			opt.FromMember = true
+			member = args[i+1]
+			i++
+		case "fromlonlat":
+			if opt.FromMember || i+2 >= len(args) {
+				return nil, member, xerror.ErrSyntax
+			}
+			opt.FromLonLat = true
+			l, err := checkGeoLocation(args[i+1:])
+			if err != nil {
+				return nil, member, err
+			}
+			opt.Center = l
+			i += 2
+		case "byradius":
+			if opt.ByBox != nil || i+2 >= len(args) {
+				return nil, nil, xerror.ErrSyntax
+			}
+			radius, err := strconv.ParseFloat(utils.B2S(args[i+1]), 64)
+			if err != nil || math.IsNaN(radius) || math.IsInf(radius, 0) {
+				return nil, member, xerror.ErrInvalidFloat
+			}
+			opt.Unit = toMeter(args[i+2])
+			opt.ByRadius = &ByRadius{
+				Radius: radius,
+			}
+		case "bybox":
+			if opt.ByRadius != nil || i+3 >= len(args) {
+				return nil, member, xerror.ErrSyntax
+			}
+			width, err := strconv.ParseFloat(utils.B2S(args[i+1]), 64)
+			if err != nil || math.IsNaN(width) || math.IsInf(width, 0) {
+				return nil, member, xerror.ErrInvalidFloat
+			}
+			height, err := strconv.ParseFloat(utils.B2S(args[i+2]), 64)
+			if err != nil || math.IsNaN(height) || math.IsInf(height, 0) {
+				return nil, member, xerror.ErrInvalidFloat
+			}
+			opt.Unit = toMeter(args[i+3])
+			opt.ByBox = &ByBox{
+				Width:  width,
+				Height: height,
+			}
 		case "withcoord":
 			opt.Coord = true
 		case "withdist":
@@ -230,15 +294,15 @@ func checkGeoOption(args [][]byte) (*geoOption, error) {
 			opt.Hash = true
 		case "count":
 			if i+1 >= len(args) {
-				return nil, xerror.ErrSyntax
+				return nil, member, xerror.ErrSyntax
 			}
 			count, err := strconv.Atoi(utils.B2S(args[i+1]))
 			if err != nil {
-				return nil, xerror.ErrNotInteger
+				return nil, member, xerror.ErrNotInteger
 			}
 
 			if count <= 0 {
-				return nil, xerror.ErrCountNegative
+				return nil, member, xerror.ErrCountNegative
 			}
 			i++
 			opt.Count = count
@@ -248,24 +312,31 @@ func checkGeoOption(args [][]byte) (*geoOption, error) {
 			opt.Direction = Desc
 		case "store":
 			if i+1 >= len(args) {
-				return nil, xerror.ErrSyntax
+				return nil, member, xerror.ErrSyntax
 			}
 			opt.StoreKey = args[i+1]
 			i++
 		case "storedist":
-			if i+1 >= len(args) {
-				return nil, xerror.ErrSyntax
+			if key != nil {
+				opt.StoreDistKey = key
+			} else {
+				if i+1 >= len(args) {
+					return nil, member, xerror.ErrSyntax
+				}
+				opt.StoreDistKey = args[i+1]
+				i++
 			}
-			opt.StoreDistKey = args[i+1]
-			i++
 		default:
-			return nil, xerror.ErrSyntax
+			return nil, member, xerror.ErrSyntax
 		}
 	}
-	if (opt.StoreKey != nil || opt.StoreDistKey != nil) && (opt.Coord || opt.Dist || opt.Hash) {
-		return nil, xerror.ErrStoreOption
+	if opt.StoreDistKey == nil && key != nil {
+		opt.StoreKey = key
 	}
-	return opt, nil
+	if (opt.StoreKey != nil || opt.StoreDistKey != nil) && (opt.Coord || opt.Dist || opt.Hash) {
+		return nil, member, xerror.ErrStoreOption
+	}
+	return opt, member, nil
 }
 
 type GeoInfo struct {
@@ -285,10 +356,11 @@ func (c *Command) GeoRadiusByMemberHandle(txn *store.Txn, args [][]byte) interfa
 		return txn.SetError(xerror.ErrInvalidFloat)
 	}
 	unit := toMeter(args[3])
-	opt, err := checkGeoOption(args[4:])
+	opt, _, err := checkGeoOption(args[4:], nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
+	opt.Unit = unit
 	object, zvalue, err := c.zget(txn, GeoType, args[0], args[1])
 	if err != nil {
 		return txn.SetError(err)
@@ -298,7 +370,11 @@ func (c *Command) GeoRadiusByMemberHandle(txn *store.Txn, args [][]byte) interfa
 	}
 	score := binary.BigEndian.Uint64(zvalue.Value)
 	center := geo.DecodeCellID(score)
-	return c.geoRadiusHandle(txn, object, center, radius, unit, opt, args)
+	opt.ByRadius = &ByRadius{
+		Radius: radius,
+	}
+	opt.Center = center
+	return c.geoSearchHandle(txn, object, opt, args)
 }
 
 // GEORADIUS key longitude latitude radius M|KM|FT|MI
@@ -317,7 +393,33 @@ func (c *Command) GeoRadiusHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.ErrInvalidFloat)
 	}
 	unit := toMeter(args[4])
-	opt, err := checkGeoOption(args[5:])
+	opt, _, err := checkGeoOption(args[5:], nil)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	opt.Unit = unit
+	opt.Center = location
+	opt.ByRadius = &ByRadius{
+		Radius: radius,
+	}
+
+	object := c.NewObject(txn, GeoType, args[0])
+	key := object.GetKeyBytes()
+	err = getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return nil
+	} else if err != nil {
+		return txn.SetError(err)
+	}
+	return c.geoSearchHandle(txn, object, opt, args)
+}
+
+// GEOSEARCH key [FROMMEMBER member] [FROMLONLAT longitude latitude] [BYRADIUS radius M|KM|FT|MI] [BYBOX width height M|KM|FT|MI] [ASC|DESC] [COUNT count [ANY]] [WITHCOORD] [WITHDIST] [WITHHASH]
+func (c *Command) GeoSearchHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 1 {
+		return txn.SetError(xerror.WrongArgsError(GEOSEARCH_COMMAND))
+	}
+	opt, member, err := checkGeoOption(args[1:], nil)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -329,14 +431,39 @@ func (c *Command) GeoRadiusHandle(txn *store.Txn, args [][]byte) interface{} {
 	} else if err != nil {
 		return txn.SetError(err)
 	}
-	return c.geoRadiusHandle(txn, object, location, radius, unit, opt, args)
+	if member != nil {
+		zvalue, err := c.zgetMember(txn, object, member)
+		if err != nil {
+			return txn.SetError(err)
+		}
+		if zvalue == nil {
+			return nil
+		}
+		score := binary.BigEndian.Uint64(zvalue.Value)
+		center := geo.DecodeCellID(score)
+		opt.Center = center
+	}
+	if !opt.FromLonLat && !opt.FromMember {
+		return txn.SetError(xerror.ErrSyntax)
+	}
+
+	if opt.ByBox == nil && opt.ByRadius == nil {
+		return txn.SetError(xerror.ErrSyntax)
+	}
+
+	return c.geoSearchHandle(txn, object, opt, args)
 }
 
-func (c *Command) geoRadiusHandle(txn *store.Txn, object *Object, center geo.Location,
-	radius, unit float64, opt *geoOption, args [][]byte) interface{} {
+func (c *Command) geoSearchHandle(txn *store.Txn, object *Object, opt *geoOption, args [][]byte) interface{} {
 	positions := make([]GeoInfo, 0)
-	radius *= unit
-	region := center.CapRegion(radius)
+	var region s2.Region
+	if opt.ByRadius != nil {
+		region = opt.Center.CapRegion(opt.ByRadius.Radius * opt.Unit)
+	} else if opt.ByBox != nil {
+		region = opt.Center.RectRegion(opt.ByBox.Width*opt.Unit, opt.ByBox.Height*opt.Unit)
+	} else {
+		return txn.SetError(xerror.ErrSyntax)
+	}
 	ranges := geo.RegionRange(region)
 	for _, r := range ranges {
 		utils.ZapLog.Debug("radius", zap.Uint64("range-min", r.Min), zap.Uint64("range-max", r.Max))
@@ -352,11 +479,10 @@ func (c *Command) geoRadiusHandle(txn *store.Txn, object *Object, center geo.Loc
 			member := ret[i].([]byte)
 			score := ret[i+1].(uint64)
 			l := geo.DecodeCellID(score)
-			dist := l.Distance(center)
-			if dist <= radius {
+			if l.RegionContains(region) {
 				positions = append(positions, GeoInfo{
 					Location: l,
-					Distance: dist,
+					Distance: l.Distance(opt.Center),
 					CellID:   score,
 					Member:   string(member),
 				})
@@ -375,7 +501,7 @@ func (c *Command) geoRadiusHandle(txn *store.Txn, object *Object, center geo.Loc
 	for _, l := range positions {
 		ret = append(ret, l.Member)
 		if opt.Dist {
-			ret = append(ret, l.Distance/unit)
+			ret = append(ret, l.Distance/opt.Unit)
 		}
 		if opt.CellID {
 			ret = append(ret, l.CellID)

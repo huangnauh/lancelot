@@ -39,6 +39,16 @@ func (l Location) Distance(other Location) float64 {
 	return l.ToLatLng().Distance(other.ToLatLng()).Radians() * EARTH_RADIUS_IN_METERS
 }
 
+func (l Location) RegionContains(region s2.Region) bool {
+	if r, ok := region.(s2.Cap); ok {
+		return r.ContainsPoint(s2.PointFromLatLng(l.ToLatLng()))
+	}
+	if r, ok := region.(s2.Rect); ok {
+		return r.ContainsLatLng(l.ToLatLng())
+	}
+	return false
+}
+
 func (l Location) EncodeCellID() uint64 {
 	return uint64(s2.CellIDFromLatLng(l.ToLatLng()))
 }

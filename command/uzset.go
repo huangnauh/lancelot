@@ -168,6 +168,25 @@ func (c *Command) ListByUint64Score(txn *store.Txn, object *Object, arg []byte, 
 	return txn.List(start, end, txn.Config.Redis.ScanMaxCount, callback)
 }
 
+func (c *Command) zgetMember(txn *store.Txn, object *Object, m []byte) (*Value, error) {
+	zkey := object.GetValueBytes(EncodeMemberKey(m))
+	v, err := txn.Get(zkey)
+	if err == store.KeyNotFound {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	if v == nil {
+		return nil, nil
+	}
+	zvalue := &Value{}
+	err = DecodeValue(v, zvalue)
+	if err != nil {
+		return nil, err
+	}
+	return zvalue, nil
+}
+
 func (c *Command) zget(txn *store.Txn, typo ObjectType, k, m []byte) (*Object, *Value, error) {
 	object := c.NewObject(txn, typo, k)
 	key := object.GetKeyBytes()
@@ -177,18 +196,7 @@ func (c *Command) zget(txn *store.Txn, typo ObjectType, k, m []byte) (*Object, *
 	} else if err != nil {
 		return nil, nil, err
 	}
-	zkey := object.GetValueBytes(EncodeMemberKey(m))
-	v, err := txn.Get(zkey)
-	if err == store.KeyNotFound {
-		return nil, nil, nil
-	} else if err != nil {
-		return nil, nil, err
-	}
-	if v == nil {
-		return nil, nil, nil
-	}
-	zvalue := &Value{}
-	err = DecodeValue(v, zvalue)
+	zvalue, err := c.zgetMember(txn, object, m)
 	if err != nil {
 		return nil, nil, err
 	}

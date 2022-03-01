@@ -1467,6 +1467,12 @@ func NewCommand(red *redcon.Server) *Command {
 			ID:       391,
 			Typo:     GeoType,
 		},
+		GEOSEARCH_COMMAND: {
+			Func:     c.GeoSearchHandle,
+			ReadOnly: true,
+			ID:       392,
+			Typo:     GeoType,
+		},
 		// ------------------- geo end 415 ---------------------------
 		// ------------------- translate start 992 ---------------------------
 		UNWATCH_COMMAND: {

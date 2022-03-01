@@ -190,6 +190,7 @@ const (
 	GEORADIUS_RO_COMMAND         = "georadius_ro"
 	GEORADIUSBYMEMBER_COMMAND    = "georadiusbymember"
 	GEORADIUSBYMEMBER_RO_COMMAND = "georadiusbymember_ro"
+	GEOSEARCH_COMMAND            = "geosearch"
 	GEODIST_COMMAND              = "geodist"
 	HELP_COMMAND                 = "help"
 	ENCODING_COMMAND             = "encoding"
