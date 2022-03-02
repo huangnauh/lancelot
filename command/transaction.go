@@ -85,7 +85,7 @@ func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command
 			if err == nil {
 				return txn.Err
 			}
-			utils.ZapLog.Info("Retry SingleHandler", zap.String("cmd", cmd.String()), zap.Int("i", i))
+			utils.ZapLog.Info("Retry SingleHandler", zap.String("cmd", cmd.String()), zap.Int("i", i), zap.Error(err))
 			time.Sleep(time.Millisecond * time.Duration(i+1))
 		}
 		WriteConnError(conn, comma, err)
