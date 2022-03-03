@@ -189,6 +189,7 @@ var cfg = Config{
 		ScanMaxCount:               10000,
 		CursorExpireSecond:         10 * 60,
 		ObjectHash:                 1<<4 - 1,
+		DisableHashCount:           true,
 	},
 	Sentinel: Sentinel{
 		MasterName: "mymaster",

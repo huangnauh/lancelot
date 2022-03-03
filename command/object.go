@@ -548,6 +548,7 @@ func (c *Command) GetCountByKey(txn *store.Txn, arg []byte, typo ObjectType) (in
 }
 
 func GetCountByObject(txn *store.Txn, object *Object) (int64, error) {
+	utils.ZapLog.Debug("GetCountByObject", zap.ByteString("key", object.Key))
 	counts, err := ListCount(txn, txn.UserId, txn.DBId, KeyPrefix, object.Value)
 	if err != nil {
 		return 0, err

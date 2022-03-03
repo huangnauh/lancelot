@@ -184,6 +184,7 @@ func (c *Command) ScanCount(txn *store.Txn, typo ObjectType, arg []byte) (int64,
 	start := getKeyFunc(object, nil)
 	end := utils.PrefixNext(start)
 	var count int64
+	utils.ZapLog.Debug("ScanCount", zap.ByteString("key", arg))
 	err = txn.List(start, end, 100*txn.Config.Redis.ScanMaxCount, func(key, value []byte) bool {
 		if len(key) < len(start) {
 			return true
