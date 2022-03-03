@@ -86,6 +86,7 @@ type GC struct {
 type Redis struct {
 	ScanMaxCount               int    `yaml:"scan-max-count" json:"scan-max-count,omitempty"`
 	DbSizeHash                 uint64 `yaml:"db-size-hash" json:"db-size-hash,omitempty"`
+	DisableHashCount           bool   `yaml:"disable-hash-count" json:"disable-hash-count,omitempty"`
 	ObjectHash                 uint16 `yaml:"object-hash" json:"object-hash,omitempty"`
 	ListType                   string `yaml:"list-type" json:"list-type,omitempty"`
 	CursorExpireSecond         int    `yaml:"cursor-expirate-second" json:"cursor-expirate-second,omitempty"`

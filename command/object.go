@@ -57,7 +57,7 @@ const (
 	EncodingStream
 
 	ObjectHelpCommand = "OBJECT HELP"
-	DefaultHashMark   = 1<<5 - 1
+	DefaultHashMark   = 1<<10 - 1
 
 	MinusCount    ChangeType = 0x01
 	PlusCount     ChangeType = 0x02
@@ -518,6 +518,10 @@ func PutOrDeleteKV(txn *store.Txn, object *Object, k, v []byte, delta int64) (in
 		return 0, err
 	}
 	if delta == 0 {
+		return 0, nil
+	}
+
+	if object.Type == HashType && txn.Config.Redis.DisableHashCount {
 		return 0, nil
 	}
 
