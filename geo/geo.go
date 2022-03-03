@@ -1,9 +1,13 @@
 package geo
 
 import (
+	"math"
+
 	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
 	"github.com/mmcloughlin/geohash"
+	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"go.uber.org/zap"
 )
 
 const (
@@ -44,7 +48,12 @@ func (l Location) RegionContains(region s2.Region) bool {
 		return r.ContainsPoint(s2.PointFromLatLng(l.ToLatLng()))
 	}
 	if r, ok := region.(s2.Rect); ok {
-		return r.ContainsLatLng(l.ToLatLng())
+		ll := l.ToLatLng()
+		utils.ZapLog.Debug("rect contains",
+			zap.Float64("lat lo", r.Lat.Lo), zap.Float64("lat hi", r.Lat.Hi),
+			zap.Float64("lng lo", r.Lng.Lo), zap.Float64("lng hi", r.Lng.Hi),
+			zap.Float64("lat", ll.Lat.Radians()), zap.Float64("lng", ll.Lng.Radians()))
+		return r.ContainsLatLng(ll)
 	}
 	return false
 }
@@ -65,10 +74,22 @@ type Range struct {
 }
 
 func (l Location) RectRegion(width, height float64) s2.Region {
-	return s2.RectFromCenterSize(l.ToLatLng(), s2.LatLng{
-		Lat: s1.Angle(width / 2 / EARTH_RADIUS_IN_METERS),
-		Lng: s1.Angle(height / 2 / EARTH_RADIUS_IN_METERS),
-	})
+	lat_delta := width / 2 / EARTH_RADIUS_IN_METERS / float64(s1.Degree)
+	if l.Lat < 0 {
+		lng_bottom := height / 2 / EARTH_RADIUS_IN_METERS / float64(s1.Degree) / math.Cos((s1.Angle(l.Lat-lat_delta) * s1.Degree).Radians())
+		utils.ZapLog.Debug("rect region", zap.Float64("width", width), zap.Float64("height", height),
+			zap.Float64("lat_delta", lat_delta), zap.Float64("lng_delta", lng_bottom))
+		return s2.RectFromLatLng(
+			s2.LatLngFromDegrees(l.Lat-lat_delta, l.Lng-lng_bottom)).AddPoint(
+			s2.LatLngFromDegrees(l.Lat+lat_delta, l.Lng+lng_bottom))
+	} else {
+		lng_top := height / 2 / EARTH_RADIUS_IN_METERS / float64(s1.Degree) / math.Cos((s1.Angle(l.Lat+lat_delta) * s1.Degree).Radians())
+		utils.ZapLog.Debug("rect region", zap.Float64("width", width), zap.Float64("height", height),
+			zap.Float64("lat_delta", lat_delta), zap.Float64("lng_delta", lng_top))
+		return s2.RectFromLatLng(
+			s2.LatLngFromDegrees(l.Lat-lat_delta, l.Lng-lng_top)).AddPoint(
+			s2.LatLngFromDegrees(l.Lat+lat_delta, l.Lng+lng_top))
+	}
 }
 
 func (l Location) CapRegion(meters float64) s2.Region {

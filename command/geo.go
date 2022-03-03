@@ -9,6 +9,7 @@ import (
 
 	"github.com/golang/geo/s2"
 	"gitlab.s.upyun.com/platform/lancelot/geo"
+	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
@@ -173,6 +174,33 @@ func checkGeoLocation(args [][]byte) (geo.Location, error) {
 	return l, nil
 }
 
+// GEOREM key member [member ...]
+func (c *Command) GeoRemHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 2 {
+		return txn.SetWrongArgs(GEOREM_COMMAND)
+	}
+	object := c.NewObject(txn, GeoType, args[0])
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return redcon.SimpleInt(0)
+	} else if err != nil {
+		return txn.SetError(err)
+	}
+
+	count := 0
+	for i := 1; i < len(args); i++ {
+		ok, err := c.zrem(txn, object, args[i])
+		if err != nil {
+			return txn.SetError(err)
+		}
+		if ok {
+			count++
+		}
+	}
+	return redcon.SimpleInt(count)
+}
+
 // GEOADD key [NX|XX] [CH] longitude latitude member [longitude latitude member ...]
 func (c *Command) GeoAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 4 {
@@ -267,7 +295,11 @@ func checkGeoOption(args [][]byte, key []byte) (*geoOption, []byte, error) {
 			opt.ByRadius = &ByRadius{
 				Radius: radius,
 			}
+			i += 2
 		case "bybox":
+			if false {
+				return nil, nil, xerror.ErrNotSupport
+			}
 			if opt.ByRadius != nil || i+3 >= len(args) {
 				return nil, member, xerror.ErrSyntax
 			}
@@ -284,6 +316,7 @@ func checkGeoOption(args [][]byte, key []byte) (*geoOption, []byte, error) {
 				Width:  width,
 				Height: height,
 			}
+			i += 3
 		case "withcoord":
 			opt.Coord = true
 		case "withdist":
@@ -466,7 +499,7 @@ func (c *Command) geoSearchHandle(txn *store.Txn, object *Object, opt *geoOption
 	}
 	ranges := geo.RegionRange(region)
 	for _, r := range ranges {
-		utils.ZapLog.Debug("radius", zap.Uint64("range-min", r.Min), zap.Uint64("range-max", r.Max))
+		utils.ZapLog.Debug("region", zap.Uint64("range-min", r.Min), zap.Uint64("range-max", r.Max))
 		ret, err := c.objectZRangeByUint64Score(txn, object, args[0], r.Min, r.Max, true, true,
 			&zRangeOption{
 				limit:      int64(txn.Config.Redis.ScanMaxCount),

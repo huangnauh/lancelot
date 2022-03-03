@@ -41,13 +41,16 @@ func getCheckOption(args [][]byte) (*checkOption, int, error) {
 		str := strings.ToLower(utils.B2S(args[i]))
 		switch str {
 		case NX:
-			if opt.Check&(CheckLT|CheckExist|CheckGT) != 0 {
+			if opt.Check&CheckExist != 0 {
+				return nil, i, xerror.ErrSyntax
+			}
+			if opt.Check&(CheckLT|CheckGT) != 0 {
 				return nil, i, xerror.ErrGTLTNXCompat
 			}
 			opt.Check |= CheckNotExist
 		case XX:
 			if opt.Check&CheckNotExist == CheckNotExist {
-				return nil, i, xerror.ErrGTLTNXCompat
+				return nil, i, xerror.ErrSyntax
 			}
 			opt.Check |= CheckExist
 		case GT:
