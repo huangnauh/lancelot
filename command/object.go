@@ -237,6 +237,10 @@ func (o *Object) IsSimple() bool {
 	return o.Type == StringType || o.Type == JsonType
 }
 
+func (o *Object) DisableCount() bool {
+	return o.Type == HashType || o.Type == AListType || o.Type == ZsetType || o.Type == SetType
+}
+
 func (o *Object) IsCountable() bool {
 	return o.Type != StringType && o.Type != JsonType && o.Type != BListType
 }
@@ -521,7 +525,7 @@ func PutOrDeleteKV(txn *store.Txn, object *Object, k, v []byte, delta int64) (in
 		return 0, nil
 	}
 
-	if object.Type == HashType && txn.Config.Redis.DisableHashCount {
+	if object.DisableCount() && txn.Config.Redis.DisableCount {
 		return 0, nil
 	}
 
@@ -543,6 +547,9 @@ func (c *Command) GetCountByKey(txn *store.Txn, arg []byte, typo ObjectType) (in
 		return 0, nil
 	} else if err != nil {
 		return 0, err
+	}
+	if txn.Config.Redis.DisableCount {
+		return c.ScanCount(txn, object, arg)
 	}
 	return GetCountByObject(txn, object)
 }

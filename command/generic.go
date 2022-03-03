@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
+	"math/rand"
 	"strconv"
 	"strings"
 
@@ -137,6 +138,15 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 	return c.expire(txn, args, newTTL, false)
 }
 
+func TTLSensitive(ttl int) int {
+	if ttl <= 0 {
+		return 0
+	}
+	ttlSensitive := ttl * 1000
+	ttlSensitive += rand.Intn(ttlSensitive)
+	return ttlSensitive
+}
+
 func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL bool) interface{} {
 	var err error
 	var i int
@@ -200,7 +210,7 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 			return SimpleInt(0)
 		}
 
-		if object.TTL == newTTL {
+		if utils.Abs(newTTL-object.TTL) <= int64(TTLSensitive(txn.Config.Redis.TTLSensitive)) {
 			return SimpleInt(1)
 		}
 
@@ -345,7 +355,7 @@ func CleanKey(txn *store.Txn, key, ttlKey []byte, object *Object, valueTTL int64
 				return err
 			}
 		} else if object.IsCountable() {
-			if txn.Config.Redis.DisableHashCount && object.Type == HashType {
+			if txn.Config.Redis.DisableCount && object.DisableCount() {
 				return nil
 			}
 			// clean count

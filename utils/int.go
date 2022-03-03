@@ -13,6 +13,13 @@ var (
 	ErrInvalidInt = errors.New("invalid int")
 )
 
+func Abs(x int64) int64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
 func GetNonnegativeInt64(arg []byte) (int64, error) {
 	offset, err := strconv.ParseInt(B2S(arg), 10, 64)
 	if err != nil {

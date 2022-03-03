@@ -147,13 +147,7 @@ func (c *Command) HLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(HLEN_COMMAND)
 	}
-	var ret int64
-	var err error
-	if !txn.Config.Redis.DisableHashCount {
-		ret, err = c.GetCountByKey(txn, args[0], HashType)
-	} else {
-		ret, err = c.ScanCount(txn, HashType, args[0])
-	}
+	ret, err := c.GetCountByKey(txn, args[0], HashType)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -168,24 +162,16 @@ func (c *Command) HScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	return c.TypeScan(txn, HashType, args, BothKV)
 }
 
-func (c *Command) ScanCount(txn *store.Txn, typo ObjectType, arg []byte) (int64, error) {
-	getKeyFunc, ok := GetKeyFuncs[typo]
+func (c *Command) ScanCount(txn *store.Txn, object *Object, arg []byte) (int64, error) {
+	getKeyFunc, ok := GetKeyFuncs[object.Type]
 	if !ok {
 		return 0, xerror.ErrNotSupport
-	}
-	object := c.NewObject(txn, typo, arg)
-	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
-	if err == store.KeyNotFound {
-		return 0, nil
-	} else if err != nil {
-		return 0, err
 	}
 	start := getKeyFunc(object, nil)
 	end := utils.PrefixNext(start)
 	var count int64
 	utils.ZapLog.Debug("ScanCount", zap.ByteString("key", arg))
-	err = txn.List(start, end, 100*txn.Config.Redis.ScanMaxCount, func(key, value []byte) bool {
+	err := txn.List(start, end, 100*txn.Config.Redis.ScanMaxCount, func(key, value []byte) bool {
 		if len(key) < len(start) {
 			return true
 		}

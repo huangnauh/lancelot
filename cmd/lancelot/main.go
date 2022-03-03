@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
@@ -77,6 +78,7 @@ func main() {
 	if err != nil {
 		utils.ZapLog.Fatal("Server init Upgrade failed", zap.Error(err))
 	}
+	rand.Seed(time.Now().UnixNano())
 	defer upg.Stop()
 	// Do an upgrade on SIGHUP
 	go func() {
