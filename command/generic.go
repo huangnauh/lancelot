@@ -345,6 +345,9 @@ func CleanKey(txn *store.Txn, key, ttlKey []byte, object *Object, valueTTL int64
 				return err
 			}
 		} else if object.IsCountable() {
+			if txn.Config.Redis.DisableHashCount && object.Type == HashType {
+				return nil
+			}
 			// clean count
 			err = DeleteCount(txn, object.UserId, object.Db, KeyPrefix, object.Value, txn.NowTime())
 			if err != nil {
