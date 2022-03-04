@@ -1231,6 +1231,7 @@ func (c *Command) checkMinMaxRank(txn *store.Txn, args [][]byte) (*Object, int64
 	} else if err != nil {
 		return object, 0, 0, false, err
 	}
+	//TODO:
 	count, err := GetCountByObject(txn, object)
 	if err != nil {
 		return object, 0, 0, false, err

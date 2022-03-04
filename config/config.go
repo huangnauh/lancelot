@@ -86,7 +86,7 @@ type GC struct {
 type Redis struct {
 	ScanMaxCount               int    `yaml:"scan-max-count" json:"scan-max-count,omitempty"`
 	DbSizeHash                 uint64 `yaml:"db-size-hash" json:"db-size-hash,omitempty"`
-	DisableCount               bool   `yaml:"disable-count" json:"disable-hash-count,omitempty"`
+	DisableCount               bool   `yaml:"disable-count" json:"disable-count,omitempty"`
 	ObjectHash                 uint16 `yaml:"object-hash" json:"object-hash,omitempty"`
 	ListType                   string `yaml:"list-type" json:"list-type,omitempty"`
 	TTLSensitive               int    `yaml:"ttl-sensitive" json:"ttl-sensitive,omitempty"`
@@ -185,7 +185,7 @@ var cfg = Config{
 		MaxMsgSize: 1024 * 1024,
 	},
 	Redis: Redis{
-		TTLSensitive:               0,
+		TTLSensitive:               1,
 		MaxSlowMessagePerSubscribe: 1000,
 		ListType:                   ALIST,
 		ScanMaxCount:               10000,

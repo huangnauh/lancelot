@@ -25,7 +25,7 @@ store:
   batch-limit: 200
 gc:
   tick-interval: 1s
-  ttl-workers: 2
+  ttl-workers: 1
   ttl-batch-limit: 1
 lua:
   init-pool-size: 1
@@ -44,8 +44,8 @@ rpc:
   compress: false
 redis:
   scan-max-count: 10000
-  disable-hash-count: true
-  db-size-hash: 1024
+  disable-count: true
+  db-size-hash: 1023
   object-hash: 31
   list-type: a
   cursor-expirate-second: 600

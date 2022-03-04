@@ -488,19 +488,30 @@ func alPos(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{
 	uindex := opt.index[0]
 	var length int64
 	var err error
+	limit := opt.max
 	if uindex < 0 {
-		uindex = -uindex
-		start, end = end, start
-		length, err = GetCountByObject(txn, object)
-		if err != nil {
-			return nil, err
+		if !txn.Config.Redis.DisableCount {
+			//TODO:
+			uindex = -uindex
+			start, end = end, start
+			length, err = GetCountByObject(txn, object)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			limit = txn.Config.Redis.ScanMaxCount
 		}
 	}
 	idxs := make([]redcon.SimpleInt, 0)
+	var temp []redcon.SimpleInt
 	v := args[0]
 	var count, idx int64
 	begin := false
-	err = txn.List(start, end, opt.max, func(key, value []byte) bool {
+	optcount := opt.count
+	if optcount <= 0 {
+		optcount = 1
+	}
+	err = txn.List(start, end, limit, func(key, value []byte) bool {
 		if len(key) < len(prefix) || !bytes.Equal(key[:len(prefix)], prefix) {
 			return false
 		}
@@ -519,14 +530,39 @@ func alPos(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{
 		}
 		if opt.index[0] >= 0 {
 			idxs = append(idxs, redcon.SimpleInt(idx-1))
-		} else {
+		} else if uindex >= 0 { // rank < 0 and has count
 			idxs = append(idxs, redcon.SimpleInt(length-idx))
+		} else { // rank < 0 and disable count
+			if temp == nil {
+				temp = make([]redcon.SimpleInt, 0)
+			}
+			temp = append(temp, redcon.SimpleInt(idx-1))
 		}
-		return len(idxs) < opt.count
+		return len(idxs) < optcount
 	})
 	if err != nil && err != store.ReachLimit {
 		return nil, err
 	}
+
+	if temp != nil {
+		utils.ZapLog.Debug("alPos rank < 0", zap.Any("matched", temp))
+		if -uindex <= int64(len(temp)) {
+			for i := 0; i < len(temp); i++ {
+				if int64(i)+1 < -uindex {
+					// skip
+					continue
+				}
+				if int(idx)-int(temp[len(temp)-1-i]) > opt.max {
+					break
+				}
+				idxs = append(idxs, temp[len(temp)-1-i])
+				if len(idxs) >= optcount {
+					break
+				}
+			}
+		}
+	}
+
 	if opt.count == 0 {
 		if len(idxs) == 0 {
 			return nil, nil

@@ -147,9 +147,10 @@ func GetZsetKey(o *Object, field []byte) []byte {
 
 var (
 	GetKeyFuncs = map[ObjectType]GetKeyFunc{
-		HashType: GetHashKey,
-		SetType:  GetHashKey,
-		ZsetType: GetZsetKey,
+		HashType:  GetHashKey,
+		SetType:   GetHashKey,
+		AListType: GetHashKey,
+		ZsetType:  GetZsetKey,
 	}
 )
 
@@ -548,14 +549,14 @@ func (c *Command) GetCountByKey(txn *store.Txn, arg []byte, typo ObjectType) (in
 	} else if err != nil {
 		return 0, err
 	}
-	if txn.Config.Redis.DisableCount {
-		return c.ScanCount(txn, object, arg)
-	}
 	return GetCountByObject(txn, object)
 }
 
 func GetCountByObject(txn *store.Txn, object *Object) (int64, error) {
-	utils.ZapLog.Debug("GetCountByObject", zap.ByteString("key", object.Key))
+	if txn.Config.Redis.DisableCount && object.DisableCount() {
+		return ScanCount(txn, object)
+	}
+	utils.ZapLog.Debug("ListCount", zap.ByteString("key", object.Key))
 	counts, err := ListCount(txn, txn.UserId, txn.DBId, KeyPrefix, object.Value)
 	if err != nil {
 		return 0, err

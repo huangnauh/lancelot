@@ -162,7 +162,7 @@ func (c *Command) HScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	return c.TypeScan(txn, HashType, args, BothKV)
 }
 
-func (c *Command) ScanCount(txn *store.Txn, object *Object, arg []byte) (int64, error) {
+func ScanCount(txn *store.Txn, object *Object) (int64, error) {
 	getKeyFunc, ok := GetKeyFuncs[object.Type]
 	if !ok {
 		return 0, xerror.ErrNotSupport
@@ -170,7 +170,7 @@ func (c *Command) ScanCount(txn *store.Txn, object *Object, arg []byte) (int64, 
 	start := getKeyFunc(object, nil)
 	end := utils.PrefixNext(start)
 	var count int64
-	utils.ZapLog.Debug("ScanCount", zap.ByteString("key", arg))
+	utils.ZapLog.Debug("ScanCount", zap.ByteString("key", object.Key))
 	err := txn.List(start, end, 100*txn.Config.Redis.ScanMaxCount, func(key, value []byte) bool {
 		if len(key) < len(start) {
 			return true
