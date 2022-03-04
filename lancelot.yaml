@@ -44,6 +44,7 @@ rpc:
   compress: false
 redis:
   scan-max-count: 10000
+  ttl-sensitive: 0
   disable-count: true
   db-size-hash: 1023
   object-hash: 31

@@ -89,6 +89,7 @@ func (t *Txn) Begin() error {
 		utils.ZapLog.Error("[txn] client begin", zap.String("remote", t.RemoteAddr()), zap.Error(err))
 		return err
 	}
+	tx.SetVars(t.client.disableLockVars)
 	startTs := tx.StartTS()
 	t.Timestamp = startTs
 	t.Now = oracle.ExtractPhysical(startTs)

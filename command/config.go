@@ -151,7 +151,7 @@ func (c *Command) ConfigSet(txn *store.Txn, args [][]byte) interface{} {
 					return txn.SetError(err)
 				}
 			case int, int16, int32, int64, uint, uint16, uint32, uint64:
-				num, err := utils.GetPositiveInt(args[1])
+				num, err := utils.GetNonnegativeInt64(args[1])
 				if err != nil {
 					return txn.SetError(xerror.ErrNotInteger)
 				}

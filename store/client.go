@@ -9,6 +9,7 @@ import (
 
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore/unistore"
 	tikvConfig "github.com/tikv/client-go/v2/config"
 	"github.com/tikv/client-go/v2/oracle"
@@ -25,13 +26,14 @@ import (
 )
 
 type Client struct {
-	store   *tikv.KVStore
-	etcd    *clientv3.Client
-	manager *Manager
-	conf    *config.Store
-	uuid    string
-	ctx     context.Context
-	cancel  context.CancelFunc
+	store           *tikv.KVStore
+	etcd            *clientv3.Client
+	manager         *Manager
+	conf            *config.Store
+	uuid            string
+	ctx             context.Context
+	cancel          context.CancelFunc
+	disableLockVars *kv.Variables
 }
 
 func Open(conf *config.Store) (*Client, error) {
@@ -53,7 +55,14 @@ func Open(conf *config.Store) (*Client, error) {
 		unistore.BootstrapWithSingleStore(cluster)
 		client.store, err = tikv.NewTestTiKVStore(c, pdClient, nil, nil, 0)
 	} else {
+		cfg := tikvConfig.GetGlobalConfig()
+		cfg.CommitterConcurrency = conf.CommitterConcurrency
 		client.store, err = tikv.NewTxnClient(conf.PDAddrs)
+
+		var ignoreKill uint32
+		disableLockVars := kv.NewVariables(&ignoreKill)
+		disableLockVars.DisableLockBackOff = true
+		client.disableLockVars = disableLockVars
 	}
 	if err != nil {
 		utils.ZapLog.Error("new tikv client", zap.Error(err))

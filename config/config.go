@@ -41,20 +41,21 @@ func (d Duration) UnmarshalJSON(b []byte) error {
 }
 
 type Store struct {
-	PDAddrs            []string      `yaml:"pd-addrs" json:"-"`
-	Level              string        `yaml:"level" json:"-"`
-	UUID               string        `yaml:"uuid" json:"-"`
-	GCEnable           bool          `yaml:"gc-enable" json:"-"`
-	GCConcurrency      int           `yaml:"gc-concurrency" json:"gc-concurrency,omitempty"`
-	SlowRequest        time.Duration `yaml:"slow-request" json:"slow-request,omitempty"`
-	ReadTimeout        time.Duration `yaml:"read-timeout" json:"read-timeout,omitempty"`
-	ListTimeout        time.Duration `yaml:"list-timeout" json:"list-timeout,omitempty"`
-	WriteTimeout       time.Duration `yaml:"write-timeout" json:"write-timeout,omitempty"`
-	BatchPutTimeout    time.Duration `yaml:"batch-put-timeout" json:"batch-put-timeout,omitempty"`
-	BatchDeleteTimeout time.Duration `yaml:"batch-delete-timeout" json:"batch-delete-timeout,omitempty"`
-	TsoSlowThreshold   time.Duration `yaml:"tso-slow-threshold" json:"tso-slow-threshold,omitempty"`
-	DisableLockBackOff bool          `yaml:"disable-lock-back-off" json:"disable-lock-back-off,omitempty"`
-	BatchLimit         int           `yaml:"batch-limit" json:"batch-limit,omitempty"`
+	PDAddrs              []string      `yaml:"pd-addrs" json:"-"`
+	Level                string        `yaml:"level" json:"-"`
+	UUID                 string        `yaml:"uuid" json:"-"`
+	GCEnable             bool          `yaml:"gc-enable" json:"-"`
+	GCConcurrency        int           `yaml:"gc-concurrency" json:"gc-concurrency,omitempty"`
+	SlowRequest          time.Duration `yaml:"slow-request" json:"slow-request,omitempty"`
+	ReadTimeout          time.Duration `yaml:"read-timeout" json:"read-timeout,omitempty"`
+	ListTimeout          time.Duration `yaml:"list-timeout" json:"list-timeout,omitempty"`
+	WriteTimeout         time.Duration `yaml:"write-timeout" json:"write-timeout,omitempty"`
+	BatchPutTimeout      time.Duration `yaml:"batch-put-timeout" json:"batch-put-timeout,omitempty"`
+	BatchDeleteTimeout   time.Duration `yaml:"batch-delete-timeout" json:"batch-delete-timeout,omitempty"`
+	TsoSlowThreshold     time.Duration `yaml:"tso-slow-threshold" json:"tso-slow-threshold,omitempty"`
+	DisableLockBackOff   bool          `yaml:"disable-lock-back-off" json:"disable-lock-back-off,omitempty"`
+	BatchLimit           int           `yaml:"batch-limit" json:"batch-limit,omitempty"`
+	CommitterConcurrency int           `yaml:"committer-concurrency" json:"committer-concurrency,omitempty"`
 }
 
 type Lua struct {
@@ -149,18 +150,19 @@ var cfg = Config{
 	RpcPort:   6381,
 	CacheSize: 10 * 1024 * 1024,
 	Store: Store{
-		PDAddrs:            nil,
-		Level:              "debug",
-		UUID:               Hostname(),
-		GCConcurrency:      1,
-		SlowRequest:        100 * time.Millisecond,
-		ReadTimeout:        time.Second,
-		ListTimeout:        time.Minute,
-		WriteTimeout:       time.Second,
-		BatchPutTimeout:    time.Minute,
-		BatchDeleteTimeout: time.Minute,
-		TsoSlowThreshold:   100 * time.Millisecond,
-		BatchLimit:         200,
+		PDAddrs:              nil,
+		Level:                "debug",
+		UUID:                 Hostname(),
+		GCConcurrency:        1,
+		SlowRequest:          100 * time.Millisecond,
+		ReadTimeout:          time.Second,
+		ListTimeout:          time.Minute,
+		WriteTimeout:         time.Second,
+		BatchPutTimeout:      time.Minute,
+		BatchDeleteTimeout:   time.Minute,
+		TsoSlowThreshold:     100 * time.Millisecond,
+		BatchLimit:           200,
+		CommitterConcurrency: 1024,
 	},
 	GC: GC{
 		TickInterval:  time.Minute,
