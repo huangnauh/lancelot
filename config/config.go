@@ -154,6 +154,7 @@ var cfg = Config{
 		Level:                "debug",
 		UUID:                 Hostname(),
 		GCConcurrency:        1,
+		DisableLockBackOff:   true,
 		SlowRequest:          100 * time.Millisecond,
 		ReadTimeout:          time.Second,
 		ListTimeout:          time.Minute,

@@ -23,6 +23,7 @@ store:
   tso-slow-threshold: 100ms
   disable-lock-back-off: false
   batch-limit: 200
+  committer-concurrency: 1024
 gc:
   tick-interval: 1s
   ttl-workers: 1
@@ -44,11 +45,11 @@ rpc:
   compress: false
 redis:
   scan-max-count: 10000
-  ttl-sensitive: 0
-  disable-count: true
   db-size-hash: 1023
+  disable-count: true
   object-hash: 31
   list-type: a
+  ttl-sensitive: 0
   cursor-expirate-second: 600
   max-slow-msg-per-sub: 1000
 sentinel:
