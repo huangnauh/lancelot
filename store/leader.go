@@ -92,6 +92,7 @@ func (m *Manager) NewSession(id int64) (*concurrency.Session, error) {
 	if err != nil {
 		utils.ZapLog.Error("create etcd session failed", zap.Error(err))
 	}
+	utils.ZapLog.Info("create etcd session", zap.Int64("lease", int64(etcdSession.Lease())))
 	return etcdSession, err
 }
 
@@ -170,8 +171,9 @@ func (m *Manager) RunElection() error {
 		for {
 			// Discover who if any, is leader of this election
 			if node, err = election.Leader(m.ctx); err != nil {
+				utils.ZapLog.Error("while determining election leader",
+					zap.Int64("lease", int64(session.Lease())), zap.Error(err))
 				if err != concurrency.ErrElectionNoLeader {
-					utils.ZapLog.Error("while determining election leader", zap.Error(err))
 					goto reconnect
 				}
 				m.setLeader("")
@@ -209,15 +211,14 @@ func (m *Manager) RunElection() error {
 						err = election.Resign(ctx)
 						cancel()
 						if err != nil {
-							utils.ZapLog.Error("while resigning leadership after reconnect", zap.Error(err))
+							utils.ZapLog.Error("while resigning leadership after reconnect",
+								zap.Int64("lease", int64(session.Lease())), zap.Error(err))
 							goto reconnect
 						}
 					}
 				}
 				m.setLeader(leader)
 			}
-			// Reset leadership if we had it previously
-
 			// Attempt to become leader
 			errChan = make(chan error)
 			go func() {
@@ -228,9 +229,10 @@ func (m *Manager) RunElection() error {
 			select {
 			case err = <-errChan:
 				if err != nil {
-					session.Close()
 					// NOTE: Campaign currently does not return an error if session expires
-					utils.ZapLog.Error("while campaigning for leader", zap.Error(err))
+					utils.ZapLog.Error("while campaigning for leader",
+						zap.Int64("lease", int64(session.Lease())), zap.Error(err))
+					session.Close()
 					goto reconnect
 				}
 			case <-m.ctx.Done():
@@ -257,6 +259,10 @@ func (m *Manager) RunElection() error {
 					}
 					leader := string(resp.Kvs[0].Value)
 					m.setLeader(leader)
+					if leader != m.id {
+						utils.ZapLog.Info("lost leadership", zap.String("leader", leader))
+						break
+					}
 				case <-m.ctx.Done():
 					if m.leader == m.id {
 						// If resign takes longer than our TTL then lease is expired and we are no
@@ -297,6 +303,7 @@ func (m *Manager) RunElection() error {
 					}
 					continue
 				}
+				election = concurrency.NewElection(session, m.key)
 				break
 			}
 		}
