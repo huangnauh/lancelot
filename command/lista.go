@@ -34,7 +34,7 @@ var (
 			return aPush(txn, object, args, opt, false)
 		},
 		LRANGE_COMMAND: func(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
-			values, err := alRange(txn, object, args, opt, false)
+			values, err := alRange(txn, object, args, opt)
 			return values, err
 		},
 		LLEN_COMMAND:  alLen,
@@ -72,28 +72,28 @@ func alLen(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{
 	return redcon.SimpleInt(count), nil
 }
 
-func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, needKey bool) ([][]byte, error) {
-	startIndex := opt.index[0]
+func rangeRank(txn *store.Txn, object *Object, args [][]byte, startIndex, endIndex int64, onlyKey bool) ([]interface{}, error) {
 	startRevered := false
 	if startIndex < 0 {
 		startRevered = true
 		startIndex = -startIndex - 1
 	}
-	endIndex := opt.index[1]
 	endRevered := false
 	if endIndex < 0 {
 		endRevered = true
 		endIndex = -endIndex - 1
 	}
 	if !startRevered && !endRevered && startIndex > endIndex {
-		// return nil, xerror.ErrStartGreaterThanEnd
-		return EmptyBytes, nil
+		return EmptyInterface, nil
 	}
 	if startRevered && endRevered && startIndex < endIndex {
-		// return nil, xerror.ErrStartGreaterThanEnd
-		return EmptyBytes, nil
+		return EmptyInterface, nil
 	}
-	prefix := object.GetValueBytes(nil)
+	getKeyFunc := GetKeyFuncs[object.Type]
+	if getKeyFunc == nil {
+		return nil, xerror.ErrNotSupport
+	}
+	prefix := getKeyFunc(object, nil)
 	start := prefix
 	end := utils.PrefixNext(prefix)
 	lr := store.LeftRight{Prefix: prefix}
@@ -114,7 +114,7 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, needKey b
 	}
 
 	if !startRevered || !endRevered {
-		utils.ZapLog.Debug("alRange", zap.ByteString("start", start), zap.ByteString("end", end))
+		utils.ZapLog.Debug("RangeRank", zap.ByteString("start", start), zap.ByteString("end", end))
 		iter, err := txn.Iter(start, end, false)
 		if err != nil {
 			return nil, err
@@ -123,7 +123,7 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, needKey b
 	}
 
 	if startRevered || endRevered {
-		utils.ZapLog.Debug("alRange reversed", zap.ByteString("start", start), zap.ByteString("end", end))
+		utils.ZapLog.Debug("RangeRank reversed", zap.ByteString("start", start), zap.ByteString("end", end))
 		iter, err := txn.Iter(start, end, true)
 		if err != nil {
 			return nil, err
@@ -131,8 +131,9 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, needKey b
 		lr.Right = iter
 	}
 	var leftC, rightC int64 = -1, -1
-	leftList := make([][]byte, 0)
-	rightList := make([][]byte, 0)
+	var leftCount, rightCount int
+	leftList := make([]interface{}, 0)
+	rightList := make([]interface{}, 0)
 	var lastLeft, checkLeft []byte
 	var lastRight, checkRight []byte
 	meet := false
@@ -175,12 +176,18 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, needKey b
 				zap.Int64("end", leftEnd), zap.Int64("current", leftC),
 				zap.ByteString("key", left[0]))
 			if leftC >= leftStart && leftC <= leftEnd {
-				if !needKey {
+				leftCount++
+				if object.Type == AListType {
 					lvalue := &Value{}
 					DecodeValue(left[1], lvalue)
 					leftList = append(leftList, lvalue.Value)
-				} else {
-					leftList = append(leftList, left[0])
+				} else if object.Type == ZsetType {
+					score := utils.DecodeFloat(left[0][len(prefix)+1:])
+					memb := left[0][len(prefix)+8+1:]
+					leftList = append(leftList, memb)
+					if !onlyKey {
+						leftList = append(leftList, score)
+					}
 				}
 			}
 
@@ -196,12 +203,18 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, needKey b
 				zap.Int64("end", rightEnd), zap.Int64("current", rightC),
 				zap.ByteString("key", right[0]))
 			if rightC >= rightStart && rightC <= rightEnd {
-				if !needKey {
+				rightCount++
+				if object.Type == AListType {
 					lvalue := &Value{}
 					DecodeValue(right[1], lvalue)
 					rightList = append(rightList, lvalue.Value)
-				} else {
-					rightList = append(rightList, right[0])
+				} else if object.Type == ZsetType {
+					score := utils.DecodeFloat(right[0][len(prefix)+1:])
+					memb := left[0][len(prefix)+8+1:]
+					rightList = append(rightList, memb)
+					if !onlyKey {
+						rightList = append(rightList, score)
+					}
 				}
 			}
 			if rightC >= rightEnd {
@@ -212,65 +225,80 @@ func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt, needKey b
 	if !startRevered && !endRevered {
 		return leftList, nil
 	} else if startRevered && endRevered {
-		utils.ReverseBytes(rightList)
+		utils.ReversePair(rightList, !onlyKey)
 		return rightList, nil
 	}
 
 	if !startRevered {
 		if rightC < rightStart && leftC < leftStart {
-			// return nil, xerror.ErrOutOfRange
-			return EmptyBytes, nil
+			return EmptyInterface, nil
 		}
 
 		if rightC < rightStart {
-			if int(rightStart-rightC) > len(leftList) {
-				// return nil, xerror.ErrStartGreaterThanEnd
-				return EmptyBytes, nil
+			if int(rightStart-rightC) > leftCount {
+				return EmptyInterface, nil
 			}
-			return leftList[:len(leftList)-int(rightStart-rightC)+1], nil
+			r := leftCount - int(rightStart-rightC) + 1
+			if !onlyKey {
+				r = 2 * r
+			}
+			return leftList[:r], nil
 		}
 		if leftC < leftStart {
-			if int(leftStart-leftC) > len(rightList) {
-				// return nil, xerror.ErrStartGreaterThanEnd
-				return EmptyBytes, nil
+			if int(leftStart-leftC) > rightCount {
+				return EmptyInterface, nil
 			}
-			ret := rightList[int(leftStart-leftC)-1:]
-			utils.ReverseBytes(ret)
+			r := int(leftStart-leftC) - 1
+			if !onlyKey {
+				r = 2 * r
+			}
+			ret := rightList[r:]
+			utils.ReversePair(ret, !onlyKey)
 			return ret, nil
 		}
-		utils.ReverseBytes(rightList)
+		utils.ReversePair(rightList, !onlyKey)
 		return append(leftList, rightList...), nil
 	} else {
 		if rightC == rightEnd && leftC == leftEnd {
-			if meet && len(leftList) > 0 {
-				return leftList[len(leftList)-1:], nil
+			if meet && leftCount > 0 {
+				r := leftCount - 1
+				if !onlyKey {
+					r = 2 * r
+				}
+				return leftList[r:], nil
 			}
 			// return nil, xerror.ErrStartGreaterThanEnd
-			return EmptyBytes, nil
+			return EmptyInterface, nil
 		}
 
-		var retRight [][]byte
-		if int(leftEnd-leftC) > len(rightList) {
-			if needKey {
-				return EmptyBytes, nil
-			}
+		var retRight []interface{}
+		if int(leftEnd-leftC) > rightCount {
 			retRight = rightList
 		} else {
-			retRight = rightList[len(rightList)-int(leftEnd-leftC):]
-		}
-		utils.ReverseBytes(retRight)
-
-		var retLeft [][]byte
-		if int(rightEnd-rightC) > len(leftList) {
-			if needKey {
-				return EmptyBytes, nil
+			r := rightCount - int(leftEnd-leftC)
+			if !onlyKey {
+				r = 2 * r
 			}
+			retRight = rightList[r:]
+		}
+		utils.ReversePair(retRight, !onlyKey)
+
+		var retLeft []interface{}
+		if int(rightEnd-rightC) > leftCount {
 			retLeft = leftList
 		} else {
-			retLeft = leftList[len(leftList)-int(rightEnd-rightC):]
+			r := leftCount - int(rightEnd-rightC)
+			if !onlyKey {
+				r = 2 * r
+			}
+			retLeft = leftList[r:]
 		}
 		return append(retLeft, retRight...), nil
 	}
+}
+
+func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) ([]interface{}, error) {
+	return rangeRank(txn, object, args, opt.index[0], opt.index[1], true)
 }
 
 func alTrim(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
