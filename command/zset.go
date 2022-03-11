@@ -15,12 +15,15 @@ import (
 )
 
 const (
-	BYSCORE = 0x01
-	BYLEX   = 0x02
-	BYRANK  = 0x04
+	BYSCORE      = 0x01
+	BYLEX        = 0x02
+	BYRANK       = 0x04
+	MemberPrefix = 'm'
+	ScorePrefix  = 's'
 )
 
 var (
+	StartScoreKey  = []byte{'s'}
 	StartMemberKey = []byte{'m'}
 	EndMemberKey   = []byte{'n'}
 )
@@ -257,14 +260,14 @@ func (c *Command) ZAddHandle(txn *store.Txn, args [][]byte) interface{} {
 
 func EncodeMemberKey(member []byte) []byte {
 	k := make([]byte, 1+len(member))
-	k[0] = 'm'
+	k[0] = MemberPrefix
 	copy(k[1:], member)
 	return k
 }
 
 func EncodeScoreKey(score float64, member []byte) []byte {
 	k := make([]byte, 1+8+len(member))
-	k[0] = 's'
+	k[0] = ScorePrefix
 	utils.EncodeFloatBytes(score, k[1:])
 	copy(k[9:], member)
 	return k
@@ -272,7 +275,7 @@ func EncodeScoreKey(score float64, member []byte) []byte {
 
 func EncodeScoreNext(score float64) []byte {
 	k := make([]byte, 1+8)
-	k[0] = 's'
+	k[0] = ScorePrefix
 	utils.EncodeFloatBytes(score, k[1:])
 	return utils.PrefixNext(k)
 }
@@ -831,12 +834,17 @@ func (c *Command) ZRevRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 		withScores = true
 	}
-	object, start, end, ok, err := c.checkMinMaxRank(txn, args)
+	start, end, err := checkMinMaxRank(args)
 	if err != nil {
 		return txn.SetError(err)
 	}
-	if !ok {
+	object := c.NewObject(txn, ZsetType, args[0])
+	key := object.GetKeyBytes()
+	err = getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
 		return EmptyInterface
+	} else if err != nil {
+		return txn.SetError(err)
 	}
 	ret, err := c.objectZrangeByRank(txn, object, args[0], start, end, &zRangeOption{
 		withScores: withScores,
@@ -997,15 +1005,18 @@ func (c *Command) zrange(txn *store.Txn, args [][]byte, opt *zRangeOption) ([]in
 		}
 		ret, err = c.zrangeByLex(txn, args[0], min, max, includeMin, includeMax, opt)
 	} else {
-		var object *Object
 		var start, end int64
-		var ok bool
-		object, start, end, ok, err = c.checkMinMaxRank(txn, args)
+		start, end, err = checkMinMaxRank(args)
 		if err != nil {
 			return nil, err
 		}
-		if !ok {
+		object := c.NewObject(txn, ZsetType, args[0])
+		key := object.GetKeyBytes()
+		err = getTxnObject(txn, key, object, false)
+		if err == store.KeyNotFound {
 			return EmptyInterface, nil
+		} else if err != nil {
+			return nil, err
 		}
 		ret, err = c.objectZrangeByRank(txn, object, args[0], start, end, opt)
 	}
@@ -1079,8 +1090,8 @@ func (c *Command) zrangeByScore(txn *store.Txn, arg []byte, min, max float64,
 	return c.objectZRangeByScore(txn, object, arg, min, max, includeMin, includeMax, opt)
 }
 
-func (c *Command) objectZremRangeByRank(txn *store.Txn, object *Object, arg []byte, min, max int64) (int, error) {
-	ret, err := c.objectZrangeByRank(txn, object, arg, min, max, &zRangeOption{withScores: true})
+func (c *Command) objectZremRangeByRank(txn *store.Txn, object *Object, arg []byte, start, end int64) (int, error) {
+	ret, err := c.objectZrangeByRank(txn, object, arg, start, end, &zRangeOption{withScores: true})
 	if err != nil {
 		return 0, err
 	}
@@ -1091,31 +1102,18 @@ func (c *Command) objectZremRangeByRank(txn *store.Txn, object *Object, arg []by
 	return len(ret) / 2, nil
 }
 
-func (c *Command) objectZrangeByRank(txn *store.Txn, object *Object, arg []byte, min, max int64, opt *zRangeOption) ([]interface{}, error) {
-	prefix := object.GetValueBytes(nil)
-	var count int64
-	ret := make([]interface{}, 0)
-	callback := func(k, v []byte) bool {
-		if len(k) < len(prefix)+8+1 {
-			return true
-		}
-		if count >= min && count <= max {
-			score := utils.DecodeFloat(k[len(prefix)+1:])
-			memb := k[len(prefix)+8+1:]
-			ret = append(ret, memb)
-			if opt.withScores {
-				ret = append(ret, score)
-			}
-		}
-		count++
-		if count > max && count > min {
-			return false
-		}
-		return true
+func (c *Command) objectZrangeByRank(txn *store.Txn, object *Object, arg []byte, start, end int64, opt *zRangeOption) ([]interface{}, error) {
+	if opt.reversed {
+		start, end = end, start
+		start = -start - 1
+		end = -end - 1
 	}
-	err := c.ListByScore(txn, object, arg, math.Inf(-1), math.Inf(1), true, true, callback, opt.reversed)
+	ret, err := rangeRank(txn, object, start, end, !opt.withScores)
 	if err != nil {
-		return nil, err
+		return ret, err
+	}
+	if opt.reversed {
+		utils.ReversePair(ret, opt.withScores)
 	}
 	return ret, nil
 }
@@ -1204,12 +1202,17 @@ func (c *Command) ZRemRangeByRankHandle(txn *store.Txn, args [][]byte) interface
 		return txn.SetWrongArgs(ZREMRANGEBYRANK_COMMAND)
 	}
 
-	object, start, end, ok, err := c.checkMinMaxRank(txn, args)
+	start, end, err := checkMinMaxRank(args)
 	if err != nil {
 		return txn.SetError(err)
 	}
-	if !ok {
+	object := c.NewObject(txn, ZsetType, args[0])
+	key := object.GetKeyBytes()
+	err = getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
 		return redcon.SimpleInt(0)
+	} else if err != nil {
+		return txn.SetError(err)
 	}
 	ret, err := c.objectZremRangeByRank(txn, object, args[0], start, end)
 	if err != nil {
@@ -1218,46 +1221,16 @@ func (c *Command) ZRemRangeByRankHandle(txn *store.Txn, args [][]byte) interface
 	return redcon.SimpleInt(ret)
 }
 
-func (c *Command) checkMinMaxRank(txn *store.Txn, args [][]byte) (*Object, int64, int64, bool, error) {
+func checkMinMaxRank(args [][]byte) (int64, int64, error) {
 	start, err := strconv.ParseInt(utils.B2S(args[1]), 10, 64)
 	if err != nil {
-		return nil, 0, 0, false, xerror.ErrNotInteger
+		return 0, 0, xerror.ErrNotInteger
 	}
 	end, err := strconv.ParseInt(utils.B2S(args[2]), 10, 64)
 	if err != nil {
-		return nil, 0, 0, false, xerror.ErrNotInteger
+		return 0, 0, xerror.ErrNotInteger
 	}
-	object := c.NewObject(txn, ZsetType, args[0])
-	key := object.GetKeyBytes()
-	err = getTxnObject(txn, key, object, false)
-	if err == store.KeyNotFound {
-		return object, 0, 0, false, nil
-	} else if err != nil {
-		return object, 0, 0, false, err
-	}
-	//TODO:
-	count, err := GetCountByObject(txn, object)
-	if err != nil {
-		return object, 0, 0, false, err
-	}
-	if end < 0 {
-		end = count + end
-	}
-	if end < 0 {
-		return object, 0, 0, false, nil
-	}
-
-	if start < 0 {
-		start = count + start
-	}
-
-	if start < 0 {
-		start = 0
-	}
-	if start > end {
-		return object, 0, 0, false, nil
-	}
-	return object, start, end, true, nil
+	return start, end, nil
 }
 
 // ZREMRANGEBYSCORE key min max

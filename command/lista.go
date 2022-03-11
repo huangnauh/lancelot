@@ -72,7 +72,7 @@ func alLen(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{
 	return redcon.SimpleInt(count), nil
 }
 
-func rangeRank(txn *store.Txn, object *Object, args [][]byte, startIndex, endIndex int64, onlyKey bool) ([]interface{}, error) {
+func rangeRank(txn *store.Txn, object *Object, startIndex, endIndex int64, onlyKey bool) ([]interface{}, error) {
 	startRevered := false
 	if startIndex < 0 {
 		startRevered = true
@@ -89,11 +89,14 @@ func rangeRank(txn *store.Txn, object *Object, args [][]byte, startIndex, endInd
 	if startRevered && endRevered && startIndex < endIndex {
 		return EmptyInterface, nil
 	}
-	getKeyFunc := GetKeyFuncs[object.Type]
-	if getKeyFunc == nil {
+	var prefix []byte
+	if object.Type == AListType {
+		prefix = object.GetValueBytes(nil)
+	} else if object.Type == ZsetType {
+		prefix = object.GetValueBytes(StartScoreKey)
+	} else {
 		return nil, xerror.ErrNotSupport
 	}
-	prefix := getKeyFunc(object, nil)
 	start := prefix
 	end := utils.PrefixNext(prefix)
 	lr := store.LeftRight{Prefix: prefix}
@@ -182,8 +185,8 @@ func rangeRank(txn *store.Txn, object *Object, args [][]byte, startIndex, endInd
 					DecodeValue(left[1], lvalue)
 					leftList = append(leftList, lvalue.Value)
 				} else if object.Type == ZsetType {
-					score := utils.DecodeFloat(left[0][len(prefix)+1:])
-					memb := left[0][len(prefix)+8+1:]
+					score := utils.DecodeFloat(left[0][len(prefix):])
+					memb := left[0][len(prefix)+8:]
 					leftList = append(leftList, memb)
 					if !onlyKey {
 						leftList = append(leftList, score)
@@ -209,8 +212,8 @@ func rangeRank(txn *store.Txn, object *Object, args [][]byte, startIndex, endInd
 					DecodeValue(right[1], lvalue)
 					rightList = append(rightList, lvalue.Value)
 				} else if object.Type == ZsetType {
-					score := utils.DecodeFloat(right[0][len(prefix)+1:])
-					memb := left[0][len(prefix)+8+1:]
+					score := utils.DecodeFloat(right[0][len(prefix):])
+					memb := right[0][len(prefix)+8:]
 					rightList = append(rightList, memb)
 					if !onlyKey {
 						rightList = append(rightList, score)
@@ -298,7 +301,7 @@ func rangeRank(txn *store.Txn, object *Object, args [][]byte, startIndex, endInd
 }
 
 func alRange(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) ([]interface{}, error) {
-	return rangeRank(txn, object, args, opt.index[0], opt.index[1], true)
+	return rangeRank(txn, object, opt.index[0], opt.index[1], true)
 }
 
 func alTrim(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface{}, error) {
