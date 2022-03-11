@@ -313,6 +313,10 @@ func (c *Command) PutZset(txn *store.Txn, object *Object, zkey, member []byte,
 		return 0, err
 	}
 
+	if object.DisableCount() && txn.Config.Redis.DisableCount {
+		return 0, nil
+	}
+
 	count, err := GetCount(txn, txn.UserId, txn.DBId, uint64(object.Hash), KeyPrefix, object.Value, member)
 	if err == store.KeyNotFound {
 	} else if err != nil {
