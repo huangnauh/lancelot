@@ -217,15 +217,20 @@ func (c *Command) GeoAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < i+3 || (len(args)-i-3)%3 != 0 {
 		return txn.SetError(xerror.ErrSyntax)
 	}
-	members := make(map[string]uint64)
+	members := make(map[string]utils.Number)
 	for ; i < len(args); i += 3 {
 		l, err := checkGeoLocation(args[i:])
 		if err != nil {
 			return txn.SetError(err)
 		}
-		members[utils.B2S(args[i+2])] = l.EncodeCellID()
+		members[utils.B2S(args[i+2])] = utils.Number{IsInt: true, Uint64: l.EncodeCellID()}
 	}
-	return c.uzaddMembers(txn, args[0], GeoType, members, opt)
+
+	object, err := c.GetOrCreateUUIDObject(txn, GeoType, args[0])
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return c.zaddMembers(txn, object, members, opt)
 }
 
 const (
@@ -500,7 +505,8 @@ func (c *Command) geoSearchHandle(txn *store.Txn, object *Object, opt *geoOption
 	ranges := geo.RegionRange(region)
 	for _, r := range ranges {
 		utils.ZapLog.Debug("region", zap.Uint64("range-min", r.Min), zap.Uint64("range-max", r.Max))
-		ret, err := c.objectZRangeByUint64Score(txn, object, args[0], r.Min, r.Max, true, true,
+		ret, err := c.objectZRangeByScore(txn, object, args[0], utils.Number{IsInt: true, Uint64: r.Min},
+			utils.Number{IsInt: true, Uint64: r.Max}, true, true,
 			&zRangeOption{
 				limit:      int64(txn.Config.Redis.ScanMaxCount),
 				withScores: true,

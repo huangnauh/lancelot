@@ -192,6 +192,10 @@ func (o *Object) Info() string {
 	}
 }
 
+func (o *Object) IsGeo() bool {
+	return o.Type == GeoType
+}
+
 func GetUserPrefix(typo PrefixType, user uint16) []byte {
 	k := make([]byte, 1+2)
 	k[0] = byte(typo)
@@ -240,7 +244,8 @@ func (o *Object) IsSimple() bool {
 }
 
 func (o *Object) DisableCount() bool {
-	return o.Type == HashType || o.Type == AListType || o.Type == ZsetType || o.Type == SetType
+	return o.Type == HashType || o.Type == AListType ||
+		o.Type == ZsetType || o.Type == SetType || o.Type == GeoType
 }
 
 func (o *Object) IsCountable() bool {
