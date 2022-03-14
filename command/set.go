@@ -2,10 +2,10 @@ package command
 
 import (
 	"bytes"
-	"math"
 	"math/rand"
 	"strconv"
 
+	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -276,9 +276,6 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 	var object *Object
 	var mini int
 	var err error
-	min := int64(math.MaxInt64)
-	counts := make([]int64, len(args))
-	alist := make([]*Object, len(args))
 	for i := 0; i < len(args); i++ {
 		o := c.NewObject(txn, typo, args[i])
 		k := o.GetKeyBytes()
@@ -299,33 +296,12 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 		} else if err != nil {
 			return nil, err
 		}
-		count, err := GetCountByObject(txn, o)
-		if err != nil {
-			return nil, err
-		}
-		if count == 0 {
-			return EmptyInterface, nil
-		}
-		if min < count {
-			min = count
-			mini = i
-		}
-		counts[i] = count
-		alist[i] = o
-	}
-	for i, o := range alist {
-		if i == mini {
+		if object == nil {
 			object = o
-			continue
-		}
-
-		if counts[i] > 10*min && counts[i] > MINI_SCAN_SIZE {
-			glist[i] = o
-		} else {
-			if int(counts[i]) > txn.Config.Redis.ScanMaxCount {
-				return nil, store.ReachLimit
-			}
+		} else if txn.Config.Redis.SetOperation == config.SETOP_SCAN {
 			llist[i] = o
+		} else {
+			glist[i] = o
 		}
 	}
 	utils.ZapLog.Debug("inter", zap.Int("glist", len(glist)), zap.Int("llist", len(llist)))
@@ -591,14 +567,6 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 		return ret, nil
 	}
 
-	count0, err := GetCountByObject(txn, object)
-	if err != nil {
-		return nil, err
-	}
-	if int(count0) > txn.Config.Redis.ScanMaxCount {
-		return nil, store.ReachLimit
-	}
-
 	glist := make(map[int]*Object)
 	llist := make(map[int]*Object)
 	for i := 1; i < len(args); i++ {
@@ -613,17 +581,9 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 			return nil, err
 		}
 
-		count, err := GetCountByObject(txn, o)
-		if err != nil {
-			return nil, err
-		}
-
-		if count > 10*count0 && count > MINI_SCAN_SIZE {
+		if txn.Config.Redis.SetOperation == config.SETOP_GET {
 			glist[i] = o
 		} else {
-			if int(count) > txn.Config.Redis.ScanMaxCount {
-				return nil, store.ReachLimit
-			}
 			llist[i] = o
 		}
 	}

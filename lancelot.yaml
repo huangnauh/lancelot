@@ -45,6 +45,7 @@ rpc:
   compress: false
 redis:
   scan-max-count: 10000
+  set-operation: scan
   db-size-hash: 1023
   disable-count: true
   object-hash: 31

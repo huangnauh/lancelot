@@ -13,27 +13,33 @@ import (
 )
 
 const (
-	ALIST = "a"
-	BLIST = "b"
+	ALIST      = "a"
+	BLIST      = "b"
+	SETOP_SCAN = "scan"
+	SETOP_GET  = "get"
 )
 
 type Duration time.Duration
 
-func (d Duration) UnmarshalJSON(b []byte) error {
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Duration(d).String())
+}
+
+func (d *Duration) UnmarshalJSON(b []byte) error {
 	var v interface{}
 	if err := json.Unmarshal(b, &v); err != nil {
 		return err
 	}
 	switch value := v.(type) {
 	case float64:
-		d = Duration(value)
+		*d = Duration(value)
 		return nil
 	case string:
 		dd, err := time.ParseDuration(value)
 		if err != nil {
 			return err
 		}
-		d = Duration(dd)
+		*d = Duration(dd)
 		return nil
 	default:
 		return errors.New("invalid duration")
@@ -86,6 +92,7 @@ type GC struct {
 }
 type Redis struct {
 	ScanMaxCount               int    `yaml:"scan-max-count" json:"scan-max-count,omitempty"`
+	SetOperation               string `yaml:"set-operation" json:"set-operation,omitempty"`
 	DbSizeHash                 uint64 `yaml:"db-size-hash" json:"db-size-hash,omitempty"`
 	DisableCount               bool   `yaml:"disable-count" json:"disable-count,omitempty"`
 	ObjectHash                 uint16 `yaml:"object-hash" json:"object-hash,omitempty"`
@@ -192,6 +199,7 @@ var cfg = Config{
 		MaxSlowMessagePerSubscribe: 1000,
 		ListType:                   ALIST,
 		ScanMaxCount:               10000,
+		SetOperation:               SETOP_SCAN,
 		CursorExpireSecond:         10 * 60,
 		ObjectHash:                 1<<4 - 1,
 		DisableCount:               true,
@@ -221,6 +229,9 @@ func LoadYAMLConfig(filename string) error {
 		return fmt.Errorf("Unmarshal: %v", err)
 	}
 	cfg.StartAt = time.Now()
+	if cfg.Redis.SetOperation != SETOP_GET {
+		cfg.Redis.SetOperation = SETOP_SCAN
+	}
 	return err
 }
 
