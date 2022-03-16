@@ -10,7 +10,7 @@ require (
 	github.com/go-redis/redis/v8 v8.11.4
 	github.com/gocraft/work v0.5.1
 	github.com/gogo/protobuf v1.3.2
-	github.com/golang/geo v0.0.0-20210211234256-740aa86cb551 // indirect
+	github.com/golang/geo v0.0.0-20210211234256-740aa86cb551
 	github.com/golang/protobuf v1.5.2
 	github.com/gomodule/redigo v1.8.5
 	github.com/google/uuid v1.1.2

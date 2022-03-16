@@ -1,7 +1,6 @@
 package command
 
 import (
-	"encoding/binary"
 	"math"
 	"sort"
 	"strconv"
@@ -50,8 +49,9 @@ func (c *Command) GeoHashHandle(txn *store.Txn, args [][]byte) interface{} {
 		if err != nil {
 			return txn.SetError(err)
 		}
-		score := binary.BigEndian.Uint64(zvalue.Value)
-		location := geo.DecodeCellID(score)
+		score := utils.Number{IsInt: true}
+		score.Decode(zvalue.Value)
+		location := geo.DecodeCellID(score.Uint64)
 		rets[i-1] = location.EncodeGeohashString()
 	}
 	return rets
@@ -91,8 +91,9 @@ func (c *Command) GeoPosHandle(txn *store.Txn, args [][]byte) interface{} {
 		if err != nil {
 			return txn.SetError(err)
 		}
-		score := binary.BigEndian.Uint64(zvalue.Value)
-		location := geo.DecodeCellID(score)
+		score := utils.Number{IsInt: true}
+		score.Decode(zvalue.Value)
+		location := geo.DecodeCellID(score.Uint64)
 		rets[i-1] = []float64{location.Lng, location.Lat}
 	}
 	return rets
@@ -141,7 +142,9 @@ func (c *Command) GeoDistHandle(txn *store.Txn, args [][]byte) interface{} {
 		if err != nil {
 			return txn.SetError(err)
 		}
-		scores[i] = binary.BigEndian.Uint64(zvalue.Value)
+		score := utils.Number{IsInt: true}
+		score.Decode(zvalue.Value)
+		scores[i] = score.Uint64
 	}
 	fl := geo.DecodeCellID(scores[0])
 	tl := geo.DecodeCellID(scores[1])
@@ -256,6 +259,7 @@ type geoOption struct {
 	FromMember   bool
 	FromLonLat   bool
 	Count        int
+	Any          bool
 	Direction    int
 	Center       geo.Location
 	Unit         float64
@@ -344,6 +348,12 @@ func checkGeoOption(args [][]byte, key []byte) (*geoOption, []byte, error) {
 			}
 			i++
 			opt.Count = count
+			if i+1 < len(args) {
+				opt.Any = strings.ToLower(utils.B2S(args[i+1])) == "any"
+				if opt.Any {
+					i++
+				}
+			}
 		case "asc":
 			opt.Direction = Asc
 		case "desc":
@@ -367,6 +377,9 @@ func checkGeoOption(args [][]byte, key []byte) (*geoOption, []byte, error) {
 		default:
 			return nil, member, xerror.ErrSyntax
 		}
+	}
+	if opt.Count > 0 && opt.Direction == UnSorted {
+		opt.Direction = Asc
 	}
 	if opt.StoreDistKey == nil && key != nil {
 		opt.StoreKey = key
@@ -406,8 +419,9 @@ func (c *Command) GeoRadiusByMemberHandle(txn *store.Txn, args [][]byte) interfa
 	if object == nil || zvalue == nil {
 		return nil
 	}
-	score := binary.BigEndian.Uint64(zvalue.Value)
-	center := geo.DecodeCellID(score)
+	score := utils.Number{IsInt: true}
+	score.Decode(zvalue.Value)
+	center := geo.DecodeCellID(score.Uint64)
 	opt.ByRadius = &ByRadius{
 		Radius: radius,
 	}
@@ -477,16 +491,17 @@ func (c *Command) GeoSearchHandle(txn *store.Txn, args [][]byte) interface{} {
 		if zvalue == nil {
 			return nil
 		}
-		score := binary.BigEndian.Uint64(zvalue.Value)
-		center := geo.DecodeCellID(score)
+		score := utils.Number{IsInt: true}
+		score.Decode(zvalue.Value)
+		center := geo.DecodeCellID(score.Uint64)
 		opt.Center = center
 	}
 	if !opt.FromLonLat && !opt.FromMember {
-		return txn.SetError(xerror.ErrSyntax)
+		return txn.SetError(xerror.ErrGeoFromSpecified)
 	}
 
 	if opt.ByBox == nil && opt.ByRadius == nil {
-		return txn.SetError(xerror.ErrSyntax)
+		return txn.SetError(xerror.ErrGeoBySpecified)
 	}
 
 	return c.geoSearchHandle(txn, object, opt, args)
@@ -502,7 +517,9 @@ func (c *Command) geoSearchHandle(txn *store.Txn, object *Object, opt *geoOption
 	} else {
 		return txn.SetError(xerror.ErrSyntax)
 	}
+	count := 0
 	ranges := geo.RegionRange(region)
+Loop:
 	for _, r := range ranges {
 		utils.ZapLog.Debug("region", zap.Uint64("range-min", r.Min), zap.Uint64("range-max", r.Max))
 		ret, err := c.objectZRangeByScore(txn, object, args[0], utils.Number{IsInt: true, Uint64: r.Min},
@@ -516,18 +533,23 @@ func (c *Command) geoSearchHandle(txn *store.Txn, object *Object, opt *geoOption
 		}
 		for i := 0; i < len(ret); i += 2 {
 			member := ret[i].([]byte)
-			score := ret[i+1].(uint64)
-			l := geo.DecodeCellID(score)
+			score := ret[i+1].(utils.Number)
+			l := geo.DecodeCellID(score.Uint64)
 			if l.RegionContains(region) {
 				positions = append(positions, GeoInfo{
 					Location: l,
 					Distance: l.Distance(opt.Center),
-					CellID:   score,
+					CellID:   score.Uint64,
 					Member:   string(member),
 				})
+				count++
+				if opt.Any && opt.Count > 0 && count >= opt.Count {
+					break Loop
+				}
 			}
 		}
 	}
+
 	if opt.Direction != UnSorted {
 		sort.Slice(positions, func(i, j int) bool {
 			if opt.Direction == Asc {
@@ -536,20 +558,29 @@ func (c *Command) geoSearchHandle(txn *store.Txn, object *Object, opt *geoOption
 			return positions[i].Distance > positions[j].Distance
 		})
 	}
-	ret := make([]interface{}, 0)
+	if opt.Count > 0 && len(positions) > opt.Count {
+		positions = positions[:opt.Count]
+	}
+	ret := make([]interface{}, 0, len(positions))
 	for _, l := range positions {
-		ret = append(ret, l.Member)
-		if opt.Dist {
-			ret = append(ret, l.Distance/opt.Unit)
-		}
-		if opt.CellID {
-			ret = append(ret, l.CellID)
-		}
-		if opt.Hash {
-			ret = append(ret, l.EncodeGeohash(geo.REDIS_GEO_MAX))
-		}
-		if opt.Coord {
-			ret = append(ret, []float64{l.Lng, l.Lat})
+		if opt.Dist || opt.Hash || opt.Coord || opt.CellID {
+			value := make([]interface{}, 0)
+			value = append(value, l.Member)
+			if opt.Dist {
+				value = append(value, l.Distance/opt.Unit)
+			}
+			if opt.CellID {
+				value = append(value, l.CellID)
+			}
+			if opt.Hash {
+				value = append(value, l.EncodeGeohash(geo.REDIS_GEO_MAX))
+			}
+			if opt.Coord {
+				value = append(value, []float64{l.Lng, l.Lat})
+			}
+			ret = append(ret, value)
+		} else {
+			ret = append(ret, l.Member)
 		}
 	}
 	return ret

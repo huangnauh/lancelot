@@ -131,6 +131,8 @@ var (
 	ErrClientClosed            = RedisNew("client closed")
 	ErrUnBlocked               = RedisNew("UNBLOCKED client unblocked via CLIENT UNBLOCK")
 	ErrNoSuchMaster            = RedisNew("No such master with that name")
+	ErrGeoFromSpecified        = RedisNew("exactly one of FROMMEMBER or FROMLONLAT can be specified for geosearch")
+	ErrGeoBySpecified          = RedisNew("exactly one of BYRADIUS and BYBOX can be specified for geosearch")
 
 	InvalidOffset     = RedisNew("invalid offset")
 	InvalidLimit      = RedisNew("invalid limit")

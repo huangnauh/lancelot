@@ -14,7 +14,7 @@ const (
 	ENC_LAT                = 90.0 //85.05112878
 	ENC_LONG               = 180.0
 	REDIS_GEO_MAX          = 64
-	EARTH_RADIUS_IN_METERS = 6372797.560856
+	EARTH_RADIUS_IN_METERS = 6372797.5608559996
 )
 
 type Location struct {
@@ -74,16 +74,16 @@ type Range struct {
 }
 
 func (l Location) RectRegion(width, height float64) s2.Region {
-	lat_delta := width / 2 / EARTH_RADIUS_IN_METERS / float64(s1.Degree)
+	lat_delta := height / 2 / EARTH_RADIUS_IN_METERS / float64(s1.Degree)
 	if l.Lat < 0 {
-		lng_bottom := height / 2 / EARTH_RADIUS_IN_METERS / float64(s1.Degree) / math.Cos((s1.Angle(l.Lat-lat_delta) * s1.Degree).Radians())
+		lng_bottom := width / 2 / EARTH_RADIUS_IN_METERS / float64(s1.Degree) / math.Cos((s1.Angle(l.Lat-lat_delta) * s1.Degree).Radians())
 		utils.ZapLog.Debug("rect region", zap.Float64("width", width), zap.Float64("height", height),
 			zap.Float64("lat_delta", lat_delta), zap.Float64("lng_delta", lng_bottom))
 		return s2.RectFromLatLng(
 			s2.LatLngFromDegrees(l.Lat-lat_delta, l.Lng-lng_bottom)).AddPoint(
 			s2.LatLngFromDegrees(l.Lat+lat_delta, l.Lng+lng_bottom))
 	} else {
-		lng_top := height / 2 / EARTH_RADIUS_IN_METERS / float64(s1.Degree) / math.Cos((s1.Angle(l.Lat+lat_delta) * s1.Degree).Radians())
+		lng_top := width / 2 / EARTH_RADIUS_IN_METERS / float64(s1.Degree) / math.Cos((s1.Angle(l.Lat+lat_delta) * s1.Degree).Radians())
 		utils.ZapLog.Debug("rect region", zap.Float64("width", width), zap.Float64("height", height),
 			zap.Float64("lat_delta", lat_delta), zap.Float64("lng_delta", lng_top))
 		return s2.RectFromLatLng(
