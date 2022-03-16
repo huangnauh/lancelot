@@ -366,42 +366,42 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 		if getType&OnlyValue == OnlyValue && typo == ZsetType {
 			zv := &Value{}
 			DecodeValue(value, zv)
-			var score float64
+			score := utils.Number{}
 			if len(zv.Value) > 0 {
-				score = utils.DecodeFloat(zv.Value)
+				score.Decode(zv.Value)
 			} else {
-				score = 1
+				score.Float64 = 1
 			}
-			utils.ZapLog.Debug("inter", zap.ByteString("key", k), zap.Float64("score", score))
+			utils.ZapLog.Debug("inter", zap.ByteString("key", k), zap.String("score", score.String()))
 			if len(weight) > 0 {
-				score *= weight[mini]
+				score.Float64 *= weight[mini]
 			}
 			for idx, v := range lvalues {
 				zv := &Value{}
 				DecodeValue(v, zv)
-				var s float64
+				s := utils.Number{}
 				if len(zv.Value) > 0 {
-					s = utils.DecodeFloat(zv.Value)
+					s.Decode(zv.Value)
 				} else {
-					s = 1
+					s.Float64 = 1
 				}
-				utils.ZapLog.Debug("inter", zap.ByteString("key", k), zap.Float64("score", s))
+				utils.ZapLog.Debug("inter", zap.ByteString("key", k), zap.String("score", s.String()))
 				if len(weight) > 0 {
-					s *= weight[idx]
+					s.Float64 *= weight[idx]
 				}
 				if getType&SumAGG == SumAGG {
-					score += s
+					score.Add(s)
 				} else if getType&MaxAGG == MaxAGG {
-					if s > score {
+					if s.Compare(score) > 0 {
 						score = s
 					}
 				} else if getType&MinAGG == MinAGG {
-					if s < score {
+					if s.Compare(score) < 0 {
 						score = s
 					}
 				}
 			}
-			utils.ZapLog.Debug("inter", zap.ByteString("key", k), zap.Float64("score-sum", score))
+			utils.ZapLog.Debug("inter", zap.ByteString("key", k), zap.String("score-sum", score.String()))
 			ret = append(ret, score)
 		}
 		return true
@@ -456,7 +456,7 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 
 	ret := make([]interface{}, 0)
 	var preKey []byte
-	var preScore float64
+	var preScore utils.Number
 	var i int
 	for {
 		kv, err := iterList.Next()
@@ -474,37 +474,37 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 		}
 		if getType&OnlyValue == OnlyValue && typo == ZsetType {
 			if new {
-				utils.ZapLog.Debug("union", zap.Int("i", i), zap.Float64("ret-score", preScore))
+				utils.ZapLog.Debug("union", zap.Int("i", i), zap.String("ret-score", preScore.String()))
 				ret = append(ret, preScore)
-				preScore = 0
+				preScore = utils.Number{}
 			}
 			if kv.Key == nil {
 				break
 			}
 			zv := &Value{}
 			DecodeValue(kv.Value, zv)
-			var score float64
+			score := utils.Number{}
 			if len(zv.Value) > 0 {
-				score = utils.DecodeFloat(zv.Value)
+				score.Decode(zv.Value)
 			} else {
-				score = 1
+				score.Float64 = 1
 			}
 			if len(weight) > 0 {
-				score *= weight[kv.Idx]
+				score.Float64 *= weight[kv.Idx]
 			}
 			if getType&SumAGG == SumAGG {
-				preScore += score
+				preScore.Add(score)
 			} else if getType&MaxAGG == MaxAGG {
-				if i == 1 || new || (score > preScore) {
+				if i == 1 || new || score.Compare(preScore) > 0 {
 					preScore = score
 				}
 			} else if getType&MinAGG == MinAGG {
-				if i == 1 || new || (score < preScore) {
+				if i == 1 || new || score.Compare(preScore) < 0 {
 					preScore = score
 				}
 			}
 			utils.ZapLog.Debug("union", zap.Int("i", i), zap.ByteString("key", kv.Key),
-				zap.Float64("score", score), zap.Float64("pre-score", preScore))
+				zap.String("score", score.String()), zap.String("pre-score", preScore.String()))
 		}
 		if kv.Key == nil {
 			break
@@ -645,11 +645,11 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 		if getType&OnlyValue == OnlyValue && typo == ZsetType {
 			zv := &Value{}
 			DecodeValue(value, zv)
-			var score float64
+			score := utils.Number{}
 			if len(zv.Value) > 0 {
-				score = utils.DecodeFloat(zv.Value)
+				score.Decode(zv.Value)
 			} else {
-				score = 1
+				score.Float64 = 1
 			}
 			ret = append(ret, score)
 		}

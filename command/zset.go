@@ -101,6 +101,9 @@ func (c *Command) ZIncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score utils.Number, opt *checkOption) (utils.Number, int, error) {
+	if score.IsNan() {
+		return score, 0, xerror.ErrResultNan
+	}
 	var delta int64
 	oldScore := utils.Number{}
 	var count int
@@ -128,6 +131,9 @@ func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score util
 		if opt.Incr {
 			score.Add(oldScore)
 		}
+		if score.IsNan() {
+			return score, 0, xerror.ErrResultNan
+		}
 
 		if opt.Check&CheckGT == CheckGT {
 			if score.Compare(oldScore) <= 0 {
@@ -148,9 +154,6 @@ func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score util
 		}
 	}
 
-	if score.IsNan() {
-		return score, 0, xerror.ErrResultNan
-	}
 	// zvalue.Value = utils.EncodeFloat(score)
 	// zvalue.Timestamp = txn.Timestamp
 	_, err = c.PutZset(txn, object, zkey, member, score, oldScore, delta)
@@ -231,7 +234,7 @@ func (c *Command) ZAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	members := make(map[string]utils.Number)
-	for i := 0; i < len(args); i += 2 {
+	for ; i < len(args); i += 2 {
 		score, err := strconv.ParseFloat(utils.B2S(args[i]), 64)
 		if err != nil || math.IsNaN(score) {
 			return txn.SetError(xerror.ErrInvalidFloat)
