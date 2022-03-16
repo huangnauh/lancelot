@@ -41,16 +41,13 @@ func getCheckOption(args [][]byte) (*checkOption, int, error) {
 		str := strings.ToLower(utils.B2S(args[i]))
 		switch str {
 		case NX:
-			if opt.Check&CheckExist != 0 {
-				return nil, i, xerror.ErrSyntax
-			}
-			if opt.Check&(CheckLT|CheckGT) != 0 {
+			if opt.Check&(CheckLT|CheckGT|CheckExist) != 0 {
 				return nil, i, xerror.ErrGTLTNXCompat
 			}
 			opt.Check |= CheckNotExist
 		case XX:
 			if opt.Check&CheckNotExist == CheckNotExist {
-				return nil, i, xerror.ErrSyntax
+				return nil, i, xerror.ErrGTLTNXCompat
 			}
 			opt.Check |= CheckExist
 		case GT:
@@ -105,7 +102,7 @@ func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score util
 		return score, 0, xerror.ErrResultNan
 	}
 	var delta int64
-	oldScore := utils.Number{}
+	oldScore := utils.Number{IsInt: object.IsGeo()}
 	var count int
 	zkey := object.GetValueBytes(EncodeMemberKey(member))
 	v, err := txn.Get(zkey)
@@ -1066,13 +1063,16 @@ func (c *Command) zrange(txn *store.Txn, args [][]byte, opt *zRangeOption) ([]in
 		if err != nil {
 			return nil, err
 		}
-		object := c.NewObject(txn, ZsetType, args[0])
+		object := c.NewObject(txn, UnknownType, args[0])
 		key := object.GetKeyBytes()
 		err = getTxnObject(txn, key, object, false)
 		if err == store.KeyNotFound {
 			return EmptyInterface, nil
 		} else if err != nil {
 			return nil, err
+		}
+		if object.Type != ZsetType && object.Type != GeoType {
+			return nil, xerror.WrongTypeErr
 		}
 		ret, err = c.objectZrangeByRank(txn, object, args[0], start, end, opt)
 	}

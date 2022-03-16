@@ -66,6 +66,10 @@ const (
 	DeleteKeyType ChangeType = 0x08
 )
 
+func (o ObjectType) UseZset() bool {
+	return o == ZsetType || o == GeoType
+}
+
 func (o ObjectType) Type() string {
 	switch o {
 	case StringType:

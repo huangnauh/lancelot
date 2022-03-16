@@ -137,7 +137,7 @@ start_server {tags {"geo"}} {
             r geoadd nyc xx nx -73.9454966 40.747533 "lic market"
         } err
         set err
-    } {ERR*syntax*}
+    } {ERR*not compatible*}
 
     test {GEOADD update with invalid option} {
         catch {
