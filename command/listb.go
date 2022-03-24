@@ -793,7 +793,7 @@ func brPop(txn *store.Txn, object *Object, _ [][]byte, opt *lOpt) (interface{}, 
 
 func (c *Command) BListHandle(txn *store.Txn, args [][]byte, lFunc ListFunc, opt *lOpt) (interface{}, error) {
 	utils.ZapLog.Debug("BListHandle", zap.ByteStrings("args", args), zap.Any("opt", opt))
-	object := c.NewObject(txn, BListType, args[0])
+	object := NewObject(txn, BListType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	var change ChangeType

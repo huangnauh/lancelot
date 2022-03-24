@@ -808,7 +808,7 @@ func (c *Command) AListHandle(txn *store.Txn, args [][]byte, lFunc ListFunc, opt
 		msgs = nil
 	}
 
-	object := c.NewObject(txn, AListType, args[0])
+	object := NewObject(txn, AListType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	create := false

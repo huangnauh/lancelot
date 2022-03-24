@@ -28,6 +28,7 @@ const (
 	BListType   ObjectType = 'b'
 	CountType   ObjectType = 'c'
 	ServerType  ObjectType = 'e'
+	HLLType     ObjectType = 'f'
 	GroupType   ObjectType = 'g'
 	HashType    ObjectType = 'h'
 	ClientType  ObjectType = 'i'
@@ -171,7 +172,7 @@ type Object struct {
 	Extra     []byte
 }
 
-func (c *Command) NewObject(txn *store.Txn, typo ObjectType, key []byte) *Object {
+func NewObject(txn *store.Txn, typo ObjectType, key []byte) *Object {
 	hash := txn.Config.Redis.ObjectHash
 	if hash == 0 {
 		hash = DefaultHashMark
@@ -244,7 +245,7 @@ func GetKeyBytes(typo PrefixType, user uint16, db uint8, keyPrefix PrefixType, d
 }
 
 func (o *Object) IsSimple() bool {
-	return o.Type == StringType || o.Type == JsonType
+	return o.Type == StringType || o.Type == JsonType || o.Type == HLLType
 }
 
 func (o *Object) DisableCount() bool {
@@ -253,7 +254,7 @@ func (o *Object) DisableCount() bool {
 }
 
 func (o *Object) IsCountable() bool {
-	return o.Type != StringType && o.Type != JsonType && o.Type != BListType
+	return o.Type != StringType && o.Type != JsonType && o.Type == HLLType && o.Type != BListType
 }
 
 func GetObjectFromKV(key, value []byte) (*Object, error) {
@@ -474,7 +475,7 @@ func (c *Command) ObjectHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongSubArgs(subcommand, ObjectHelpCommand)
 	}
 
-	object := c.NewObject(txn, UnknownType, args[1])
+	object := NewObject(txn, UnknownType, args[1])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err != nil {
@@ -551,7 +552,7 @@ func PutOrDeleteKV(txn *store.Txn, object *Object, k, v []byte, delta int64) (in
 }
 
 func (c *Command) GetCountByKey(txn *store.Txn, arg []byte, typo ObjectType) (int64, error) {
-	object := c.NewObject(txn, typo, arg)
+	object := NewObject(txn, typo, arg)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
