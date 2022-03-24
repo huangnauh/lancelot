@@ -97,7 +97,7 @@ type Redis struct {
 	DisableCount               bool   `yaml:"disable-count" json:"disable-count,omitempty"`
 	ObjectHash                 uint16 `yaml:"object-hash" json:"object-hash,omitempty"`
 	ListType                   string `yaml:"list-type" json:"list-type,omitempty"`
-	TTLSensitive               int    `yaml:"ttl-sensitive" json:"ttl-sensitive,omitempty"`
+	TTLSensitive               int64  `yaml:"ttl-sensitive" json:"ttl-sensitive,omitempty"`
 	CursorExpireSecond         int    `yaml:"cursor-expirate-second" json:"cursor-expirate-second,omitempty"`
 	MaxSlowMessagePerSubscribe int    `yaml:"max-slow-msg-per-sub" json:"max-slow-msg-per-sub,omitempty"`
 }

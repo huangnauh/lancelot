@@ -138,13 +138,37 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 	return c.expire(txn, args, newTTL, false)
 }
 
-func TTLSensitive(ttl int) int {
-	if ttl <= 0 {
-		return 0
+func TTLSensitive(newTTL, oldTTL, sensitive int64) bool {
+	if sensitive < 0 {
+		return true
 	}
-	ttlSensitive := ttl * 1000
-	ttlSensitive += rand.Intn(ttlSensitive)
-	return ttlSensitive
+
+	if newTTL <= 0 || oldTTL <= 0 {
+		return true
+	}
+
+	var delta, s int64
+	if newTTL < oldTTL {
+		delta = oldTTL - newTTL
+		s = newTTL / 1000 / 100
+	} else {
+		delta = newTTL - oldTTL
+		s = oldTTL / 1000 / 100
+	}
+
+	if sensitive == 0 {
+		sensitive = s
+	}
+
+	if sensitive == 0 {
+		return true
+	}
+
+	ttlSensitive := sensitive * 1000
+	ttlSensitive += rand.Int63n(ttlSensitive)
+	utils.ZapLog.Debug("ttlSensitive", zap.Int64("ttlSensitive", ttlSensitive),
+		zap.Int64("sensitive", sensitive), zap.Int64("delta", delta))
+	return ttlSensitive <= delta
 }
 
 func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL bool) interface{} {
@@ -210,7 +234,7 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 			return SimpleInt(0)
 		}
 
-		if utils.Abs(newTTL-object.TTL) <= int64(TTLSensitive(txn.Config.Redis.TTLSensitive)) {
+		if !TTLSensitive(newTTL-txn.Now, object.TTL-txn.Now, txn.Config.Redis.TTLSensitive) {
 			return SimpleInt(1)
 		}
 

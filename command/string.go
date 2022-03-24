@@ -508,18 +508,23 @@ func (c *Command) setString(txn *store.Txn, argKey, argValue []byte, expire int6
 		if check == CheckNotExist {
 			return xerror.ErrCheckFailed
 		}
-		if object.TTL > 0 && object.TTL != expire {
-			ttlKey := object.GetTTLKeyBytes()
-			err := txn.Del(ttlKey)
-			if err != nil {
-				return err
-			}
+	}
+
+	sensitive := expire == 0 || object.TTL == 0
+	if !sensitive {
+		sensitive = TTLSensitive(object.TTL-txn.Now, expire-txn.Now, txn.Config.Redis.TTLSensitive)
+	}
+	if object.TTL > 0 && sensitive {
+		ttlKey := object.GetTTLKeyBytes()
+		err := txn.Del(ttlKey)
+		if err != nil {
+			return err
 		}
 	}
 
 	object.Value = argValue
 	object.Timestamp = txn.Timestamp
-	if expire > 0 && object.TTL != expire {
+	if expire > 0 && sensitive {
 		object.TTL = expire
 		ttlKey := object.GetTTLKeyBytes()
 		err := txn.Put(ttlKey, []byte{1})
