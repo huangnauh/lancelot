@@ -1489,6 +1489,11 @@ func NewCommand(red *redcon.Server) *Command {
 			ID:       417,
 			Typo:     HLLType,
 		},
+		PFMERGE_COMMAND: {
+			Func: c.PfMergeHandle,
+			ID:   418,
+			Typo: HLLType,
+		},
 		// ------------------- hyperloglog end 447 ---------------------------
 		// ------------------- translate start 992 ---------------------------
 		UNWATCH_COMMAND: {

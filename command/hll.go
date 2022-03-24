@@ -207,25 +207,32 @@ func (c *Command) LoadHll(txn *store.Txn, k []byte) (*hll, error) {
 	return h, nil
 }
 
+func (c *Command) GetHll(txn *store.Txn, k []byte) (*hll, error) {
+	hk := GetHllKey(txn.UserId, txn.DBId, k)
+	h := HLogLog.Get(hk)
+	if h == nil {
+		var err error
+		h, err = c.LoadHll(txn, k)
+		if err != nil {
+			return nil, err
+		}
+		h.Key = hk
+		HLogLog.Set(hk, h)
+	}
+	h.AccessTime = txn.NowTime()
+	return h, nil
+}
+
 // PFADD key [element [element ...]]
 func (c *Command) PfAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(PFADD_COMMAND)
 	}
 	k := args[0]
-	hk := GetHllKey(txn.UserId, txn.DBId, k)
-	now := txn.NowTime()
-	h := HLogLog.Get(hk)
-	if h == nil {
-		var err error
-		h, err = c.LoadHll(txn, k)
-		if err != nil {
-			return txn.SetError(err)
-		}
-		h.Key = hk
-		HLogLog.Set(hk, h)
+	h, err := c.GetHll(txn, k)
+	if err != nil {
+		return txn.SetError(err)
 	}
-	h.AccessTime = now
 	count := 0
 	for _, v := range args[1:] {
 		ok := h.Sketch.Insert(v)
@@ -235,7 +242,7 @@ func (c *Command) PfAddHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 	}
 	if count > 0 {
-		h.UpdateTime = now
+		h.UpdateTime = txn.NowTime()
 		return redcon.SimpleInt(1)
 	}
 	return redcon.SimpleInt(0)
@@ -248,18 +255,36 @@ func (c *Command) PfCountHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	var count uint64
 	for _, v := range args {
-		hk := GetHllKey(txn.UserId, txn.DBId, v)
-		h := HLogLog.Get(hk)
-		if h == nil {
-			var err error
-			h, err = c.LoadHll(txn, v)
-			if err != nil {
-				return txn.SetError(err)
-			}
-			h.Key = hk
-			HLogLog.Set(hk, h)
+		h, err := c.GetHll(txn, v)
+		if err != nil {
+			return txn.SetError(err)
 		}
 		count += h.Sketch.Estimate()
 	}
 	return redcon.SimpleInt(count)
+}
+
+// PFMERGE destkey sourcekey [sourcekey ...]
+func (c *Command) PfMergeHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 2 {
+		return txn.SetWrongArgs(PFMERGE_COMMAND)
+	}
+	destkey := args[0]
+	destHll, err := c.GetHll(txn, destkey)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	for _, v := range args[1:] {
+		h, err := c.GetHll(txn, v)
+		if err != nil {
+			return txn.SetError(err)
+		}
+		err = destHll.Sketch.Merge(h.Sketch)
+		if err != nil {
+			utils.ZapLog.Error("PfMergeHandle", zap.String("destkey", string(destkey)), zap.String("sourcekey", string(v)), zap.Error(err))
+			return txn.SetError(err)
+		}
+	}
+	destHll.UpdateTime = txn.NowTime()
+	return OK
 }
