@@ -1419,7 +1419,61 @@ func NewCommand(red *redcon.Server) *Command {
 			Typo: PubSubType,
 		},
 		// ------------------- pubsub end 383 ---------------------------
-
+		// ------------------- geo start 384 ---------------------------
+		GEOADD_COMMAND: {
+			Func: c.GeoAddHandle,
+			ID:   384,
+			Typo: GeoType,
+		},
+		GEODIST_COMMAND: {
+			Func:     c.GeoDistHandle,
+			ReadOnly: true,
+			ID:       385,
+			Typo:     GeoType,
+		},
+		GEOHASH_COMMAND: {
+			Func:     c.GeoHashHandle,
+			ReadOnly: true,
+			ID:       386,
+			Typo:     GeoType,
+		},
+		GEOPOS_COMMAND: {
+			Func:     c.GeoPosHandle,
+			ReadOnly: true,
+			ID:       387,
+			Typo:     GeoType,
+		},
+		GEORADIUS_COMMAND: {
+			Func:     c.GeoRadiusHandle,
+			ReadOnly: true,
+			ID:       388,
+			Typo:     GeoType,
+		},
+		GEORADIUSBYMEMBER_COMMAND: {
+			Func:     c.GeoRadiusByMemberHandle,
+			ReadOnly: true,
+			ID:       389,
+			Typo:     GeoType,
+		},
+		GEORADIUS_RO_COMMAND: {
+			Func:     c.GeoRadiusHandle,
+			ReadOnly: true,
+			ID:       390,
+			Typo:     GeoType,
+		},
+		GEORADIUSBYMEMBER_RO_COMMAND: {
+			Func:     c.GeoRadiusByMemberHandle,
+			ReadOnly: true,
+			ID:       391,
+			Typo:     GeoType,
+		},
+		GEOSEARCH_COMMAND: {
+			Func:     c.GeoSearchHandle,
+			ReadOnly: true,
+			ID:       392,
+			Typo:     GeoType,
+		},
+		// ------------------- geo end 415 ---------------------------
 		// ------------------- translate start 992 ---------------------------
 		UNWATCH_COMMAND: {
 			Func: c.UnWatchHandle,

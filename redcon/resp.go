@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"gitlab.s.upyun.com/platform/lancelot/utils"
 )
 
 // Type of RESP
@@ -548,6 +550,12 @@ func AppendAny(b []byte, v interface{}) []byte {
 		b = AppendBulkFloat(b, float64(v))
 	case float64:
 		b = AppendBulkFloat(b, float64(v))
+	case utils.Number:
+		if v.IsInt {
+			b = AppendBulkUint(b, v.Uint64)
+		} else {
+			b = AppendBulkFloat(b, v.Float64)
+		}
 	case Marshaler:
 		b = append(b, v.MarshalRESP()...)
 	default:

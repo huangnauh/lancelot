@@ -92,7 +92,7 @@ func rangeRank(txn *store.Txn, object *Object, startIndex, endIndex int64, onlyK
 	var prefix []byte
 	if object.Type == AListType {
 		prefix = object.GetValueBytes(nil)
-	} else if object.Type == ZsetType {
+	} else if object.Type.UseZset() {
 		prefix = object.GetValueBytes(StartScoreKey)
 	} else {
 		return nil, xerror.ErrNotSupport
@@ -184,8 +184,9 @@ func rangeRank(txn *store.Txn, object *Object, startIndex, endIndex int64, onlyK
 					lvalue := &Value{}
 					DecodeValue(left[1], lvalue)
 					leftList = append(leftList, lvalue.Value)
-				} else if object.Type == ZsetType {
-					score := utils.DecodeFloat(left[0][len(prefix):])
+				} else if object.Type.UseZset() {
+					score := utils.Number{IsInt: object.IsGeo()}
+					score.Decode(left[0][len(prefix):])
 					memb := left[0][len(prefix)+8:]
 					leftList = append(leftList, memb)
 					if !onlyKey {
@@ -211,8 +212,9 @@ func rangeRank(txn *store.Txn, object *Object, startIndex, endIndex int64, onlyK
 					lvalue := &Value{}
 					DecodeValue(right[1], lvalue)
 					rightList = append(rightList, lvalue.Value)
-				} else if object.Type == ZsetType {
-					score := utils.DecodeFloat(right[0][len(prefix):])
+				} else if object.Type.UseZset() {
+					score := utils.Number{IsInt: object.IsGeo()}
+					score.Decode(right[0][len(prefix):])
 					memb := right[0][len(prefix)+8:]
 					rightList = append(rightList, memb)
 					if !onlyKey {

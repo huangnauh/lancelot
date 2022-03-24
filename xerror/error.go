@@ -89,6 +89,7 @@ var (
 	ErrScriptKilled        = RedisNew("Script killed by user with SCRIPT KILL...")
 	ErrScriptTimeout       = RedisNew("Script timeout")
 	ErrResultNan           = RedisNew("resulting score is not a number (NaN)")
+	ErrStoreOption         = RedisNew("STORE option in GEORADIUS is not compatible with WITHDIST, WITHHASH and WITHCOORDS options")
 
 	MissingTxn        = RedisNew("missing transcation")
 	InvalidTxn        = RedisNew("invalid transcation")
@@ -130,6 +131,8 @@ var (
 	ErrClientClosed            = RedisNew("client closed")
 	ErrUnBlocked               = RedisNew("UNBLOCKED client unblocked via CLIENT UNBLOCK")
 	ErrNoSuchMaster            = RedisNew("No such master with that name")
+	ErrGeoFromSpecified        = RedisNew("exactly one of FROMMEMBER or FROMLONLAT can be specified for geosearch")
+	ErrGeoBySpecified          = RedisNew("exactly one of BYRADIUS and BYBOX can be specified for geosearch")
 
 	InvalidOffset     = RedisNew("invalid offset")
 	InvalidLimit      = RedisNew("invalid limit")
@@ -205,6 +208,14 @@ func WrongSubArgsError(command, help string) error {
 func WrongPermissionString(command string) string {
 	return fmt.Sprintf("this user has no permissions to run the '%s' command or its subcommand",
 		command)
+}
+
+func InvalidGEO(longitude, latitude float64) string {
+	return fmt.Sprintf("ERR invalid longitude,latitude pair %.6f,%.6f", longitude, latitude)
+}
+
+func InvalidGEOError(longitude, latitude float64) error {
+	return RedisNew(InvalidGEO(longitude, latitude))
 }
 
 func WrongPermissionError(command string) error {

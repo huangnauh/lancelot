@@ -41,7 +41,7 @@ func getCheckOption(args [][]byte) (*checkOption, int, error) {
 		str := strings.ToLower(utils.B2S(args[i]))
 		switch str {
 		case NX:
-			if opt.Check&(CheckLT|CheckExist|CheckGT) != 0 {
+			if opt.Check&(CheckLT|CheckGT|CheckExist) != 0 {
 				return nil, i, xerror.ErrGTLTNXCompat
 			}
 			opt.Check |= CheckNotExist
@@ -90,53 +90,60 @@ func (c *Command) ZIncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	score, _, err = c.zadd(txn, object, args[2], score, &checkOption{Incr: true})
+	s, _, err := c.zadd(txn, object, args[2], utils.Number{Float64: score}, &checkOption{Incr: true})
 	if err != nil {
 		return txn.SetError(err)
 	}
-	return score
+	return s.Float64
 }
 
-func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score float64, opt *checkOption) (float64, int, error) {
+func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score utils.Number, opt *checkOption) (utils.Number, int, error) {
+	if score.IsNan() {
+		return score, 0, xerror.ErrResultNan
+	}
 	var delta int64
-	var oldScore float64
+	oldScore := utils.Number{IsInt: object.IsGeo()}
 	var count int
 	zkey := object.GetValueBytes(EncodeMemberKey(member))
 	v, err := txn.Get(zkey)
 	if err == store.KeyNotFound {
 		if opt.Check&CheckExist == CheckExist {
-			return 0, 0, nil
+			return oldScore, 0, nil
 		}
 		count++
 		delta = 1
 	} else if err != nil {
-		return 0, 0, err
+		return oldScore, 0, err
 	} else {
 		if opt.Check&CheckNotExist == CheckNotExist {
-			return 0, 0, nil
+			return oldScore, 0, nil
 		}
 		zvalue := &Value{}
 		err = DecodeValue(v, zvalue)
 		if err != nil {
-			return 0, 0, err
+			return oldScore, 0, err
 		}
-		oldScore = utils.DecodeFloat(zvalue.Value)
+
+		oldScore.Decode(zvalue.Value)
 		if opt.Incr {
-			score += oldScore
+			score.Add(oldScore)
+		}
+		if score.IsNan() {
+			return score, 0, xerror.ErrResultNan
 		}
 
 		if opt.Check&CheckGT == CheckGT {
-			if score <= oldScore {
+			if score.Compare(oldScore) <= 0 {
 				return oldScore, 0, nil
 			}
 		}
 		if opt.Check&CheckLT == CheckLT {
-			if score >= oldScore {
+			if score.Compare(oldScore) >= 0 {
 				return oldScore, 0, nil
 			}
 		}
 
-		if score == oldScore {
+		if score.Compare(oldScore) == 0 {
 			return score, 0, nil
 		}
 		if opt.Changed {
@@ -144,14 +151,11 @@ func (c *Command) zadd(txn *store.Txn, object *Object, member []byte, score floa
 		}
 	}
 
-	if math.IsNaN(score) {
-		return 0, 0, xerror.ErrResultNan
-	}
 	// zvalue.Value = utils.EncodeFloat(score)
 	// zvalue.Timestamp = txn.Timestamp
 	_, err = c.PutZset(txn, object, zkey, member, score, oldScore, delta)
 	if err != nil {
-		return 0, 0, err
+		return score, 0, err
 	}
 	return score, count, nil
 }
@@ -169,10 +173,9 @@ func (c *Command) zrem(txn *store.Txn, object *Object, member []byte) (bool, err
 	if err != nil {
 		return false, err
 	}
-	score := utils.DecodeFloat(zvalue.Value)
-	// zvalue.Value = utils.EncodeFloat(score)
-	// zvalue.Timestamp = txn.Timestamp
-	_, err = c.PutZset(txn, object, zkey, member, score, 0, -1)
+	score := utils.Number{}
+	score.Decode(zvalue.Value)
+	_, err = c.PutZset(txn, object, zkey, member, score, utils.Number{}, -1)
 	if err != nil {
 		return false, err
 	}
@@ -226,19 +229,25 @@ func (c *Command) ZAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	if opt.Incr {
 		opt.Changed = true
 	}
-	members := make(map[string]float64)
+
+	members := make(map[string]utils.Number)
 	for ; i < len(args); i += 2 {
 		score, err := strconv.ParseFloat(utils.B2S(args[i]), 64)
 		if err != nil || math.IsNaN(score) {
 			return txn.SetError(xerror.ErrInvalidFloat)
 		}
-		members[utils.B2S(args[i+1])] = score
+		members[utils.B2S(args[i+1])] = utils.Number{Float64: score}
 	}
+
 	object, err := c.GetOrCreateUUIDObject(txn, ZsetType, args[0])
 	if err != nil {
 		return txn.SetError(err)
 	}
-	var s float64
+	return c.zaddMembers(txn, object, members, opt)
+}
+
+func (c *Command) zaddMembers(txn *store.Txn, object *Object, members map[string]utils.Number, opt *checkOption) interface{} {
+	var s utils.Number
 	count := 0
 	for member, score := range members {
 		memb := utils.S2B(member)
@@ -265,27 +274,29 @@ func EncodeMemberKey(member []byte) []byte {
 	return k
 }
 
-func EncodeScoreKey(score float64, member []byte) []byte {
+func EncodeScoreKey(score utils.Number, member []byte) []byte {
 	k := make([]byte, 1+8+len(member))
 	k[0] = ScorePrefix
-	utils.EncodeFloatBytes(score, k[1:])
+	score.Encode(k[1:])
 	copy(k[9:], member)
 	return k
 }
 
-func EncodeScoreNext(score float64) []byte {
+func EncodeScoreNext(score utils.Number) []byte {
 	k := make([]byte, 1+8)
 	k[0] = ScorePrefix
-	utils.EncodeFloatBytes(score, k[1:])
+	score.Encode(k[1:])
 	return utils.PrefixNext(k)
 }
 
 func (c *Command) PutZset(txn *store.Txn, object *Object, zkey, member []byte,
-	score, oldScore float64, delta int64) (int64, error) {
+	score, oldScore utils.Number, delta int64) (int64, error) {
 	var err error
 	if delta >= 0 {
+		vv := make([]byte, 8)
+		score.Encode(vv)
 		v := EncodeValue(&Value{
-			Value:     utils.EncodeFloat(score),
+			Value:     vv,
 			Timestamp: txn.Timestamp,
 		})
 		err = txn.Put(zkey, v)
@@ -328,6 +339,41 @@ func (c *Command) PutZset(txn *store.Txn, object *Object, zkey, member []byte,
 	count.Value += delta
 	err = SetCount(txn, count)
 	return count.Value, err
+}
+
+func (c *Command) zgetMember(txn *store.Txn, object *Object, m []byte) (*Value, error) {
+	zkey := object.GetValueBytes(EncodeMemberKey(m))
+	v, err := txn.Get(zkey)
+	if err == store.KeyNotFound {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	if v == nil {
+		return nil, nil
+	}
+	zvalue := &Value{}
+	err = DecodeValue(v, zvalue)
+	if err != nil {
+		return nil, err
+	}
+	return zvalue, nil
+}
+
+func (c *Command) zget(txn *store.Txn, typo ObjectType, k, m []byte) (*Object, *Value, error) {
+	object := c.NewObject(txn, typo, k)
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return nil, nil, nil
+	} else if err != nil {
+		return nil, nil, err
+	}
+	zvalue, err := c.zgetMember(txn, object, m)
+	if err != nil {
+		return nil, nil, err
+	}
+	return object, zvalue, nil
 }
 
 // ZRANK key member
@@ -391,7 +437,8 @@ func (c *Command) zrank(txn *store.Txn, args [][]byte, reversed bool) (int64, bo
 		count++
 		return count < int64(txn.Config.Redis.ScanMaxCount)
 	}
-	err = c.ListByScore(txn, object, args[0], math.Inf(-1), math.Inf(1), true, true, callback, reversed)
+	err = c.ListByScore(txn, object, args[0], utils.Number{Float64: math.Inf(-1)},
+		utils.Number{Float64: math.Inf(1)}, true, true, callback, reversed)
 	if err != nil {
 		return 0, false, err
 	}
@@ -509,22 +556,23 @@ func checkMinMaxScore(argMin, argMax []byte) (float64, float64, bool, bool, erro
 	return min, max, includeMin, includeMax, nil
 }
 
-func getScoreMember(k, v, prefix []byte, min, max float64,
-	includeMin, includeMax bool, reversed bool) (float64, []byte, bool, bool) {
+func getScoreMember(k, v, prefix []byte, min, max utils.Number,
+	includeMin, includeMax bool, reversed bool) (utils.Number, []byte, bool, bool) {
+	score := utils.Number{IsInt: min.IsInt}
 	if len(k) < len(prefix)+8+1 {
-		return 0, nil, true, false
+		return score, nil, true, false
 	}
-	score := utils.DecodeFloat(k[len(prefix)+1:])
+	score.Decode(k[len(prefix)+1:])
 	memb := k[len(prefix)+8+1:]
-	utils.ZapLog.Debug("score member", zap.Float64("min", min), zap.Float64("max", max),
-		zap.Float64("score", score), zap.String("member", utils.B2S(memb)))
-	if score < min || score > max {
+	utils.ZapLog.Debug("score member", zap.String("min", min.String()), zap.String("max", max.String()),
+		zap.String("score", score.String()), zap.String("member", utils.B2S(memb)))
+	if score.Compare(min) < 0 || score.Compare(max) > 0 {
 		return score, memb, false, false
 	}
-	if !includeMin && score == min {
+	if !includeMin && score.Compare(min) == 0 {
 		return score, memb, !reversed, false
 	}
-	if !includeMax && score == max {
+	if !includeMax && score.Compare(max) == 0 {
 		return score, memb, reversed, false
 	}
 	return score, memb, true, true
@@ -552,24 +600,26 @@ func (c *Command) ZCountHandle(txn *store.Txn, args [][]byte) interface{} {
 	prefix := object.GetValueBytes(nil)
 	var count int64
 	callback := func(k, v []byte) bool {
-		_, _, ok, found := getScoreMember(k, v, prefix, min, max, includeMin, includeMax, false)
+		_, _, ok, found := getScoreMember(k, v, prefix, utils.Number{Float64: min},
+			utils.Number{Float64: max}, includeMin, includeMax, false)
 		if !found {
 			return ok
 		}
 		count++
 		return true
 	}
-	err = c.ListByScore(txn, object, args[0], min, max, includeMin, includeMax, callback, false)
+	err = c.ListByScore(txn, object, args[0], utils.Number{Float64: min},
+		utils.Number{Float64: max}, includeMin, includeMax, callback, false)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	return redcon.SimpleInt(count)
 }
 
-func (c *Command) ListByScore(txn *store.Txn, object *Object, arg []byte, min, max float64,
+func (c *Command) ListByScore(txn *store.Txn, object *Object, arg []byte, min, max utils.Number,
 	includeMin, includeMax bool, callback store.KVCallback, reversed bool) error {
-	utils.ZapLog.Debug("ListByScore", zap.String("arg", utils.B2S(arg)), zap.Float64("min", min),
-		zap.Float64("max", max), zap.Bool("includeMin", includeMin), zap.Bool("includeMax", includeMax),
+	utils.ZapLog.Debug("ListByScore", zap.String("arg", utils.B2S(arg)), zap.String("min", min.String()),
+		zap.String("max", max.String()), zap.Bool("includeMin", includeMin), zap.Bool("includeMax", includeMax),
 		zap.Bool("reversed", reversed))
 	start := object.GetValueBytes(EncodeScoreKey(min, nil))
 	end := object.GetValueBytes(EncodeScoreNext(max))
@@ -732,12 +782,13 @@ func (c *Command) zpop(txn *store.Txn, arg []byte, limit int64, reversed bool) (
 }
 
 func (c *Command) objectZpop(txn *store.Txn, object *Object, arg []byte, limit int64, reversed bool) ([]interface{}, error) {
-	ret, err := c.objectZRangeByScore(txn, object, arg, math.Inf(-1), math.Inf(1), true, true, &zRangeOption{
-		reversed:   reversed,
-		limit:      limit,
-		withScores: true,
-		offset:     0,
-	})
+	ret, err := c.objectZRangeByScore(txn, object, arg, utils.Number{Float64: math.Inf(-1)},
+		utils.Number{Float64: math.Inf(1)}, true, true, &zRangeOption{
+			reversed:   reversed,
+			limit:      limit,
+			withScores: true,
+			offset:     0,
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -754,7 +805,7 @@ func (c *Command) ZremValues(txn *store.Txn, object *Object, ret []interface{}) 
 	for i := 0; i < len(ret); i += 2 {
 		member := ret[i].([]byte)
 		zkey := object.GetValueBytes(EncodeMemberKey(member))
-		_, err = c.PutZset(txn, object, zkey, member, ret[i+1].(float64), 0, -1)
+		_, err = c.PutZset(txn, object, zkey, member, ret[i+1].(utils.Number), utils.Number{}, -1)
 		if err != nil {
 			return err
 		}
@@ -765,7 +816,7 @@ func (c *Command) ZremValues(txn *store.Txn, object *Object, ret []interface{}) 
 func (c *Command) ZaddValues(txn *store.Txn, object *Object, ret []interface{}) (int, error) {
 	count := 0
 	for i := 0; i < len(ret); i += 2 {
-		_, c, err := c.zadd(txn, object, ret[i].([]byte), ret[i+1].(float64), &checkOption{})
+		_, c, err := c.zadd(txn, object, ret[i].([]byte), ret[i+1].(utils.Number), &checkOption{})
 		if err != nil {
 			return count, err
 		}
@@ -919,10 +970,11 @@ func (c *Command) ZRandMemberHandle(txn *store.Txn, args [][]byte) interface{} {
 		withScores = true
 	}
 
-	ret, err := c.zrangeByScore(txn, args[0], math.Inf(-1), math.Inf(1), true, true, &zRangeOption{
-		limit:      int64(ucount),
-		withScores: withScores,
-	})
+	ret, err := c.zrangeByScore(txn, args[0], utils.Number{Float64: math.Inf(-1)},
+		utils.Number{Float64: math.Inf(1)}, true, true, &zRangeOption{
+			limit:      int64(ucount),
+			withScores: withScores,
+		})
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -988,7 +1040,8 @@ func (c *Command) zrange(txn *store.Txn, args [][]byte, opt *zRangeOption) ([]in
 		if err != nil {
 			return nil, err
 		}
-		ret, err = c.zrangeByScore(txn, args[0], min, max, includeMin, includeMax, opt)
+		ret, err = c.zrangeByScore(txn, args[0], utils.Number{Float64: min},
+			utils.Number{Float64: max}, includeMin, includeMax, opt)
 	} else if opt.by == BYLEX {
 		var min, max string
 		var includeMin, includeMax bool
@@ -1010,13 +1063,16 @@ func (c *Command) zrange(txn *store.Txn, args [][]byte, opt *zRangeOption) ([]in
 		if err != nil {
 			return nil, err
 		}
-		object := c.NewObject(txn, ZsetType, args[0])
+		object := c.NewObject(txn, UnknownType, args[0])
 		key := object.GetKeyBytes()
 		err = getTxnObject(txn, key, object, false)
 		if err == store.KeyNotFound {
 			return EmptyInterface, nil
 		} else if err != nil {
 			return nil, err
+		}
+		if object.Type != ZsetType && object.Type != GeoType {
+			return nil, xerror.WrongTypeErr
 		}
 		ret, err = c.objectZrangeByRank(txn, object, args[0], start, end, opt)
 	}
@@ -1039,7 +1095,8 @@ func (c *Command) ZRevRangeByScoreHandle(txn *store.Txn, args [][]byte) interfac
 	if err != nil {
 		return txn.SetError(err)
 	}
-	ret, err := c.zrangeByScoreHandle(txn, args, min, max, includeMin, includeMax, true)
+	ret, err := c.zrangeByScoreHandle(txn, args, utils.Number{Float64: min},
+		utils.Number{Float64: max}, includeMin, includeMax, true)
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -1058,14 +1115,15 @@ func (c *Command) ZRangeByScoreHandle(txn *store.Txn, args [][]byte) interface{}
 	if err != nil {
 		return txn.SetError(err)
 	}
-	ret, err := c.zrangeByScoreHandle(txn, args, min, max, includeMin, includeMax, false)
+	ret, err := c.zrangeByScoreHandle(txn, args, utils.Number{Float64: min},
+		utils.Number{Float64: max}, includeMin, includeMax, false)
 	if err != nil {
 		return txn.SetError(err)
 	}
 	return ret
 }
 
-func (c *Command) zrangeByScoreHandle(txn *store.Txn, args [][]byte, min, max float64, includeMin, includeMax, reversed bool) ([]interface{}, error) {
+func (c *Command) zrangeByScoreHandle(txn *store.Txn, args [][]byte, min, max utils.Number, includeMin, includeMax, reversed bool) ([]interface{}, error) {
 	opt, err := c.checkZRangeOption(txn, args[3:])
 	if err != nil {
 		return nil, err
@@ -1077,7 +1135,7 @@ func (c *Command) zrangeByScoreHandle(txn *store.Txn, args [][]byte, min, max fl
 	return c.zrangeByScore(txn, args[0], min, max, includeMin, includeMax, opt)
 }
 
-func (c *Command) zrangeByScore(txn *store.Txn, arg []byte, min, max float64,
+func (c *Command) zrangeByScore(txn *store.Txn, arg []byte, min, max utils.Number,
 	includeMin, includeMax bool, opt *zRangeOption) ([]interface{}, error) {
 	object := c.NewObject(txn, ZsetType, arg)
 	key := object.GetKeyBytes()
@@ -1118,7 +1176,7 @@ func (c *Command) objectZrangeByRank(txn *store.Txn, object *Object, arg []byte,
 	return ret, nil
 }
 
-func (c *Command) objectZRangeByScore(txn *store.Txn, object *Object, arg []byte, min, max float64,
+func (c *Command) objectZRangeByScore(txn *store.Txn, object *Object, arg []byte, min, max utils.Number,
 	includeMin, includeMax bool, opt *zRangeOption) ([]interface{}, error) {
 	prefix := object.GetValueBytes(nil)
 	ret := make([]interface{}, 0)
@@ -1253,8 +1311,9 @@ func (c *Command) ZRemRangeByScoreHandle(txn *store.Txn, args [][]byte) interfac
 	} else if err != nil {
 		return txn.SetError(err)
 	}
-	ret, err := c.objectZRangeByScore(txn, object, args[0], min, max, includeMin, includeMax, &zRangeOption{
-		offset: 0, limit: int64(txn.Config.Redis.ScanMaxCount), withScores: true})
+	ret, err := c.objectZRangeByScore(txn, object, args[0], utils.Number{Float64: min},
+		utils.Number{Float64: max}, includeMin, includeMax, &zRangeOption{
+			offset: 0, limit: int64(txn.Config.Redis.ScanMaxCount), withScores: true})
 	if err != nil {
 		return txn.SetError(err)
 	}
@@ -1417,7 +1476,8 @@ func (c *Command) objectZrangeByLex(txn *store.Txn, object *Object, arg []byte, 
 		if opt.withScores {
 			zvalue := &Value{}
 			DecodeValue(v, zvalue)
-			score := utils.DecodeFloat(zvalue.Value)
+			score := utils.Number{IsInt: object.IsGeo()}
+			score.Decode(zvalue.Value)
 			ret = append(ret, score)
 		}
 		cnt++

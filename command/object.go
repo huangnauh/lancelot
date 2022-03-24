@@ -35,6 +35,7 @@ const (
 	StringType  ObjectType = 'k'
 	LListType   ObjectType = 'l'
 	MessageType ObjectType = 'm'
+	GeoType     ObjectType = 'o'
 	StreamType  ObjectType = 'p'
 	PubSubType  ObjectType = 'q'
 	ScriptType  ObjectType = 'r'
@@ -64,6 +65,10 @@ const (
 	GCChange      ChangeType = 0x04
 	DeleteKeyType ChangeType = 0x08
 )
+
+func (o ObjectType) UseZset() bool {
+	return o == ZsetType || o == GeoType
+}
 
 func (o ObjectType) Type() string {
 	switch o {
@@ -191,6 +196,10 @@ func (o *Object) Info() string {
 	}
 }
 
+func (o *Object) IsGeo() bool {
+	return o.Type == GeoType
+}
+
 func GetUserPrefix(typo PrefixType, user uint16) []byte {
 	k := make([]byte, 1+2)
 	k[0] = byte(typo)
@@ -239,7 +248,8 @@ func (o *Object) IsSimple() bool {
 }
 
 func (o *Object) DisableCount() bool {
-	return o.Type == HashType || o.Type == AListType || o.Type == ZsetType || o.Type == SetType
+	return o.Type == HashType || o.Type == AListType ||
+		o.Type == ZsetType || o.Type == SetType || o.Type == GeoType
 }
 
 func (o *Object) IsCountable() bool {
