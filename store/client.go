@@ -112,6 +112,13 @@ func (c *Client) ID() string {
 	return c.uuid
 }
 
+func (c *Client) IsLeader(ctx context.Context) bool {
+	if c.manager == nil {
+		return true
+	}
+	return c.manager.IsLeader(ctx)
+}
+
 func (c *Client) GetLeader(ctx context.Context) string {
 	if c.manager == nil {
 		return c.ID()

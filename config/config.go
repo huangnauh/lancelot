@@ -159,7 +159,6 @@ var cfg = Config{
 	Store: Store{
 		PDAddrs:              nil,
 		Level:                "debug",
-		UUID:                 Hostname(),
 		GCConcurrency:        1,
 		DisableLockBackOff:   true,
 		SlowRequest:          100 * time.Millisecond,
@@ -231,6 +230,9 @@ func LoadYAMLConfig(filename string) error {
 	cfg.StartAt = time.Now()
 	if cfg.Redis.SetOperation != SETOP_GET {
 		cfg.Redis.SetOperation = SETOP_SCAN
+	}
+	if cfg.Store.UUID == "" {
+		cfg.Store.UUID = cfg.Host
 	}
 	return err
 }

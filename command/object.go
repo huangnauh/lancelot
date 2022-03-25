@@ -87,6 +87,10 @@ func (o ObjectType) Type() string {
 		return "zset"
 	case SetType:
 		return "set"
+	case GeoType:
+		return "geo"
+	case HLLType:
+		return "hll"
 	default:
 		return "unknown"
 	}

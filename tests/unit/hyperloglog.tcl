@@ -83,36 +83,32 @@ start_server {tags {"hll"}} {
     test {Corrupted sparse HyperLogLogs are detected: Additional at tail} {
         r del hll
         r pfadd hll a b c
-        r append hll "hello"
         set e {}
-        catch {r pfcount hll} e
+        catch {r append hll "hello"} e
         set e
-    } {*INVALIDOBJ*}
+    } {*WRONGTYPE*}
 
     test {Corrupted sparse HyperLogLogs are detected: Broken magic} {
         r del hll
         r pfadd hll a b c
-        r setrange hll 0 "0123"
         set e {}
-        catch {r pfcount hll} e
+        catch { r setrange hll 0 "0123"} e
         set e
     } {*WRONGTYPE*}
 
     test {Corrupted sparse HyperLogLogs are detected: Invalid encoding} {
         r del hll
         r pfadd hll a b c
-        r setrange hll 4 "x"
         set e {}
-        catch {r pfcount hll} e
+        catch {r setrange hll 4 "x"} e
         set e
     } {*WRONGTYPE*}
 
     test {Corrupted dense HyperLogLogs are detected: Wrong length} {
         r del hll
         r pfadd hll a b c
-        r setrange hll 4 "\x00"
         set e {}
-        catch {r pfcount hll} e
+        catch {r setrange hll 4 "\x00"} e
         set e
     } {*WRONGTYPE*}
 
@@ -142,7 +138,7 @@ start_server {tags {"hll"}} {
                 r pfcount hll
             }
         }
-    }
+    } {} {needs:pfdebug}
 
     test {PFADD, PFCOUNT, PFMERGE type checking works} {
         r set foo{t} bar
@@ -167,7 +163,7 @@ start_server {tags {"hll"}} {
 
     test {PFCOUNT multiple-keys merge returns cardinality of union #1} {
         r del hll1{t} hll2{t} hll3{t}
-        for {set x 1} {$x < 10000} {incr x} {
+        for {set x 1} {$x < 100} {incr x} {
             r pfadd hll1{t} "foo-$x"
             r pfadd hll2{t} "bar-$x"
             r pfadd hll3{t} "zap-$x"
@@ -182,7 +178,7 @@ start_server {tags {"hll"}} {
     test {PFCOUNT multiple-keys merge returns cardinality of union #2} {
         r del hll1{t} hll2{t} hll3{t}
         set elements {}
-        for {set x 1} {$x < 10000} {incr x} {
+        for {set x 1} {$x < 100} {incr x} {
             for {set j 1} {$j <= 3} {incr j} {
                 set rint [randomInt 20000]
                 r pfadd hll$j{t} $rint
@@ -210,5 +206,5 @@ start_server {tags {"hll"}} {
         assert {[r getrange hll 15 15] eq "\x00"}
         r pfadd hll 1 2 3
         assert {[r getrange hll 15 15] eq "\x80"}
-    }
+    } {} {needs:pfdebug}
 }

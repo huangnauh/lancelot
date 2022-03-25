@@ -23,6 +23,9 @@ app:
 lint:
 	revive -config ./revive.toml -formatter friendly ./...
 
+gen:
+	./scripts/genproto.sh
+
 start:
 	./bin/lancelot -dev
 
