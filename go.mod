@@ -6,8 +6,10 @@ require (
 	github.com/alicebob/miniredis/v2 v2.16.0
 	github.com/axiomhq/hyperloglog v0.0.0-20220105174342-98591331716a
 	github.com/cenkalti/backoff/v4 v4.1.1
+	github.com/cespare/xxhash v1.1.0
 	github.com/cloudflare/tableflip v1.2.2
 	github.com/coocood/freecache v1.1.1
+	github.com/davecgh/go-spew v1.1.1
 	github.com/go-redis/redis/v8 v8.11.4
 	github.com/gocraft/work v0.5.1
 	github.com/gogo/protobuf v1.3.2
