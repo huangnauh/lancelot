@@ -1,24 +1,13 @@
 package hll
 
-import "encoding"
-
 // Sketch is the interface representing a sketch for estimating cardinality.
 type Sketch interface {
 	// Add adds a single value to the sketch.
-	Add(v []byte)
+	Add(v []byte) error
 
 	// Count returns a cardinality estimate for the sketch.
-	Count() uint64
+	Count() (uint64, error)
 
 	// Merge merges another sketch into this one.
 	Merge(s Sketch) error
-
-	// Bytes estimates the memory footprint of the sketch, in bytes.
-	Bytes() int
-
-	// Clone returns a deep copy of the sketch.
-	Clone() Sketch
-
-	encoding.BinaryMarshaler
-	encoding.BinaryUnmarshaler
 }
