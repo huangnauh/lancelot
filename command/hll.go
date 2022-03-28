@@ -21,7 +21,7 @@ const (
 	HLLNoAccess = time.Minute
 )
 
-type hll struct {
+type Hll struct {
 	sync.RWMutex
 	Key        string
 	Sketch     *hyperloglog.Sketch
@@ -31,14 +31,14 @@ type hll struct {
 	Exist      bool
 }
 
-type Hll struct {
+type HllManger struct {
 	sync.RWMutex
-	Keys map[string]*hll
+	Keys map[string]*Hll
 	wg   *sync.WaitGroup
 }
 
 var (
-	HLogLog = NewHll()
+	HLogLog = NewHllManger()
 )
 
 func GetHllKey(userId uint16, dbId uint8, key []byte) string {
@@ -61,14 +61,14 @@ func GetUserAndKey(key string) (uint16, uint8, []byte, error) {
 	return uint16(userId), uint8(dbId), []byte(s[2]), nil
 }
 
-func NewHll() *Hll {
-	return &Hll{
-		Keys: make(map[string]*hll),
+func NewHllManger() *HllManger {
+	return &HllManger{
+		Keys: make(map[string]*Hll),
 		wg:   &sync.WaitGroup{},
 	}
 }
 
-func (h *Hll) Get(key string) *hll {
+func (h *HllManger) Get(key string) *Hll {
 	h.RLock()
 	defer h.RUnlock()
 	if v, ok := h.Keys[key]; ok {
@@ -77,23 +77,23 @@ func (h *Hll) Get(key string) *hll {
 	return nil
 }
 
-func (h *Hll) Set(key string, v *hll) {
+func (h *HllManger) Set(key string, v *Hll) {
 	h.Lock()
 	defer h.Unlock()
 	h.Keys[key] = v
 }
 
-func (h *Hll) GetALL() map[string]*hll {
+func (h *HllManger) GetALL() map[string]*Hll {
 	h.RLock()
 	defer h.RUnlock()
-	result := make(map[string]*hll, len(h.Keys))
+	result := make(map[string]*Hll, len(h.Keys))
 	for k, v := range h.Keys {
 		result[k] = v
 	}
 	return result
 }
 
-func (h *Hll) Remove(key string, nocheck bool) {
+func (h *HllManger) Remove(key string, nocheck bool) {
 	h.Lock()
 	defer h.Unlock()
 	if v, ok := h.Keys[key]; ok {
@@ -103,7 +103,7 @@ func (h *Hll) Remove(key string, nocheck bool) {
 	}
 }
 
-func (c *Command) FlushHll(h *hll) {
+func (c *Command) FlushHll(h *Hll) {
 	h.Lock()
 	defer h.Unlock()
 	if h.FlushTime.Sub(h.UpdateTime) >= 0 {
@@ -125,7 +125,7 @@ func (c *Command) BeginTxn(txn *store.Txn, userID uint16, dbID uint8) {
 	}
 }
 
-func (c *Command) FlushHllData(h *hll, hlldata []byte) {
+func (c *Command) FlushHllData(h *Hll, hlldata []byte) {
 	HLogLog.wg.Add(1)
 	defer HLogLog.wg.Done()
 	utils.ZapLog.Debug("FlushHllData", zap.String("key", h.Key), zap.Int("size", len(hlldata)))
@@ -194,11 +194,11 @@ func (c *Command) CloseHll() {
 	c.FlushAllHll()
 }
 
-func (c *Command) LoadHll(txn *store.Txn, k []byte) (*hll, *Object, error) {
+func (c *Command) LoadHll(txn *store.Txn, k []byte) (*Hll, *Object, error) {
 	object := NewObject(txn, HLLType, k)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
-	h := &hll{
+	h := &Hll{
 		Sketch:     hyperloglog.NewNoSparse(),
 		AccessTime: txn.NowTime(),
 	}
@@ -221,7 +221,7 @@ func (c *Command) LoadHll(txn *store.Txn, k []byte) (*hll, *Object, error) {
 	}
 }
 
-func (c *Command) GetHll(txn *store.Txn, k []byte, flush bool) (*hll, *Object, error) {
+func (c *Command) GetHll(txn *store.Txn, k []byte, flush bool) (*Hll, *Object, error) {
 	hk := GetHllKey(txn.UserId, txn.DBId, k)
 	h := HLogLog.Get(hk)
 	var object *Object
