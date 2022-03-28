@@ -41,7 +41,7 @@ func (c *Command) ExpireTimeHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(EXPIRETIME_COMMAND)
 	}
-	object := c.NewObject(txn, UnknownType, args[0])
+	object := NewObject(txn, UnknownType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -60,7 +60,7 @@ func (c *Command) PExpireTimeHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(PEXPIRETIME_COMMAND)
 	}
-	object := c.NewObject(txn, UnknownType, args[0])
+	object := NewObject(txn, UnknownType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -185,7 +185,7 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 		}
 	}
 
-	object := c.NewObject(txn, UnknownType, args[0])
+	object := NewObject(txn, UnknownType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
@@ -279,7 +279,7 @@ func (c *Command) ExistsHandle(txn *store.Txn, args [][]byte) interface{} {
 
 	count := 0
 	for _, arg := range args {
-		object := c.NewObject(txn, UnknownType, arg)
+		object := NewObject(txn, UnknownType, arg)
 		key := object.GetKeyBytes()
 		err := getTxnObject(txn, key, object, false)
 		if err == store.KeyNotFound {
@@ -293,7 +293,7 @@ func (c *Command) ExistsHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) ttl(txn *store.Txn, args [][]byte) (int64, error) {
-	object := c.NewObject(txn, UnknownType, args[0])
+	object := NewObject(txn, UnknownType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -370,6 +370,10 @@ func CleanKey(txn *store.Txn, key, ttlKey []byte, object *Object, valueTTL int64
 		}
 	}
 
+	if object.Type == HLLType {
+		HLogLog.Remove(GetHllKey(object.UserId, object.Db, object.Key), true)
+	}
+
 	if !object.IsSimple() && len(object.Value) > 0 {
 		if valueTTL > 0 {
 			object.TTL = valueTTL
@@ -433,7 +437,7 @@ func (c *Command) RenameHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) rename(txn *store.Txn, args [][]byte, checkExist bool) (int, error) {
-	fromObject := c.NewObject(txn, UnknownType, args[0])
+	fromObject := NewObject(txn, UnknownType, args[0])
 	fromKey := fromObject.GetKeyBytes()
 	err := getTxnObject(txn, fromKey, fromObject, false)
 	if err == store.KeyNotFound {
@@ -447,7 +451,7 @@ func (c *Command) rename(txn *store.Txn, args [][]byte, checkExist bool) (int, e
 		return 0, nil
 	}
 
-	toObject := c.NewObject(txn, UnknownType, args[1])
+	toObject := NewObject(txn, UnknownType, args[1])
 	toKey := toObject.GetKeyBytes()
 	err = getTxnObject(txn, toKey, toObject, false)
 	if err == store.KeyNotFound {
@@ -500,7 +504,7 @@ func (c *Command) UnlinkHandle(txn *store.Txn, args [][]byte) interface{} {
 func (c *Command) touchORDelete(txn *store.Txn, args [][]byte, delete bool) interface{} {
 	var count int64
 	for i := range args {
-		object := c.NewObject(txn, UnknownType, args[i])
+		object := NewObject(txn, UnknownType, args[i])
 		key := object.GetKeyBytes()
 		err := getTxnObject(txn, key, object, false)
 		if err == store.KeyNotFound {
@@ -690,7 +694,7 @@ func (c *Command) TypeHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(TYPE_COMMAND)
 	}
-	object := c.NewObject(txn, UnknownType, args[0])
+	object := NewObject(txn, UnknownType, args[0])
 	err := getTxnObject(txn, object.GetKeyBytes(), object, false)
 	if err != nil {
 		return txn.SetError(err)

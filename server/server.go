@@ -182,9 +182,9 @@ func NewServer(cfg *config.Config) *Server {
 		cfg:    cfg,
 	}
 	s.rpc = grpc.NewGrpcServer(cfg)
-	lancepb.RegisterLanceServer(s.rpc.GRPCServer, s.Command)
 	s.red = redcon.NewServer("", s.ServeRESP, s.Accept, s.Close)
 	s.Command = command.NewCommand(s.red)
+	lancepb.RegisterLanceServer(s.rpc.GRPCServer, s.Command)
 	return s
 }
 

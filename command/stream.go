@@ -321,7 +321,7 @@ func (c *Command) XCreateHandle(txn *store.Txn, args [][]byte) interface{} {
 		create = true
 	}
 
-	object := c.NewObject(txn, StreamType, args[0])
+	object := NewObject(txn, StreamType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, create)
 	if err == store.KeyNotFound {
@@ -335,7 +335,7 @@ func (c *Command) XCreateHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 
-	gobject := c.NewObject(txn, GroupType, args[1])
+	gobject := NewObject(txn, GroupType, args[1])
 	key = object.GetKeyBytes()
 	err = getTxnObject(txn, key, gobject, true)
 	if err == nil {
@@ -416,7 +416,7 @@ func (c *Command) XRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 		return EmptySlice
 	}
 
-	object := c.NewObject(txn, StreamType, args[0])
+	object := NewObject(txn, StreamType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -569,7 +569,7 @@ LOOP:
 		return txn.SetError(err)
 	}
 
-	object := c.NewObject(txn, StreamType, channel)
+	object := NewObject(txn, StreamType, channel)
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
@@ -736,7 +736,7 @@ func (c *Command) FSubscribeHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 	channel := args[0]
-	object := c.NewObject(txn, StreamType, channel)
+	object := NewObject(txn, StreamType, channel)
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {

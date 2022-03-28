@@ -22,7 +22,7 @@ func (c *Command) GeoHashHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	count := len(args) - 1
 	rets := make([]interface{}, count)
-	object := c.NewObject(txn, GeoType, args[0])
+	object := NewObject(txn, GeoType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -64,7 +64,7 @@ func (c *Command) GeoPosHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 	count := len(args) - 1
 	rets := make([]interface{}, count)
-	object := c.NewObject(txn, GeoType, args[0])
+	object := NewObject(txn, GeoType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -117,7 +117,7 @@ func (c *Command) GeoDistHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 3 {
 		return txn.SetError(xerror.WrongArgsError(GEODIST_COMMAND))
 	}
-	object := c.NewObject(txn, GeoType, args[0])
+	object := NewObject(txn, GeoType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -182,7 +182,7 @@ func (c *Command) GeoRemHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(GEOREM_COMMAND)
 	}
-	object := c.NewObject(txn, GeoType, args[0])
+	object := NewObject(txn, GeoType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -455,7 +455,7 @@ func (c *Command) GeoRadiusHandle(txn *store.Txn, args [][]byte) interface{} {
 		Radius: radius,
 	}
 
-	object := c.NewObject(txn, GeoType, args[0])
+	object := NewObject(txn, GeoType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -475,7 +475,7 @@ func (c *Command) GeoSearchHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	object := c.NewObject(txn, GeoType, args[0])
+	object := NewObject(txn, GeoType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {

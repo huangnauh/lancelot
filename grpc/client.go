@@ -14,10 +14,10 @@ import (
 )
 
 type Client struct {
-	conn          *grpc.ClientConn
-	publishClient lancepb.LanceClient
-	closed        chan struct{}
-	address       string
+	conn    *grpc.ClientConn
+	Client  lancepb.LanceClient
+	closed  chan struct{}
+	address string
 }
 
 func NewClient(ctx context.Context, address string, opts ...grpc.DialOption) (*Client, error) {
@@ -52,7 +52,7 @@ func NewClient(ctx context.Context, address string, opts ...grpc.DialOption) (*C
 	}
 	client := lancepb.NewLanceClient(conn)
 
-	return &Client{conn: conn, publishClient: client, address: address, closed: make(chan struct{})}, nil
+	return &Client{conn: conn, Client: client, address: address, closed: make(chan struct{})}, nil
 }
 
 func (c *Client) String() string {
@@ -92,12 +92,12 @@ func (c *Client) Publish(ctx context.Context, req *lancepb.PubRequest) (*lancepb
 	for i := 0; i < 3; i++ {
 		err = c.waitConnReady()
 		if err == nil {
-			resp, err = c.publishClient.Publish(ctx, req)
+			resp, err = c.Client.Publish(ctx, req)
 		}
 		if err == nil {
 			return resp, nil
 		}
-		time.Sleep(time.Millisecond * 100 * time.Duration(i+1))
+		time.Sleep(time.Millisecond * 10 * time.Duration(i+1))
 	}
 	return nil, err
 }
@@ -108,12 +108,12 @@ func (c *Client) PSNumPat(ctx context.Context, req *lancepb.PSNumPatRequest) (*l
 	for i := 0; i < 3; i++ {
 		err = c.waitConnReady()
 		if err == nil {
-			resp, err = c.publishClient.PSNumPat(ctx, req)
+			resp, err = c.Client.PSNumPat(ctx, req)
 		}
 		if err == nil {
 			return resp, nil
 		}
-		time.Sleep(time.Millisecond * 100 * time.Duration(i+1))
+		time.Sleep(time.Millisecond * 10 * time.Duration(i+1))
 	}
 	return nil, err
 }
@@ -124,12 +124,12 @@ func (c *Client) PSChannels(ctx context.Context, req *lancepb.PSChannelsRequest)
 	for i := 0; i < 3; i++ {
 		err = c.waitConnReady()
 		if err == nil {
-			resp, err = c.publishClient.PSChannels(ctx, req)
+			resp, err = c.Client.PSChannels(ctx, req)
 		}
 		if err == nil {
 			return resp, nil
 		}
-		time.Sleep(time.Millisecond * 100 * time.Duration(i+1))
+		time.Sleep(time.Millisecond * 10 * time.Duration(i+1))
 	}
 	return nil, err
 }
@@ -140,12 +140,60 @@ func (c *Client) PSNumSub(ctx context.Context, req *lancepb.PSNumSubRequest) (*l
 	for i := 0; i < 3; i++ {
 		err = c.waitConnReady()
 		if err == nil {
-			resp, err = c.publishClient.PSNumSub(ctx, req)
+			resp, err = c.Client.PSNumSub(ctx, req)
 		}
 		if err == nil {
 			return resp, nil
 		}
-		time.Sleep(time.Millisecond * 100 * time.Duration(i+1))
+		time.Sleep(time.Millisecond * 10 * time.Duration(i+1))
+	}
+	return nil, err
+}
+
+func (c *Client) PFAdd(ctx context.Context, req *lancepb.PFAddRequest) (*lancepb.PFResponse, error) {
+	var resp *lancepb.PFResponse
+	var err error
+	for i := 0; i < 3; i++ {
+		err = c.waitConnReady()
+		if err == nil {
+			resp, err = c.Client.PFAdd(ctx, req)
+		}
+		if err == nil {
+			return resp, nil
+		}
+		time.Sleep(time.Millisecond * 10 * time.Duration(i+1))
+	}
+	return nil, err
+}
+
+func (c *Client) PFCount(ctx context.Context, req *lancepb.PFCountRequest) (*lancepb.PFResponse, error) {
+	var resp *lancepb.PFResponse
+	var err error
+	for i := 0; i < 3; i++ {
+		err = c.waitConnReady()
+		if err == nil {
+			resp, err = c.Client.PFCount(ctx, req)
+		}
+		if err == nil {
+			return resp, nil
+		}
+		time.Sleep(time.Millisecond * 10 * time.Duration(i+1))
+	}
+	return nil, err
+}
+
+func (c *Client) PFMerge(ctx context.Context, req *lancepb.PFMergeRequest) (*lancepb.PFResponse, error) {
+	var resp *lancepb.PFResponse
+	var err error
+	for i := 0; i < 3; i++ {
+		err = c.waitConnReady()
+		if err == nil {
+			resp, err = c.Client.PFMerge(ctx, req)
+		}
+		if err == nil {
+			return resp, nil
+		}
+		time.Sleep(time.Millisecond * 10 * time.Duration(i+1))
 	}
 	return nil, err
 }

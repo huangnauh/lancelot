@@ -54,7 +54,7 @@ const (
 )
 
 func (c *Command) getString(txn *store.Txn, arg []byte) ([]byte, error) {
-	object := c.NewObject(txn, StringType, arg)
+	object := NewObject(txn, StringType, arg)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -109,7 +109,7 @@ func (c *Command) GetDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(GETDEL_COMMAND)
 	}
-	object := c.NewObject(txn, StringType, args[0])
+	object := NewObject(txn, StringType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -143,7 +143,7 @@ func (c *Command) AppendHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 {
 		return txn.SetWrongArgs(APPEND_COMMAND)
 	}
-	object := c.NewObject(txn, StringType, args[0])
+	object := NewObject(txn, StringType, args[0])
 	key := object.GetKeyBytes()
 	var create ChangeType
 	err := getTxnObject(txn, key, object, true)
@@ -300,7 +300,7 @@ func (c *Command) checkExist(txn *store.Txn, cmd string, key []byte, check Check
 	if !ok {
 		return nil, xerror.UnknownCommandError(cmd)
 	}
-	oldObject := c.NewObject(txn, c.getObjectType(txn, cmdHandler.Typo), key)
+	oldObject := NewObject(txn, c.getObjectType(txn, cmdHandler.Typo), key)
 	objectKey := oldObject.GetKeyBytes()
 	err := getTxnObject(txn, objectKey, oldObject, false)
 	if err == store.KeyNotFound {
@@ -322,7 +322,7 @@ func (c *Command) GetSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 {
 		return txn.SetWrongArgs(GETSET_COMMAND)
 	}
-	object := c.NewObject(txn, StringType, args[0])
+	object := NewObject(txn, StringType, args[0])
 	key := object.GetKeyBytes()
 	var create ChangeType
 	err := getTxnObject(txn, key, object, true)
@@ -428,7 +428,7 @@ func incrBy(o *Object, args [][]byte) (interface{}, bool, error) {
 
 func (c *Command) stringHandle(txn *store.Txn, args [][]byte, stringFunc StringFunc) interface{} {
 	var create ChangeType
-	object := c.NewObject(txn, StringType, args[0])
+	object := NewObject(txn, StringType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
@@ -494,7 +494,7 @@ func (c *Command) IncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 
 func (c *Command) setString(txn *store.Txn, argKey, argValue []byte, expire int64, check CheckType) error {
 	var create ChangeType
-	object := c.NewObject(txn, StringType, argKey)
+	object := NewObject(txn, StringType, argKey)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
@@ -606,7 +606,7 @@ func (c *Command) SetRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	var create ChangeType
-	object := c.NewObject(txn, StringType, args[0])
+	object := NewObject(txn, StringType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, true)
 	var value []byte
@@ -701,7 +701,7 @@ func (c *Command) SetHandle(txn *store.Txn, args [][]byte) interface{} {
 		create = PlusCount
 	}
 
-	object := c.NewObject(txn, StringType, args[0])
+	object := NewObject(txn, StringType, args[0])
 	object.Value = args[1]
 	object.TTL = setOption.Expire
 	object.Timestamp = txn.Timestamp
@@ -733,7 +733,7 @@ func (c *Command) GetExHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 1 {
 		return txn.SetWrongArgs(GETEX_COMMAND)
 	}
-	object := c.NewObject(txn, StringType, args[0])
+	object := NewObject(txn, StringType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
@@ -820,7 +820,7 @@ func (c *Command) checkAndGetRange(txn *store.Txn, k []byte, args [][]byte) ([]b
 }
 
 func (c *Command) getRange(txn *store.Txn, k []byte, start, end int) ([]byte, int, int, error) {
-	object := c.NewObject(txn, StringType, k)
+	object := NewObject(txn, StringType, k)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {

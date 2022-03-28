@@ -27,6 +27,289 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 
+type UserDB struct {
+	User                 uint64   `protobuf:"varint,1,opt,name=user,proto3" json:"user,omitempty"`
+	Db                   uint64   `protobuf:"varint,2,opt,name=db,proto3" json:"db,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *UserDB) Reset()         { *m = UserDB{} }
+func (m *UserDB) String() string { return proto.CompactTextString(m) }
+func (*UserDB) ProtoMessage()    {}
+func (*UserDB) Descriptor() ([]byte, []int) {
+	return fileDescriptor_9500dafa571eb7ef, []int{0}
+}
+func (m *UserDB) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *UserDB) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_UserDB.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *UserDB) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UserDB.Merge(m, src)
+}
+func (m *UserDB) XXX_Size() int {
+	return m.Size()
+}
+func (m *UserDB) XXX_DiscardUnknown() {
+	xxx_messageInfo_UserDB.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_UserDB proto.InternalMessageInfo
+
+func (m *UserDB) GetUser() uint64 {
+	if m != nil {
+		return m.User
+	}
+	return 0
+}
+
+func (m *UserDB) GetDb() uint64 {
+	if m != nil {
+		return m.Db
+	}
+	return 0
+}
+
+type PFCountRequest struct {
+	Userdb               *UserDB  `protobuf:"bytes,1,opt,name=userdb,proto3" json:"userdb,omitempty"`
+	Keys                 [][]byte `protobuf:"bytes,2,rep,name=keys,proto3" json:"keys,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *PFCountRequest) Reset()         { *m = PFCountRequest{} }
+func (m *PFCountRequest) String() string { return proto.CompactTextString(m) }
+func (*PFCountRequest) ProtoMessage()    {}
+func (*PFCountRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_9500dafa571eb7ef, []int{1}
+}
+func (m *PFCountRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PFCountRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PFCountRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PFCountRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PFCountRequest.Merge(m, src)
+}
+func (m *PFCountRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *PFCountRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_PFCountRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PFCountRequest proto.InternalMessageInfo
+
+func (m *PFCountRequest) GetUserdb() *UserDB {
+	if m != nil {
+		return m.Userdb
+	}
+	return nil
+}
+
+func (m *PFCountRequest) GetKeys() [][]byte {
+	if m != nil {
+		return m.Keys
+	}
+	return nil
+}
+
+type PFResponse struct {
+	Count                uint64   `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *PFResponse) Reset()         { *m = PFResponse{} }
+func (m *PFResponse) String() string { return proto.CompactTextString(m) }
+func (*PFResponse) ProtoMessage()    {}
+func (*PFResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_9500dafa571eb7ef, []int{2}
+}
+func (m *PFResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PFResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PFResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PFResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PFResponse.Merge(m, src)
+}
+func (m *PFResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *PFResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_PFResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PFResponse proto.InternalMessageInfo
+
+func (m *PFResponse) GetCount() uint64 {
+	if m != nil {
+		return m.Count
+	}
+	return 0
+}
+
+type PFAddRequest struct {
+	Userdb               *UserDB  `protobuf:"bytes,1,opt,name=userdb,proto3" json:"userdb,omitempty"`
+	Key                  []byte   `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Elements             [][]byte `protobuf:"bytes,3,rep,name=elements,proto3" json:"elements,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *PFAddRequest) Reset()         { *m = PFAddRequest{} }
+func (m *PFAddRequest) String() string { return proto.CompactTextString(m) }
+func (*PFAddRequest) ProtoMessage()    {}
+func (*PFAddRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_9500dafa571eb7ef, []int{3}
+}
+func (m *PFAddRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PFAddRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PFAddRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PFAddRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PFAddRequest.Merge(m, src)
+}
+func (m *PFAddRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *PFAddRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_PFAddRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PFAddRequest proto.InternalMessageInfo
+
+func (m *PFAddRequest) GetUserdb() *UserDB {
+	if m != nil {
+		return m.Userdb
+	}
+	return nil
+}
+
+func (m *PFAddRequest) GetKey() []byte {
+	if m != nil {
+		return m.Key
+	}
+	return nil
+}
+
+func (m *PFAddRequest) GetElements() [][]byte {
+	if m != nil {
+		return m.Elements
+	}
+	return nil
+}
+
+type PFMergeRequest struct {
+	Userdb               *UserDB  `protobuf:"bytes,1,opt,name=userdb,proto3" json:"userdb,omitempty"`
+	Destkey              []byte   `protobuf:"bytes,2,opt,name=destkey,proto3" json:"destkey,omitempty"`
+	Sourcekeys           [][]byte `protobuf:"bytes,3,rep,name=sourcekeys,proto3" json:"sourcekeys,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *PFMergeRequest) Reset()         { *m = PFMergeRequest{} }
+func (m *PFMergeRequest) String() string { return proto.CompactTextString(m) }
+func (*PFMergeRequest) ProtoMessage()    {}
+func (*PFMergeRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_9500dafa571eb7ef, []int{4}
+}
+func (m *PFMergeRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *PFMergeRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_PFMergeRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *PFMergeRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PFMergeRequest.Merge(m, src)
+}
+func (m *PFMergeRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *PFMergeRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_PFMergeRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PFMergeRequest proto.InternalMessageInfo
+
+func (m *PFMergeRequest) GetUserdb() *UserDB {
+	if m != nil {
+		return m.Userdb
+	}
+	return nil
+}
+
+func (m *PFMergeRequest) GetDestkey() []byte {
+	if m != nil {
+		return m.Destkey
+	}
+	return nil
+}
+
+func (m *PFMergeRequest) GetSourcekeys() [][]byte {
+	if m != nil {
+		return m.Sourcekeys
+	}
+	return nil
+}
+
 type PubRequestMessage struct {
 	Channel              string   `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
 	Messages             [][]byte `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"`
@@ -39,7 +322,7 @@ func (m *PubRequestMessage) Reset()         { *m = PubRequestMessage{} }
 func (m *PubRequestMessage) String() string { return proto.CompactTextString(m) }
 func (*PubRequestMessage) ProtoMessage()    {}
 func (*PubRequestMessage) Descriptor() ([]byte, []int) {
-	return fileDescriptor_9500dafa571eb7ef, []int{0}
+	return fileDescriptor_9500dafa571eb7ef, []int{5}
 }
 func (m *PubRequestMessage) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -93,7 +376,7 @@ func (m *PubRequest) Reset()         { *m = PubRequest{} }
 func (m *PubRequest) String() string { return proto.CompactTextString(m) }
 func (*PubRequest) ProtoMessage()    {}
 func (*PubRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_9500dafa571eb7ef, []int{1}
+	return fileDescriptor_9500dafa571eb7ef, []int{6}
 }
 func (m *PubRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -140,7 +423,7 @@ func (m *PubResponse) Reset()         { *m = PubResponse{} }
 func (m *PubResponse) String() string { return proto.CompactTextString(m) }
 func (*PubResponse) ProtoMessage()    {}
 func (*PubResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_9500dafa571eb7ef, []int{2}
+	return fileDescriptor_9500dafa571eb7ef, []int{7}
 }
 func (m *PubResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -187,7 +470,7 @@ func (m *PSChannelsRequest) Reset()         { *m = PSChannelsRequest{} }
 func (m *PSChannelsRequest) String() string { return proto.CompactTextString(m) }
 func (*PSChannelsRequest) ProtoMessage()    {}
 func (*PSChannelsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_9500dafa571eb7ef, []int{3}
+	return fileDescriptor_9500dafa571eb7ef, []int{8}
 }
 func (m *PSChannelsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -234,7 +517,7 @@ func (m *PSChannelsResponse) Reset()         { *m = PSChannelsResponse{} }
 func (m *PSChannelsResponse) String() string { return proto.CompactTextString(m) }
 func (*PSChannelsResponse) ProtoMessage()    {}
 func (*PSChannelsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_9500dafa571eb7ef, []int{4}
+	return fileDescriptor_9500dafa571eb7ef, []int{9}
 }
 func (m *PSChannelsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -281,7 +564,7 @@ func (m *PSNumSubRequest) Reset()         { *m = PSNumSubRequest{} }
 func (m *PSNumSubRequest) String() string { return proto.CompactTextString(m) }
 func (*PSNumSubRequest) ProtoMessage()    {}
 func (*PSNumSubRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_9500dafa571eb7ef, []int{5}
+	return fileDescriptor_9500dafa571eb7ef, []int{10}
 }
 func (m *PSNumSubRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -328,7 +611,7 @@ func (m *PSNumSubResponse) Reset()         { *m = PSNumSubResponse{} }
 func (m *PSNumSubResponse) String() string { return proto.CompactTextString(m) }
 func (*PSNumSubResponse) ProtoMessage()    {}
 func (*PSNumSubResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_9500dafa571eb7ef, []int{6}
+	return fileDescriptor_9500dafa571eb7ef, []int{11}
 }
 func (m *PSNumSubResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -374,7 +657,7 @@ func (m *PSNumPatRequest) Reset()         { *m = PSNumPatRequest{} }
 func (m *PSNumPatRequest) String() string { return proto.CompactTextString(m) }
 func (*PSNumPatRequest) ProtoMessage()    {}
 func (*PSNumPatRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_9500dafa571eb7ef, []int{7}
+	return fileDescriptor_9500dafa571eb7ef, []int{12}
 }
 func (m *PSNumPatRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -414,7 +697,7 @@ func (m *PSNumPatResponse) Reset()         { *m = PSNumPatResponse{} }
 func (m *PSNumPatResponse) String() string { return proto.CompactTextString(m) }
 func (*PSNumPatResponse) ProtoMessage()    {}
 func (*PSNumPatResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_9500dafa571eb7ef, []int{8}
+	return fileDescriptor_9500dafa571eb7ef, []int{13}
 }
 func (m *PSNumPatResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -451,6 +734,11 @@ func (m *PSNumPatResponse) GetCount() int64 {
 }
 
 func init() {
+	proto.RegisterType((*UserDB)(nil), "lancepb.UserDB")
+	proto.RegisterType((*PFCountRequest)(nil), "lancepb.PFCountRequest")
+	proto.RegisterType((*PFResponse)(nil), "lancepb.PFResponse")
+	proto.RegisterType((*PFAddRequest)(nil), "lancepb.PFAddRequest")
+	proto.RegisterType((*PFMergeRequest)(nil), "lancepb.PFMergeRequest")
 	proto.RegisterType((*PubRequestMessage)(nil), "lancepb.PubRequestMessage")
 	proto.RegisterType((*PubRequest)(nil), "lancepb.PubRequest")
 	proto.RegisterType((*PubResponse)(nil), "lancepb.PubResponse")
@@ -465,31 +753,42 @@ func init() {
 func init() { proto.RegisterFile("proto/lancepb/lancepb.proto", fileDescriptor_9500dafa571eb7ef) }
 
 var fileDescriptor_9500dafa571eb7ef = []byte{
-	// 378 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x92, 0x5f, 0x4a, 0xeb, 0x40,
-	0x14, 0xc6, 0x6f, 0x1a, 0xda, 0xb4, 0xa7, 0x17, 0xee, 0xed, 0x58, 0x24, 0x4e, 0x21, 0x94, 0x80,
-	0x10, 0x84, 0xb6, 0x52, 0xc5, 0x57, 0xc1, 0x3f, 0x0f, 0x82, 0x4a, 0x48, 0x57, 0x90, 0x84, 0x31,
-	0x2d, 0xb4, 0x99, 0xd8, 0x99, 0xd9, 0x82, 0x6b, 0x70, 0x49, 0x7d, 0x74, 0x09, 0x5a, 0x37, 0x22,
-	0x9d, 0x99, 0x34, 0x69, 0x2c, 0xfa, 0x94, 0x7c, 0x73, 0xbe, 0xf3, 0x9b, 0x73, 0xbe, 0x04, 0x7a,
-	0xd9, 0x92, 0x72, 0x3a, 0x9a, 0x87, 0x69, 0x4c, 0xb2, 0x28, 0x7f, 0x0e, 0xe5, 0x29, 0xb2, 0xb4,
-	0xc4, 0x83, 0x64, 0xc6, 0xa7, 0x22, 0x1a, 0xc6, 0x74, 0x31, 0x4a, 0x68, 0x42, 0x47, 0xb2, 0x1e,
-	0x89, 0x27, 0xa9, 0x14, 0x62, 0xf3, 0xa6, 0xfa, 0xdc, 0x3b, 0xe8, 0xf8, 0x22, 0x0a, 0xc8, 0xb3,
-	0x20, 0x8c, 0x3f, 0x10, 0xc6, 0xc2, 0x84, 0x20, 0x1b, 0xac, 0x78, 0x1a, 0xa6, 0x29, 0x99, 0xdb,
-	0x46, 0xdf, 0xf0, 0x5a, 0x41, 0x2e, 0x11, 0x86, 0xe6, 0x42, 0x99, 0x98, 0x5d, 0xeb, 0x9b, 0xde,
-	0xdf, 0x60, 0xab, 0xdd, 0x1b, 0x80, 0x02, 0x85, 0x2e, 0x4a, 0x4e, 0xa3, 0x6f, 0x7a, 0xed, 0x31,
-	0x1e, 0xe6, 0x23, 0x7f, 0xbb, 0xb1, 0x44, 0x39, 0x86, 0xb6, 0x2c, 0xb3, 0x8c, 0xa6, 0x8c, 0xa0,
-	0x43, 0x68, 0xc4, 0x54, 0xa4, 0x5c, 0x41, 0xcc, 0x40, 0x2b, 0x77, 0x00, 0x1d, 0x7f, 0x72, 0xad,
-	0xa6, 0x62, 0xf9, 0x9d, 0x36, 0x58, 0x59, 0xc8, 0x39, 0x59, 0xa6, 0xf9, 0xdc, 0x5a, 0xba, 0xa7,
-	0x80, 0xca, 0x76, 0x0d, 0xc7, 0xd0, 0xd4, 0x8b, 0x29, 0x7c, 0x2b, 0xd8, 0x6a, 0x77, 0x00, 0xff,
-	0xfc, 0xc9, 0xa3, 0x58, 0x4c, 0x8a, 0x95, 0x7e, 0xb2, 0x9f, 0xc0, 0xff, 0xc2, 0xfe, 0xcb, 0xec,
-	0x1d, 0x8d, 0xf6, 0x43, 0xae, 0xd1, 0xae, 0xa7, 0xdb, 0xe5, 0x91, 0x6e, 0xef, 0x42, 0x5d, 0x36,
-	0xc8, 0x5d, 0xcc, 0x40, 0x89, 0xf1, 0x4b, 0x0d, 0xea, 0xf7, 0x9b, 0x1c, 0xd1, 0x39, 0x58, 0xbe,
-	0x88, 0xe6, 0x33, 0x36, 0x45, 0x07, 0x7b, 0xa2, 0xc5, 0xdd, 0xdd, 0x43, 0x4d, 0xbd, 0x05, 0x28,
-	0x92, 0x40, 0xa5, 0x6f, 0x52, 0x4d, 0x13, 0xf7, 0xf6, 0xd6, 0x34, 0xe6, 0x12, 0x9a, 0xf9, 0xbe,
-	0xc8, 0x2e, 0x19, 0x77, 0x12, 0xc3, 0x47, 0x7b, 0x2a, 0x15, 0x80, 0x1f, 0xf2, 0x2a, 0xa0, 0xc8,
-	0xa5, 0x0a, 0x28, 0xc5, 0x73, 0xd5, 0x5d, 0x7d, 0x38, 0xc6, 0x6a, 0xed, 0x18, 0x6f, 0x6b, 0xc7,
-	0x78, 0x5f, 0x3b, 0xc6, 0xeb, 0xa7, 0xf3, 0x27, 0x6a, 0xc8, 0xdf, 0xfa, 0xec, 0x2b, 0x00, 0x00,
-	0xff, 0xff, 0x1f, 0xe6, 0x50, 0x1e, 0x2d, 0x03, 0x00, 0x00,
+	// 560 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x54, 0x5d, 0x6e, 0xd3, 0x40,
+	0x10, 0xc6, 0x71, 0xf3, 0xd3, 0x49, 0xd4, 0x36, 0x4b, 0x00, 0xe3, 0x4a, 0x56, 0xb4, 0x12, 0x22,
+	0x42, 0x24, 0x41, 0x29, 0x82, 0x47, 0x44, 0x5b, 0x22, 0x21, 0x11, 0x64, 0x39, 0xe2, 0x00, 0xfe,
+	0x19, 0x9c, 0xaa, 0x89, 0x1d, 0xbc, 0xf6, 0x43, 0x6f, 0xc2, 0x25, 0xb8, 0x47, 0x1f, 0x39, 0x02,
+	0x84, 0x8b, 0x20, 0xaf, 0xd7, 0xd9, 0x4d, 0xb0, 0xa8, 0xfa, 0xe4, 0xfd, 0xe6, 0xe7, 0xfb, 0x66,
+	0xc6, 0x3b, 0x0b, 0xa7, 0xeb, 0x24, 0x4e, 0xe3, 0xf1, 0xd2, 0x8d, 0x7c, 0x5c, 0x7b, 0xe5, 0x77,
+	0xc4, 0xad, 0xa4, 0x29, 0xa0, 0x39, 0x0c, 0xaf, 0xd2, 0x45, 0xe6, 0x8d, 0xfc, 0x78, 0x35, 0x0e,
+	0xe3, 0x30, 0x1e, 0x73, 0xbf, 0x97, 0x7d, 0xe5, 0xa8, 0xa0, 0xc8, 0x4f, 0x45, 0x1e, 0x7d, 0x09,
+	0x8d, 0x2f, 0x0c, 0x93, 0xcb, 0x73, 0x42, 0xe0, 0x20, 0x63, 0x98, 0x18, 0x5a, 0x5f, 0x1b, 0x1c,
+	0x38, 0xfc, 0x4c, 0x8e, 0xa0, 0x16, 0x78, 0x46, 0x8d, 0x5b, 0x6a, 0x81, 0x47, 0x67, 0x70, 0x64,
+	0x4f, 0x2f, 0xe2, 0x2c, 0x4a, 0x1d, 0xfc, 0x96, 0x21, 0x4b, 0xc9, 0x73, 0x68, 0xe4, 0x91, 0x81,
+	0xc7, 0xf3, 0xda, 0x93, 0xe3, 0x51, 0x59, 0x57, 0x41, 0xeb, 0x08, 0x77, 0x4e, 0x7f, 0x8d, 0x37,
+	0xcc, 0xa8, 0xf5, 0xf5, 0x41, 0xc7, 0xe1, 0x67, 0x4a, 0x01, 0xec, 0xa9, 0x83, 0x6c, 0x1d, 0x47,
+	0x0c, 0x49, 0x0f, 0xea, 0x7e, 0x4e, 0x2d, 0x2a, 0x28, 0x00, 0x45, 0xe8, 0xd8, 0xd3, 0xf7, 0x41,
+	0x70, 0x6f, 0xc1, 0x13, 0xd0, 0xaf, 0xf1, 0x86, 0x17, 0xdf, 0x71, 0xf2, 0x23, 0x31, 0xa1, 0x85,
+	0x4b, 0x5c, 0x61, 0x94, 0x32, 0x43, 0xe7, 0x65, 0x6c, 0x31, 0x65, 0x79, 0x67, 0x33, 0x4c, 0x42,
+	0xbc, 0xb7, 0x90, 0x01, 0xcd, 0x00, 0x59, 0x2a, 0xc5, 0x4a, 0x48, 0x2c, 0x00, 0x16, 0x67, 0x89,
+	0x8f, 0xbc, 0xf3, 0x42, 0x52, 0xb1, 0xd0, 0x8f, 0xd0, 0xb5, 0x33, 0x4f, 0x08, 0xce, 0x90, 0x31,
+	0x37, 0xc4, 0x9c, 0xce, 0x5f, 0xb8, 0x51, 0x84, 0x4b, 0x2e, 0x7c, 0xe8, 0x94, 0x30, 0xaf, 0x7f,
+	0x55, 0x04, 0x95, 0x63, 0xdc, 0x62, 0x7a, 0x09, 0x20, 0xa9, 0xc8, 0x1b, 0x25, 0x52, 0xeb, 0xeb,
+	0x83, 0xf6, 0xc4, 0xdc, 0x56, 0xff, 0x8f, 0xa2, 0xc2, 0xf2, 0x0c, 0xda, 0xdc, 0x2d, 0xfe, 0xc8,
+	0x63, 0x68, 0xf0, 0x9f, 0x50, 0x90, 0xe8, 0x8e, 0x40, 0x74, 0x08, 0x5d, 0x7b, 0x7e, 0x51, 0x54,
+	0xc5, 0x4a, 0x4d, 0x03, 0x9a, 0x6b, 0x37, 0x4d, 0x31, 0x89, 0xca, 0xba, 0x05, 0xa4, 0xaf, 0x80,
+	0xa8, 0xe1, 0x82, 0xdc, 0x84, 0x96, 0x68, 0xac, 0xa0, 0x3f, 0x74, 0xb6, 0x98, 0x0e, 0xe1, 0xd8,
+	0x9e, 0x7f, 0xce, 0x56, 0x73, 0xd9, 0xd2, 0xff, 0xc2, 0x5f, 0xc0, 0x89, 0x0c, 0xbf, 0xa3, 0xf6,
+	0xae, 0xa0, 0xb6, 0xdd, 0xf2, 0x0e, 0xd3, 0x81, 0x48, 0xe7, 0xa6, 0xaa, 0xcb, 0xa8, 0x8b, 0xcb,
+	0x38, 0xf9, 0xa1, 0x43, 0xfd, 0x53, 0x3e, 0x47, 0xf2, 0x1a, 0x9a, 0x76, 0xe6, 0x2d, 0xaf, 0xd8,
+	0x82, 0x3c, 0xac, 0x18, 0xad, 0xd9, 0xdb, 0x35, 0x0a, 0xd6, 0x0f, 0x00, 0x72, 0x12, 0x44, 0xf9,
+	0x27, 0xfb, 0xd3, 0x34, 0x4f, 0x2b, 0x7d, 0x82, 0xe6, 0x1d, 0xb4, 0xca, 0x7e, 0x89, 0xa1, 0x04,
+	0xee, 0x4c, 0xcc, 0x7c, 0x5a, 0xe1, 0xd9, 0x23, 0xb0, 0xdd, 0x74, 0x9f, 0x40, 0xce, 0x65, 0x9f,
+	0x40, 0x1d, 0xcf, 0x5b, 0x68, 0x8a, 0x87, 0x80, 0x3c, 0x91, 0x51, 0x3b, 0x4f, 0x83, 0xa9, 0xcc,
+	0x45, 0x2e, 0xf9, 0x19, 0xd4, 0xf9, 0x3a, 0x93, 0x47, 0x8a, 0x57, 0xae, 0x77, 0x75, 0x12, 0x57,
+	0xe3, 0xcb, 0xb9, 0xa3, 0xa6, 0xae, 0x6b, 0x65, 0xe2, 0x79, 0xef, 0xf6, 0xb7, 0xa5, 0xdd, 0x6e,
+	0x2c, 0xed, 0xe7, 0xc6, 0xd2, 0x7e, 0x6d, 0x2c, 0xed, 0xfb, 0x1f, 0xeb, 0x81, 0xd7, 0xe0, 0x4f,
+	0xdf, 0xd9, 0xdf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x6d, 0xc0, 0x02, 0xb6, 0x51, 0x05, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -508,6 +807,9 @@ type LanceClient interface {
 	PSChannels(ctx context.Context, in *PSChannelsRequest, opts ...grpc.CallOption) (*PSChannelsResponse, error)
 	PSNumSub(ctx context.Context, in *PSNumSubRequest, opts ...grpc.CallOption) (*PSNumSubResponse, error)
 	PSNumPat(ctx context.Context, in *PSNumPatRequest, opts ...grpc.CallOption) (*PSNumPatResponse, error)
+	PFCount(ctx context.Context, in *PFCountRequest, opts ...grpc.CallOption) (*PFResponse, error)
+	PFAdd(ctx context.Context, in *PFAddRequest, opts ...grpc.CallOption) (*PFResponse, error)
+	PFMerge(ctx context.Context, in *PFMergeRequest, opts ...grpc.CallOption) (*PFResponse, error)
 }
 
 type lanceClient struct {
@@ -554,12 +856,42 @@ func (c *lanceClient) PSNumPat(ctx context.Context, in *PSNumPatRequest, opts ..
 	return out, nil
 }
 
+func (c *lanceClient) PFCount(ctx context.Context, in *PFCountRequest, opts ...grpc.CallOption) (*PFResponse, error) {
+	out := new(PFResponse)
+	err := c.cc.Invoke(ctx, "/lancepb.Lance/PFCount", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *lanceClient) PFAdd(ctx context.Context, in *PFAddRequest, opts ...grpc.CallOption) (*PFResponse, error) {
+	out := new(PFResponse)
+	err := c.cc.Invoke(ctx, "/lancepb.Lance/PFAdd", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *lanceClient) PFMerge(ctx context.Context, in *PFMergeRequest, opts ...grpc.CallOption) (*PFResponse, error) {
+	out := new(PFResponse)
+	err := c.cc.Invoke(ctx, "/lancepb.Lance/PFMerge", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LanceServer is the server API for Lance service.
 type LanceServer interface {
 	Publish(context.Context, *PubRequest) (*PubResponse, error)
 	PSChannels(context.Context, *PSChannelsRequest) (*PSChannelsResponse, error)
 	PSNumSub(context.Context, *PSNumSubRequest) (*PSNumSubResponse, error)
 	PSNumPat(context.Context, *PSNumPatRequest) (*PSNumPatResponse, error)
+	PFCount(context.Context, *PFCountRequest) (*PFResponse, error)
+	PFAdd(context.Context, *PFAddRequest) (*PFResponse, error)
+	PFMerge(context.Context, *PFMergeRequest) (*PFResponse, error)
 }
 
 // UnimplementedLanceServer can be embedded to have forward compatible implementations.
@@ -577,6 +909,15 @@ func (*UnimplementedLanceServer) PSNumSub(ctx context.Context, req *PSNumSubRequ
 }
 func (*UnimplementedLanceServer) PSNumPat(ctx context.Context, req *PSNumPatRequest) (*PSNumPatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PSNumPat not implemented")
+}
+func (*UnimplementedLanceServer) PFCount(ctx context.Context, req *PFCountRequest) (*PFResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PFCount not implemented")
+}
+func (*UnimplementedLanceServer) PFAdd(ctx context.Context, req *PFAddRequest) (*PFResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PFAdd not implemented")
+}
+func (*UnimplementedLanceServer) PFMerge(ctx context.Context, req *PFMergeRequest) (*PFResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PFMerge not implemented")
 }
 
 func RegisterLanceServer(s *grpc.Server, srv LanceServer) {
@@ -655,6 +996,60 @@ func _Lance_PSNumPat_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Lance_PFCount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PFCountRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LanceServer).PFCount(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/lancepb.Lance/PFCount",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LanceServer).PFCount(ctx, req.(*PFCountRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Lance_PFAdd_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PFAddRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LanceServer).PFAdd(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/lancepb.Lance/PFAdd",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LanceServer).PFAdd(ctx, req.(*PFAddRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Lance_PFMerge_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PFMergeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LanceServer).PFMerge(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/lancepb.Lance/PFMerge",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LanceServer).PFMerge(ctx, req.(*PFMergeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Lance_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "lancepb.Lance",
 	HandlerType: (*LanceServer)(nil),
@@ -675,9 +1070,248 @@ var _Lance_serviceDesc = grpc.ServiceDesc{
 			MethodName: "PSNumPat",
 			Handler:    _Lance_PSNumPat_Handler,
 		},
+		{
+			MethodName: "PFCount",
+			Handler:    _Lance_PFCount_Handler,
+		},
+		{
+			MethodName: "PFAdd",
+			Handler:    _Lance_PFAdd_Handler,
+		},
+		{
+			MethodName: "PFMerge",
+			Handler:    _Lance_PFMerge_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "proto/lancepb/lancepb.proto",
+}
+
+func (m *UserDB) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *UserDB) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *UserDB) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Db != 0 {
+		i = encodeVarintLancepb(dAtA, i, uint64(m.Db))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.User != 0 {
+		i = encodeVarintLancepb(dAtA, i, uint64(m.User))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *PFCountRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PFCountRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PFCountRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Keys) > 0 {
+		for iNdEx := len(m.Keys) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Keys[iNdEx])
+			copy(dAtA[i:], m.Keys[iNdEx])
+			i = encodeVarintLancepb(dAtA, i, uint64(len(m.Keys[iNdEx])))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if m.Userdb != nil {
+		{
+			size, err := m.Userdb.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLancepb(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *PFResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PFResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PFResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Count != 0 {
+		i = encodeVarintLancepb(dAtA, i, uint64(m.Count))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *PFAddRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PFAddRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PFAddRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Elements) > 0 {
+		for iNdEx := len(m.Elements) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Elements[iNdEx])
+			copy(dAtA[i:], m.Elements[iNdEx])
+			i = encodeVarintLancepb(dAtA, i, uint64(len(m.Elements[iNdEx])))
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if len(m.Key) > 0 {
+		i -= len(m.Key)
+		copy(dAtA[i:], m.Key)
+		i = encodeVarintLancepb(dAtA, i, uint64(len(m.Key)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.Userdb != nil {
+		{
+			size, err := m.Userdb.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLancepb(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *PFMergeRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PFMergeRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PFMergeRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Sourcekeys) > 0 {
+		for iNdEx := len(m.Sourcekeys) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Sourcekeys[iNdEx])
+			copy(dAtA[i:], m.Sourcekeys[iNdEx])
+			i = encodeVarintLancepb(dAtA, i, uint64(len(m.Sourcekeys[iNdEx])))
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if len(m.Destkey) > 0 {
+		i -= len(m.Destkey)
+		copy(dAtA[i:], m.Destkey)
+		i = encodeVarintLancepb(dAtA, i, uint64(len(m.Destkey)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.Userdb != nil {
+		{
+			size, err := m.Userdb.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintLancepb(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *PubRequestMessage) Marshal() (dAtA []byte, err error) {
@@ -789,21 +1423,21 @@ func (m *PubResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.Counts) > 0 {
-		dAtA2 := make([]byte, len(m.Counts)*10)
-		var j1 int
+		dAtA5 := make([]byte, len(m.Counts)*10)
+		var j4 int
 		for _, num1 := range m.Counts {
 			num := uint64(num1)
 			for num >= 1<<7 {
-				dAtA2[j1] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA5[j4] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j1++
+				j4++
 			}
-			dAtA2[j1] = uint8(num)
-			j1++
+			dAtA5[j4] = uint8(num)
+			j4++
 		}
-		i -= j1
-		copy(dAtA[i:], dAtA2[:j1])
-		i = encodeVarintLancepb(dAtA, i, uint64(j1))
+		i -= j4
+		copy(dAtA[i:], dAtA5[:j4])
+		i = encodeVarintLancepb(dAtA, i, uint64(j4))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -941,21 +1575,21 @@ func (m *PSNumSubResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.Counts) > 0 {
-		dAtA4 := make([]byte, len(m.Counts)*10)
-		var j3 int
+		dAtA7 := make([]byte, len(m.Counts)*10)
+		var j6 int
 		for _, num1 := range m.Counts {
 			num := uint64(num1)
 			for num >= 1<<7 {
-				dAtA4[j3] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA7[j6] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j3++
+				j6++
 			}
-			dAtA4[j3] = uint8(num)
-			j3++
+			dAtA7[j6] = uint8(num)
+			j6++
 		}
-		i -= j3
-		copy(dAtA[i:], dAtA4[:j3])
-		i = encodeVarintLancepb(dAtA, i, uint64(j3))
+		i -= j6
+		copy(dAtA[i:], dAtA7[:j6])
+		i = encodeVarintLancepb(dAtA, i, uint64(j6))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -1032,6 +1666,113 @@ func encodeVarintLancepb(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+func (m *UserDB) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.User != 0 {
+		n += 1 + sovLancepb(uint64(m.User))
+	}
+	if m.Db != 0 {
+		n += 1 + sovLancepb(uint64(m.Db))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *PFCountRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Userdb != nil {
+		l = m.Userdb.Size()
+		n += 1 + l + sovLancepb(uint64(l))
+	}
+	if len(m.Keys) > 0 {
+		for _, b := range m.Keys {
+			l = len(b)
+			n += 1 + l + sovLancepb(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *PFResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Count != 0 {
+		n += 1 + sovLancepb(uint64(m.Count))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *PFAddRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Userdb != nil {
+		l = m.Userdb.Size()
+		n += 1 + l + sovLancepb(uint64(l))
+	}
+	l = len(m.Key)
+	if l > 0 {
+		n += 1 + l + sovLancepb(uint64(l))
+	}
+	if len(m.Elements) > 0 {
+		for _, b := range m.Elements {
+			l = len(b)
+			n += 1 + l + sovLancepb(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *PFMergeRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Userdb != nil {
+		l = m.Userdb.Size()
+		n += 1 + l + sovLancepb(uint64(l))
+	}
+	l = len(m.Destkey)
+	if l > 0 {
+		n += 1 + l + sovLancepb(uint64(l))
+	}
+	if len(m.Sourcekeys) > 0 {
+		for _, b := range m.Sourcekeys {
+			l = len(b)
+			n += 1 + l + sovLancepb(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *PubRequestMessage) Size() (n int) {
 	if m == nil {
 		return 0
@@ -1194,6 +1935,590 @@ func sovLancepb(x uint64) (n int) {
 }
 func sozLancepb(x uint64) (n int) {
 	return sovLancepb(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *UserDB) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLancepb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: UserDB: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: UserDB: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field User", wireType)
+			}
+			m.User = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLancepb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.User |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Db", wireType)
+			}
+			m.Db = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLancepb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Db |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLancepb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PFCountRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLancepb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PFCountRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PFCountRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Userdb", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLancepb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Userdb == nil {
+				m.Userdb = &UserDB{}
+			}
+			if err := m.Userdb.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Keys", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLancepb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Keys = append(m.Keys, make([]byte, postIndex-iNdEx))
+			copy(m.Keys[len(m.Keys)-1], dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLancepb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PFResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLancepb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PFResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PFResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Count", wireType)
+			}
+			m.Count = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLancepb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Count |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLancepb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PFAddRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLancepb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PFAddRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PFAddRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Userdb", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLancepb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Userdb == nil {
+				m.Userdb = &UserDB{}
+			}
+			if err := m.Userdb.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLancepb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Key = append(m.Key[:0], dAtA[iNdEx:postIndex]...)
+			if m.Key == nil {
+				m.Key = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Elements", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLancepb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Elements = append(m.Elements, make([]byte, postIndex-iNdEx))
+			copy(m.Elements[len(m.Elements)-1], dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLancepb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PFMergeRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLancepb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PFMergeRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PFMergeRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Userdb", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLancepb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Userdb == nil {
+				m.Userdb = &UserDB{}
+			}
+			if err := m.Userdb.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Destkey", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLancepb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Destkey = append(m.Destkey[:0], dAtA[iNdEx:postIndex]...)
+			if m.Destkey == nil {
+				m.Destkey = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Sourcekeys", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLancepb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Sourcekeys = append(m.Sourcekeys, make([]byte, postIndex-iNdEx))
+			copy(m.Sourcekeys[len(m.Sourcekeys)-1], dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLancepb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLancepb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
 func (m *PubRequestMessage) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)

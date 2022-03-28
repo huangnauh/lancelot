@@ -127,6 +127,11 @@ func (m *Manager) setLeader(id string) {
 	}
 }
 
+func (m *Manager) IsLeader(ctx context.Context) bool {
+	leader := m.GetLeader(ctx)
+	return leader == m.id
+}
+
 func (m *Manager) GetLeader(ctx context.Context) string {
 	if m.etcdCli == nil {
 		return m.id

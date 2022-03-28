@@ -77,6 +77,8 @@ func (c *Command) Shutdown(ctx context.Context) {
 	}
 	c.luaLock.Unlock()
 
+	c.CloseHll()
+
 	c.client.Close()
 	for {
 		select {
@@ -110,6 +112,7 @@ func (c *Command) Start() error {
 	c.cache = freecache.NewCache(conf.CacheSize)
 	c.luapools = make(map[uint16]*LStatePool)
 
+	go c.StartHll()
 	go c.watchUser()
 	go c.startGC()
 	c.Info.Health = true
@@ -1474,6 +1477,24 @@ func NewCommand(red *redcon.Server) *Command {
 			Typo:     GeoType,
 		},
 		// ------------------- geo end 415 ---------------------------
+		// ------------------- hyperloglog start 416 ---------------------------
+		PFADD_COMMAND: {
+			Func: c.PfAddHandle,
+			ID:   416,
+			Typo: HLLType,
+		},
+		PFCOUNT_COMMAND: {
+			Func:     c.PfCountHandle,
+			ReadOnly: true,
+			ID:       417,
+			Typo:     HLLType,
+		},
+		PFMERGE_COMMAND: {
+			Func: c.PfMergeHandle,
+			ID:   418,
+			Typo: HLLType,
+		},
+		// ------------------- hyperloglog end 447 ---------------------------
 		// ------------------- translate start 992 ---------------------------
 		UNWATCH_COMMAND: {
 			Func: c.UnWatchHandle,

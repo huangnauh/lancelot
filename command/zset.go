@@ -187,7 +187,7 @@ func (c *Command) ZRemHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(ZREM_COMMAND)
 	}
-	object := c.NewObject(txn, ZsetType, args[0])
+	object := NewObject(txn, ZsetType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -361,7 +361,7 @@ func (c *Command) zgetMember(txn *store.Txn, object *Object, m []byte) (*Value, 
 }
 
 func (c *Command) zget(txn *store.Txn, typo ObjectType, k, m []byte) (*Object, *Value, error) {
-	object := c.NewObject(txn, typo, k)
+	object := NewObject(txn, typo, k)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -407,7 +407,7 @@ func (c *Command) ZRevRankHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) zrank(txn *store.Txn, args [][]byte, reversed bool) (int64, bool, error) {
-	object := c.NewObject(txn, ZsetType, args[0])
+	object := NewObject(txn, ZsetType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -476,7 +476,7 @@ func (c *Command) ZScoreHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) zscore(txn *store.Txn, args [][]byte) ([]interface{}, error) {
-	object := c.NewObject(txn, ZsetType, args[0])
+	object := NewObject(txn, ZsetType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -589,7 +589,7 @@ func (c *Command) ZCountHandle(txn *store.Txn, args [][]byte) interface{} {
 	} else if err != nil {
 		return txn.SetError(err)
 	}
-	object := c.NewObject(txn, ZsetType, args[0])
+	object := NewObject(txn, ZsetType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -749,7 +749,7 @@ func (c *Command) zpopMany(txn *store.Txn, args [][]byte, reversed bool) (interf
 	var ret []interface{}
 	var err error
 	for i := 0; i < len(args); i++ {
-		object := c.NewObject(txn, ZsetType, args[i])
+		object := NewObject(txn, ZsetType, args[i])
 		key := object.GetKeyBytes()
 		err = getTxnObject(txn, key, object, false)
 		if err == store.KeyNotFound {
@@ -770,7 +770,7 @@ func (c *Command) zpopMany(txn *store.Txn, args [][]byte, reversed bool) (interf
 
 func (c *Command) zpop(txn *store.Txn, arg []byte, limit int64, reversed bool) ([]interface{}, error) {
 	var err error
-	object := c.NewObject(txn, ZsetType, arg)
+	object := NewObject(txn, ZsetType, arg)
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -889,7 +889,7 @@ func (c *Command) ZRevRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 	if err != nil {
 		return txn.SetError(err)
 	}
-	object := c.NewObject(txn, ZsetType, args[0])
+	object := NewObject(txn, ZsetType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -1063,7 +1063,7 @@ func (c *Command) zrange(txn *store.Txn, args [][]byte, opt *zRangeOption) ([]in
 		if err != nil {
 			return nil, err
 		}
-		object := c.NewObject(txn, UnknownType, args[0])
+		object := NewObject(txn, UnknownType, args[0])
 		key := object.GetKeyBytes()
 		err = getTxnObject(txn, key, object, false)
 		if err == store.KeyNotFound {
@@ -1137,7 +1137,7 @@ func (c *Command) zrangeByScoreHandle(txn *store.Txn, args [][]byte, min, max ut
 
 func (c *Command) zrangeByScore(txn *store.Txn, arg []byte, min, max utils.Number,
 	includeMin, includeMax bool, opt *zRangeOption) ([]interface{}, error) {
-	object := c.NewObject(txn, ZsetType, arg)
+	object := NewObject(txn, ZsetType, arg)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -1264,7 +1264,7 @@ func (c *Command) ZRemRangeByRankHandle(txn *store.Txn, args [][]byte) interface
 	if err != nil {
 		return txn.SetError(err)
 	}
-	object := c.NewObject(txn, ZsetType, args[0])
+	object := NewObject(txn, ZsetType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -1303,7 +1303,7 @@ func (c *Command) ZRemRangeByScoreHandle(txn *store.Txn, args [][]byte) interfac
 	if err != nil {
 		return txn.SetError(err)
 	}
-	object := c.NewObject(txn, ZsetType, args[0])
+	object := NewObject(txn, ZsetType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -1340,7 +1340,7 @@ func (c *Command) ZRemRangeByLexHandle(txn *store.Txn, args [][]byte) interface{
 		return txn.SetError(err)
 	}
 
-	object := c.NewObject(txn, ZsetType, args[0])
+	object := NewObject(txn, ZsetType, args[0])
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
@@ -1447,7 +1447,7 @@ func (c *Command) zrangeByLexHandle(txn *store.Txn, args [][]byte, min, max stri
 }
 
 func (c *Command) zrangeByLex(txn *store.Txn, arg []byte, min, max string, includeMin, includeMax bool, opt *zRangeOption) ([]interface{}, error) {
-	object := c.NewObject(txn, ZsetType, arg)
+	object := NewObject(txn, ZsetType, arg)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {

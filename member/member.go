@@ -86,6 +86,16 @@ func (m *MemberList) GetClients() []*grpc.Client {
 	return clients
 }
 
+func (m *MemberList) GetClient(addr string) *grpc.Client {
+	m.RLock()
+	defer m.RUnlock()
+	member, ok := m.Members[addr]
+	if !ok {
+		return nil
+	}
+	return member.Client
+}
+
 func (m *MemberList) GetConfig(id uint16) *Config {
 	m.configLock.RLock()
 	defer m.configLock.RUnlock()
@@ -281,7 +291,8 @@ func (m *MemberList) SetMemberKV(kv *mvccpb.KeyValue, version int64, deleted boo
 		return addr
 	}
 
-	utils.ZapLog.Debug("[member] set kv", zap.Int64("lease", id), zap.String("address", addr))
+	utils.ZapLog.Info("[member] set kv", zap.Int64("lease", id),
+		zap.String("address", addr), zap.Bool("deleted", deleted))
 
 	m.Lock()
 	member, ok := m.Members[addr]
@@ -343,6 +354,7 @@ func (m *MemberList) GetALLMember() error {
 	m.Lock()
 	for addr, member := range m.Members {
 		if _, ok := addrs[addr]; !ok {
+			utils.ZapLog.Info("[member] delete", zap.String("address", addr))
 			delete(m.Members, addr)
 			membs = append(membs, member)
 		}

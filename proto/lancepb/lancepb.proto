@@ -14,6 +14,35 @@ service Lance {
     rpc PSChannels(PSChannelsRequest) returns (PSChannelsResponse);
     rpc PSNumSub(PSNumSubRequest) returns (PSNumSubResponse);
     rpc PSNumPat(PSNumPatRequest) returns (PSNumPatResponse);
+    rpc PFCount(PFCountRequest) returns (PFResponse);
+    rpc PFAdd(PFAddRequest) returns (PFResponse);
+    rpc PFMerge(PFMergeRequest) returns (PFResponse);
+}
+
+message UserDB {
+    uint64 user = 1;
+    uint64 db = 2;
+}
+
+message PFCountRequest {
+    UserDB userdb = 1;
+    repeated bytes keys = 2;
+}
+
+message PFResponse {
+    uint64 count = 1;
+}
+
+message PFAddRequest {
+    UserDB userdb = 1;
+    bytes key = 2;
+    repeated bytes elements = 3;
+}
+
+message PFMergeRequest {
+    UserDB userdb = 1;
+    bytes destkey = 2;
+    repeated bytes sourcekeys = 3;
 }
 
 message PubRequestMessage {
