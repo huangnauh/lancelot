@@ -64,16 +64,16 @@ func (c *Command) PFAdd(ctx context.Context, req *lancepb.PFAddRequest) (*lancep
 	}
 	defer txn.Rollback()
 	c.BeginTxn(txn, uint16(req.Userdb.User), uint8(req.Userdb.Db))
-	count, err := c.pfAdd(txn, req.Key, req.Elements)
-	if err != nil {
-		return nil, err
-	}
+	// count, err := c.pfAdd(txn, req.Key, req.Elements)
+	// if err != nil {
+	// 	return nil, err
+	// }
 	err = txn.Commit()
 	if err != nil {
 		return nil, err
 	}
 	return &lancepb.PFResponse{
-		Count: count,
+		// Count: count,
 	}, nil
 }
 
@@ -85,16 +85,16 @@ func (c *Command) PFCount(ctx context.Context, req *lancepb.PFCountRequest) (*la
 	}
 	defer txn.Rollback()
 	c.BeginTxn(txn, uint16(req.Userdb.User), uint8(req.Userdb.Db))
-	count, err := c.pfCount(txn, req.Keys)
-	if err != nil {
-		return nil, err
-	}
+	// count, err := c.pfCount(txn, req.Keys)
+	// if err != nil {
+	// 	return nil, err
+	// }
 	err = txn.Commit()
 	if err != nil {
 		return nil, err
 	}
 	return &lancepb.PFResponse{
-		Count: count,
+		// Count: count,
 	}, nil
 }
 
@@ -106,10 +106,10 @@ func (c *Command) PFMerge(ctx context.Context, req *lancepb.PFMergeRequest) (*la
 	}
 	defer txn.Rollback()
 	c.BeginTxn(txn, uint16(req.Userdb.User), uint8(req.Userdb.Db))
-	_, err = c.pfMerge(txn, req.Destkey, req.Sourcekeys)
-	if err != nil {
-		return nil, err
-	}
+	// _, err = c.pfMerge(txn, req.Destkey, req.Sourcekeys)
+	// if err != nil {
+	// 	return nil, err
+	// }
 	err = txn.Commit()
 	if err != nil {
 		return nil, err

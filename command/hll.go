@@ -1,269 +1,113 @@
 package command
 
 import (
-	"context"
-	"fmt"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
+	"encoding/binary"
 
-	"github.com/axiomhq/hyperloglog"
-	"gitlab.s.upyun.com/platform/lancelot/proto/lancepb"
+	"gitlab.s.upyun.com/platform/lancelot/hll"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
-	"gitlab.s.upyun.com/platform/lancelot/xerror"
 	"go.uber.org/zap"
 )
 
-const (
-	HLLNoAccess = time.Minute
-)
+const DenseSize = 4096
 
-type Hll struct {
-	sync.RWMutex
-	Key        string
-	Sketch     *hyperloglog.Sketch
-	AccessTime time.Time
-	UpdateTime time.Time
-	FlushTime  time.Time
-	Exist      bool
+type Dense struct {
+	m      uint64
+	txn    *store.Txn
+	object *Object
+	tmp    []uint8
 }
 
-type HllManger struct {
-	sync.RWMutex
-	Keys map[string]*Hll
-	wg   *sync.WaitGroup
-}
-
-var (
-	HLogLog = NewHllManger()
-)
-
-func GetHllKey(userId uint16, dbId uint8, key []byte) string {
-	return fmt.Sprintf("%d-%d-%s", userId, dbId, utils.B2S(key))
-}
-
-func GetUserAndKey(key string) (uint16, uint8, []byte, error) {
-	s := strings.SplitN(key, "-", 3)
-	if len(s) != 3 {
-		return 0, 0, nil, fmt.Errorf("invalid key %s", key)
-	}
-	userId, err := strconv.Atoi(s[0])
-	if err != nil {
-		return 0, 0, nil, err
-	}
-	dbId, err := strconv.Atoi(s[1])
-	if err != nil {
-		return 0, 0, nil, err
-	}
-	return uint16(userId), uint8(dbId), []byte(s[2]), nil
-}
-
-func NewHllManger() *HllManger {
-	return &HllManger{
-		Keys: make(map[string]*Hll),
-		wg:   &sync.WaitGroup{},
-	}
-}
-
-func (h *HllManger) Get(key string) *Hll {
-	h.RLock()
-	defer h.RUnlock()
-	if v, ok := h.Keys[key]; ok {
-		return v
-	}
-	return nil
-}
-
-func (h *HllManger) Set(key string, v *Hll) {
-	h.Lock()
-	defer h.Unlock()
-	h.Keys[key] = v
-}
-
-func (h *HllManger) GetALL() map[string]*Hll {
-	h.RLock()
-	defer h.RUnlock()
-	result := make(map[string]*Hll, len(h.Keys))
-	for k, v := range h.Keys {
-		result[k] = v
-	}
-	return result
-}
-
-func (h *HllManger) Remove(key string, nocheck bool) {
-	h.Lock()
-	defer h.Unlock()
-	if v, ok := h.Keys[key]; ok {
-		if nocheck || time.Since(v.AccessTime) > HLLNoAccess {
-			delete(h.Keys, key)
+func (d *Dense) CheckAndSet(i uint64, rho uint8) (uint8, bool, error) {
+	var origin uint8
+	var err error
+	delta := d.m / DenseSize
+	index := i % delta
+	bk := make([]byte, 2)
+	binary.BigEndian.PutUint16(bk, uint16(i/delta))
+	bkey := d.object.GetValueBytes(bk)
+	var bvalue []byte
+	if d.tmp == nil {
+		bvalue, err = d.txn.Get(bkey)
+		if err == store.KeyNotFound {
+			bvalue = make([]uint8, delta)
+		} else if err != nil {
+			return 0, false, err
 		}
-	}
-}
-
-func (c *Command) FlushHll(h *Hll) {
-	h.Lock()
-	defer h.Unlock()
-	if h.FlushTime.Sub(h.UpdateTime) >= 0 {
-		return
-	}
-	data, err := h.Sketch.MarshalBinary()
-	if err != nil {
-		utils.ZapLog.Error("Hll MarshalBinary error", zap.Error(err))
-	}
-	go c.FlushHllData(h, data)
-}
-
-func (c *Command) BeginTxn(txn *store.Txn, userID uint16, dbID uint8) {
-	cfg := c.GetConfig(userID)
-	txn.Config = cfg
-	txn.Conn = &redcon.Conn{
-		DBId:   dbID,
-		UserId: userID,
-	}
-}
-
-func (c *Command) FlushHllData(h *Hll, hlldata []byte) {
-	HLogLog.wg.Add(1)
-	defer HLogLog.wg.Done()
-	utils.ZapLog.Debug("FlushHllData", zap.String("key", h.Key), zap.Int("size", len(hlldata)))
-	txn := c.client.NewTxn()
-	err := txn.Begin()
-	if err != nil {
-		return
-	}
-	defer txn.Rollback()
-	userID, dbID, k, err := GetUserAndKey(h.Key)
-	if err != nil {
-		utils.ZapLog.Error("GetUserAndKey error", zap.Error(err))
-		return
-	}
-	c.BeginTxn(txn, userID, dbID)
-	var create ChangeType
-	object := NewObject(txn, HLLType, k)
-	key := object.GetKeyBytes()
-	err = getTxnObject(txn, key, object, true)
-	if err == store.KeyNotFound {
-		create = PlusCount
-	} else if err != nil {
-		return
-	}
-	object.Value = hlldata
-	object.Timestamp = txn.Timestamp
-	err = setTxnObject(txn, key, object, create)
-	if err != nil {
-		return
-	}
-	err = txn.Commit()
-	if err != nil {
-		return
-	}
-	h.FlushTime = time.Now()
-}
-
-func (c *Command) FlushAllHll() {
-	now := time.Now()
-	all := HLogLog.GetALL()
-	for k, v := range all {
-		if v.UpdateTime.Sub(v.FlushTime) > 0 {
-			c.FlushHll(v)
-		}
-		if now.Sub(v.AccessTime) > HLLNoAccess {
-			HLogLog.Remove(k, false)
-		}
-	}
-	HLogLog.wg.Wait()
-}
-
-func (c *Command) StartHll() {
-	tick := time.NewTicker(time.Second)
-	defer tick.Stop()
-	for {
-		select {
-		case <-tick.C:
-			c.FlushAllHll()
-		case <-c.done:
-			return
-		}
-	}
-}
-
-func (c *Command) CloseHll() {
-	c.FlushAllHll()
-}
-
-func (c *Command) LoadHll(txn *store.Txn, k []byte) (*Hll, *Object, error) {
-	object := NewObject(txn, HLLType, k)
-	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
-	h := &Hll{
-		Sketch:     hyperloglog.NewNoSparse(),
-		AccessTime: txn.NowTime(),
-	}
-	if err == store.KeyNotFound {
-		return h, object, nil
-	} else if err != nil {
-		return nil, nil, err
+		origin = bvalue[index]
 	} else {
-		h.Exist = true
-		if len(object.Value) == 0 {
-			return h, object, nil
-		}
-
-		utils.ZapLog.Debug("LoadHll", zap.String("key", string(k)), zap.Int("size", len(object.Value)))
-		err = h.Sketch.UnmarshalBinary(object.Value)
-		if err != nil {
-			return nil, nil, err
-		}
-		return h, object, nil
+		bvalue = d.tmp[i/delta*delta : i+delta]
+		origin = bvalue[index]
 	}
+
+	set := rho > origin
+	if set {
+		bvalue[index] = rho
+		err = d.txn.Put(bkey, bvalue)
+		if err != nil {
+			return 0, false, err
+		}
+	}
+	return origin, set, nil
 }
 
-func (c *Command) GetHll(txn *store.Txn, k []byte, flush bool) (*Hll, *Object, error) {
-	hk := GetHllKey(txn.UserId, txn.DBId, k)
-	h := HLogLog.Get(hk)
-	var object *Object
-	if h == nil {
-		var err error
-		h, object, err = c.LoadHll(txn, k)
-		if err != nil {
-			return nil, nil, err
+func (d *Dense) Get(i uint64) (uint8, error) {
+	bk := make([]byte, 2)
+	delta := d.m / DenseSize
+	binary.BigEndian.PutUint16(bk, uint16(i/delta))
+	bkey := d.object.GetValueBytes(bk)
+	var err error
+	var bvalue []byte
+	if d.tmp == nil {
+		bvalue, err = d.txn.Get(bkey)
+		if err == store.KeyNotFound {
+			return 0, nil
+		} else if err != nil {
+			return 0, err
 		}
-		if flush {
-			object.Timestamp = txn.Timestamp
-			err = setTxnObject(txn, object.GetKeyBytes(), object, PlusCount)
-			if err != nil {
-				return nil, nil, err
-			}
-		}
-		h.Key = hk
-		HLogLog.Set(hk, h)
+	} else {
+		bvalue = d.tmp[i/delta*delta : i+delta]
 	}
-	h.AccessTime = txn.NowTime()
-	return h, object, nil
+	index := i % delta
+	return bvalue[index], nil
 }
 
-func (c *Command) pfAdd(txn *store.Txn, k []byte, elements [][]byte) (uint64, error) {
-	h, _, err := c.GetHll(txn, k, true)
+func (d *Dense) List() ([]uint8, error) {
+	if d.tmp != nil {
+		return d.tmp, nil
+	}
+
+	start := d.object.GetValueBytes(nil)
+	end := utils.PrefixNext(start)
+	ret := make([]uint8, d.m)
+	delta := int(d.m / DenseSize)
+	err := d.txn.List(start, end, d.txn.Config.Redis.ScanMaxCount, func(key, value []byte) bool {
+		if len(key) < len(start) {
+			return false
+		}
+		i := int(binary.BigEndian.Uint16(key[len(start):]))
+		utils.ZapLog.Debug("list hll", zap.ByteString("key", key), zap.Int("index", i), zap.ByteString("value", value))
+		for j := 0; j < len(value); j++ {
+			ret[i*delta+j] = value[j]
+			utils.ZapLog.Debug("list hll", zap.Int("index", i*delta+j), zap.Any("value", value[j]))
+		}
+		return true
+	})
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	var count uint64
-	for _, v := range elements {
-		ok := h.Sketch.Insert(v)
-		if ok {
-			count++
-			utils.ZapLog.Debug("pfAdd", zap.String("key", string(k)), zap.String("element", string(v)))
-		}
+	d.tmp = ret
+	return ret, nil
+}
+
+func getHll(txn *store.Txn, object *Object) (*hll.Plus, error) {
+	dense := &Dense{txn: txn, object: object, m: 1 << hll.DefaultPrecision}
+	plus, err := hll.NewPlus(hll.DefaultPrecision, dense)
+	if err != nil {
+		return nil, err
 	}
-	if count > 0 || !h.Exist {
-		h.Exist = true
-		h.UpdateTime = txn.NowTime()
-		return 1, nil
-	}
-	return 0, nil
+	return plus, nil
 }
 
 // PFADD key [element [element ...]]
@@ -271,56 +115,25 @@ func (c *Command) PfAddHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 1 {
 		return txn.SetWrongArgs(PFADD_COMMAND)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	leader := c.client.GetLeader(ctx)
-	if leader == "" {
-		return txn.SetError(xerror.ErrNoLeader)
+	object, err := c.GetOrCreateUUIDObject(txn, HLLType, args[0])
+	if err != nil {
+		return txn.SetError(err)
 	}
-	var count uint64
-	var err error
-	if leader == c.client.ID() {
-		count, err = c.pfAdd(txn, args[0], args[1:])
+	plus, err := getHll(txn, object)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	var ret int
+	for i := 1; i < len(args); i++ {
+		ok, err := plus.Add(args[i])
 		if err != nil {
 			return txn.SetError(err)
 		}
-	} else {
-		leaderAddr := GetRpcAddress(leader, txn.Config.RpcPort)
-		client := c.memberlist.GetClient(leaderAddr)
-		if client == nil {
-			utils.ZapLog.Error("leader client not found", zap.String("leader", leader), zap.String("leaderAddr", leaderAddr))
-			return txn.SetError(xerror.ErrNoLeader)
+		if ok {
+			ret = 1
 		}
-		response, err := client.PFAdd(ctx, &lancepb.PFAddRequest{
-			Userdb: &lancepb.UserDB{
-				User: uint64(txn.UserId),
-				Db:   uint64(txn.DBId),
-			},
-			Key:      args[0],
-			Elements: args[1:],
-		})
-		if err != nil {
-			return txn.SetError(err)
-		}
-		count = response.Count
 	}
-	if count > 0 {
-		return redcon.SimpleInt(1)
-	}
-	return redcon.SimpleInt(0)
-}
-
-func (c *Command) pfCount(txn *store.Txn, keys [][]byte) (uint64, error) {
-	var count uint64
-	for _, v := range keys {
-		h, _, err := c.GetHll(txn, v, false)
-		if err != nil {
-			return 0, err
-		}
-		count += h.Sketch.Estimate()
-	}
-	return count, nil
+	return redcon.SimpleInt(ret)
 }
 
 // PFCOUNT key [key ...]
@@ -328,60 +141,34 @@ func (c *Command) PfCountHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 1 {
 		return txn.SetWrongArgs(PFCOUNT_COMMAND)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	leader := c.client.GetLeader(ctx)
-	if leader == "" {
-		return txn.SetError(xerror.ErrNoLeader)
-	}
 	var count uint64
-	var err error
-	if leader == c.client.ID() {
-		count, err = c.pfCount(txn, args)
+	exists := make(map[string]bool)
+
+	for i := 0; i < len(args); i++ {
+		s := utils.B2S(args[i])
+		if exists[s] {
+			continue
+		}
+		exists[s] = true
+		object := NewObject(txn, HLLType, args[i])
+		key := object.GetKeyBytes()
+		err := getTxnObject(txn, key, object, true)
+		if err == store.KeyNotFound {
+			continue
+		} else if err != nil {
+			return txn.SetError(err)
+		}
+		plus, err := getHll(txn, object)
 		if err != nil {
 			return txn.SetError(err)
 		}
-	} else {
-		leaderAddr := GetRpcAddress(leader, txn.Config.RpcPort)
-		client := c.memberlist.GetClient(leaderAddr)
-		if client == nil {
-			utils.ZapLog.Error("leader client not found", zap.String("leader", leader), zap.String("leaderAddr", leaderAddr))
-			return txn.SetError(xerror.ErrNoLeader)
-		}
-		response, err := client.PFCount(ctx, &lancepb.PFCountRequest{
-			Userdb: &lancepb.UserDB{
-				User: uint64(txn.UserId),
-				Db:   uint64(txn.DBId),
-			},
-			Keys: args,
-		})
+		l, err := plus.Count()
 		if err != nil {
 			return txn.SetError(err)
 		}
-		count = response.Count
+		count += l
 	}
 	return redcon.SimpleInt(count)
-}
-
-func (c *Command) pfMerge(txn *store.Txn, destkey []byte, sourcekeys [][]byte) (uint64, error) {
-	destHll, _, err := c.GetHll(txn, destkey, true)
-	if err != nil {
-		return 0, err
-	}
-	for _, v := range sourcekeys {
-		h, _, err := c.GetHll(txn, v, false)
-		if err != nil {
-			return 0, err
-		}
-		err = destHll.Sketch.Merge(h.Sketch)
-		if err != nil {
-			utils.ZapLog.Error("pfMerge", zap.String("destkey", string(destkey)), zap.String("sourcekey", string(v)), zap.Error(err))
-			return 0, err
-		}
-	}
-	destHll.Exist = true
-	destHll.UpdateTime = txn.NowTime()
-	return 0, nil
 }
 
 // PFMERGE destkey sourcekey [sourcekey ...]
@@ -389,36 +176,34 @@ func (c *Command) PfMergeHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(PFMERGE_COMMAND)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	leader := c.client.GetLeader(ctx)
-	if leader == "" {
-		return txn.SetError(xerror.ErrNoLeader)
+	destObject, err := c.GetOrCreateUUIDObject(txn, HLLType, args[0])
+	if err != nil {
+		return txn.SetError(err)
 	}
-	var err error
-	if leader == c.client.ID() {
-		_, err := c.pfMerge(txn, args[0], args[1:])
+	destPlus, err := getHll(txn, destObject)
+	if err != nil {
+		return txn.SetError(err)
+	}
+
+	exists := make(map[string]bool)
+	for _, k := range args[1:] {
+		s := utils.B2S(k)
+		if exists[s] {
+			continue
+		}
+		exists[s] = true
+		object, err := c.GetOrCreateUUIDObject(txn, HLLType, k)
 		if err != nil {
 			return txn.SetError(err)
 		}
-	} else {
-		leaderAddr := GetRpcAddress(leader, txn.Config.RpcPort)
-		client := c.memberlist.GetClient(leaderAddr)
-		if client == nil {
-			utils.ZapLog.Error("leader client not found", zap.String("leader", leader), zap.String("leaderAddr", leaderAddr))
-			return txn.SetError(xerror.ErrNoLeader)
+		plus, err := getHll(txn, object)
+		if err != nil {
+			return txn.SetError(err)
 		}
-		_, err = client.PFMerge(ctx, &lancepb.PFMergeRequest{
-			Userdb: &lancepb.UserDB{
-				User: uint64(txn.UserId),
-				Db:   uint64(txn.DBId),
-			},
-			Destkey:    args[0],
-			Sourcekeys: args[1:],
-		})
+		err = destPlus.Merge(plus)
 		if err != nil {
 			return txn.SetError(err)
 		}
 	}
-	return OK
+	return redcon.SimpleString("OK")
 }

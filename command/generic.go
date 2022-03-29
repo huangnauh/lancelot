@@ -370,10 +370,6 @@ func CleanKey(txn *store.Txn, key, ttlKey []byte, object *Object, valueTTL int64
 		}
 	}
 
-	if object.Type == HLLType {
-		HLogLog.Remove(GetHllKey(object.UserId, object.Db, object.Key), true)
-	}
-
 	if !object.IsSimple() && len(object.Value) > 0 {
 		if valueTTL > 0 {
 			object.TTL = valueTTL

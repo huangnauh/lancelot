@@ -15,7 +15,6 @@ package hll
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"math/bits"
 
@@ -26,7 +25,7 @@ const (
 	// Current version of HLL implementation.
 	version = uint8(2)
 	// DefaultPrecision is the default precision.
-	DefaultPrecision = 16
+	DefaultPrecision = uint8(16)
 )
 
 func beta(ez float64) float64 {
@@ -87,20 +86,14 @@ func NewPlus(p uint8, dense Dense) (*Plus, error) {
 }
 
 // Add adds a new value to the HLL.
-func (h *Plus) Add(v []byte) error {
+func (h *Plus) Add(v []byte) (bool, error) {
 	x := h.hash(v)
 	i := bextr(x, 64-h.p, h.p) // {x63,...,x64-p}
 	w := x<<h.p | 1<<(h.p-1)   // {x63-p,...,x0}
 
 	rho := uint8(bits.LeadingZeros64(w)) + 1
-	origin, err := h.dense.Get(i)
-	if err != nil {
-		return err
-	}
-	if rho > origin {
-		h.dense.Set(i, rho)
-	}
-	return nil
+	_, ok, err := h.dense.CheckAndSet(i, rho)
+	return ok, err
 }
 
 // Count returns a cardinality estimate.
@@ -128,17 +121,7 @@ func (h *Plus) Count() (uint64, error) {
 // Merge takes another HyperLogLogPlus and combines it with HyperLogLogPlus h.
 // If HyperLogLogPlus h is using the sparse representation, it will be converted
 // to the normal representation.
-func (h *Plus) Merge(s Sketch) error {
-	if s == nil {
-		// Nothing to do
-		return nil
-	}
-
-	other, ok := s.(*Plus)
-	if !ok {
-		return fmt.Errorf("wrong type for merging: %T", other)
-	}
-
+func (h *Plus) Merge(other *Plus) error {
 	if h.p != other.p {
 		return errors.New("precisions must be equal")
 	}
@@ -148,17 +131,15 @@ func (h *Plus) Merge(s Sketch) error {
 		return err
 	}
 
-	hL, err := h.dense.List()
+	_, err = h.dense.List()
 	if err != nil {
 		return err
 	}
 
 	for i, v := range otherL {
-		if v > hL[i] {
-			err = h.dense.Set(uint64(i), v)
-			if err != nil {
-				return err
-			}
+		_, _, err = h.dense.CheckAndSet(uint64(i), v)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
