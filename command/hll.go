@@ -29,11 +29,17 @@ func (d *Dense) CheckAndSet(i uint64, rho uint8) (uint8, bool, error) {
 	bkey := d.object.GetValueBytes(bk)
 	var bvalue []byte
 	if d.tmp == nil {
-		bvalue, err = d.txn.Get(bkey)
+		value, err := d.txn.Get(bkey)
 		if err == store.KeyNotFound {
-			bvalue = make([]uint8, delta)
 		} else if err != nil {
 			return 0, false, err
+		} else {
+			hvalue := &Value{}
+			_ = DecodeValue(value, hvalue)
+			bvalue = hvalue.Value
+		}
+		if len(bvalue) != int(delta) {
+			bvalue = make([]uint8, delta)
 		}
 		origin = bvalue[index]
 	} else {
@@ -45,7 +51,8 @@ func (d *Dense) CheckAndSet(i uint64, rho uint8) (uint8, bool, error) {
 	set := rho > origin
 	if set {
 		bvalue[index] = rho
-		err = d.txn.Put(bkey, bvalue)
+		hvalue := &Value{Value: bvalue, Timestamp: d.txn.Timestamp}
+		err = d.txn.Put(bkey, EncodeValue(hvalue))
 		if err != nil {
 			return 0, false, err
 		}
@@ -58,14 +65,19 @@ func (d *Dense) Get(i uint64) (uint8, error) {
 	delta := d.m / DenseSize
 	binary.BigEndian.PutUint16(bk, uint16(i/delta))
 	bkey := d.object.GetValueBytes(bk)
-	var err error
 	var bvalue []byte
 	if d.tmp == nil {
-		bvalue, err = d.txn.Get(bkey)
+		value, err := d.txn.Get(bkey)
 		if err == store.KeyNotFound {
 			return 0, nil
 		} else if err != nil {
 			return 0, err
+		}
+		hvalue := &Value{}
+		_ = DecodeValue(value, hvalue)
+		bvalue = hvalue.Value
+		if len(bvalue) != int(delta) {
+			return 0, nil
 		}
 	} else {
 		start := i / delta * delta
@@ -90,9 +102,15 @@ func (d *Dense) List() ([]uint8, error) {
 		}
 		i := int(binary.BigEndian.Uint16(key[len(start):]))
 		utils.ZapLog.Debug("list hll", zap.ByteString("key", key), zap.Int("index", i), zap.ByteString("value", value))
-		for j := 0; j < len(value); j++ {
-			ret[i*delta+j] = value[j]
-			utils.ZapLog.Debug("list hll", zap.Int("index", i*delta+j), zap.Any("value", value[j]))
+		hvalue := &Value{}
+		_ = DecodeValue(value, hvalue)
+		bvalue := hvalue.Value
+		if len(bvalue) != int(delta) {
+			return true
+		}
+		for j := 0; j < len(bvalue); j++ {
+			ret[i*delta+j] = bvalue[j]
+			// utils.ZapLog.Debug("list hll", zap.Int("index", i*delta+j), zap.Any("value", value[j]))
 		}
 		return true
 	})
