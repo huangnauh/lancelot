@@ -77,8 +77,6 @@ func (c *Command) Shutdown(ctx context.Context) {
 	}
 	c.luaLock.Unlock()
 
-	c.CloseHll()
-
 	c.client.Close()
 	for {
 		select {
@@ -112,7 +110,6 @@ func (c *Command) Start() error {
 	c.cache = freecache.NewCache(conf.CacheSize)
 	c.luapools = make(map[uint16]*LStatePool)
 
-	go c.StartHll()
 	go c.watchUser()
 	go c.startGC()
 	c.Info.Health = true

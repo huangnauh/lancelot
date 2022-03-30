@@ -259,6 +259,15 @@ func (c *Command) getTransaction(conn *redcon.Conn) (*store.Txn, bool) {
 	return nil, false
 }
 
+func (c *Command) BeginTxn(txn *store.Txn, userID uint16, dbID uint8) {
+	cfg := c.GetConfig(userID)
+	txn.Config = cfg
+	txn.Conn = &redcon.Conn{
+		DBId:   dbID,
+		UserId: userID,
+	}
+}
+
 func (c *Command) createTransaction(conn *redcon.Conn) *store.Txn {
 	txn := c.client.NewTxn()
 	cfg := c.GetConfig(conn.UserId)

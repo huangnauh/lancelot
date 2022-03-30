@@ -249,7 +249,7 @@ func GetKeyBytes(typo PrefixType, user uint16, db uint8, keyPrefix PrefixType, d
 }
 
 func (o *Object) IsSimple() bool {
-	return o.Type == StringType || o.Type == JsonType || o.Type == HLLType
+	return o.Type == StringType || o.Type == JsonType
 }
 
 func (o *Object) DisableCount() bool {
@@ -258,7 +258,7 @@ func (o *Object) DisableCount() bool {
 }
 
 func (o *Object) IsCountable() bool {
-	return o.Type != StringType && o.Type != JsonType && o.Type == HLLType && o.Type != BListType
+	return o.Type != StringType && o.Type != JsonType && o.Type != HLLType && o.Type != BListType
 }
 
 func GetObjectFromKV(key, value []byte) (*Object, error) {
