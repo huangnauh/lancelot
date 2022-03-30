@@ -37,7 +37,8 @@ func (d *Dense) CheckAndSet(i uint64, rho uint8) (uint8, bool, error) {
 		}
 		origin = bvalue[index]
 	} else {
-		bvalue = d.tmp[i/delta*delta : i+delta]
+		start := i / delta * delta
+		bvalue = d.tmp[start : start+delta]
 		origin = bvalue[index]
 	}
 
@@ -67,7 +68,8 @@ func (d *Dense) Get(i uint64) (uint8, error) {
 			return 0, err
 		}
 	} else {
-		bvalue = d.tmp[i/delta*delta : i+delta]
+		start := i / delta * delta
+		bvalue = d.tmp[start : start+delta]
 	}
 	index := i % delta
 	return bvalue[index], nil
