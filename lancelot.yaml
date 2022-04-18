@@ -58,7 +58,7 @@ sentinel:
   run-id: ba74de3a-1528-49eb-8178-60529af9f35e
 log:
   enable: true
-  slow-log: 25ms
+  slow-log: 100ms
   filename: ""
   arg-limit: 10
   line-limit: 256
