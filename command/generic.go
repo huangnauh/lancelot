@@ -532,10 +532,13 @@ var CursorMap = map[string]CursorType{
 }
 
 type scanOptions struct {
-	count  int
-	match  string
-	typo   ObjectType
-	cursor CursorType
+	count     int
+	match     string
+	withValue bool
+	start     string
+	end       string
+	typo      ObjectType
+	cursor    CursorType
 }
 
 func (c *Command) getObjectType(txn *store.Txn, typo ObjectType) ObjectType {
@@ -585,12 +588,26 @@ func (c *Command) getScanOptions(txn *store.Txn, opts [][]byte) (*scanOptions, e
 		cursor: ServerCursor,
 	}
 
-	for i := 0; i < len(opts); i += 2 {
+	for i := 0; i < len(opts); i += 1 {
+		if len(opts) < i+1 {
+			return nil, xerror.WrongArgsError(SCAN_COMMAND)
+		}
+
+		iarg := strings.ToLower(utils.B2S(opts[i]))
+		if iarg == "withvalue" {
+			scanOptions.withValue = true
+			continue
+		}
+
 		if len(opts) < i+2 {
 			return nil, xerror.WrongArgsError(SCAN_COMMAND)
 		}
 
-		switch strings.ToLower(utils.B2S(opts[i])) {
+		switch iarg {
+		case "start":
+			scanOptions.start = utils.B2S(opts[i+1])
+		case "end":
+			scanOptions.end = utils.B2S(opts[i+1])
 		case "match":
 			scanOptions.match = utils.B2S(opts[i+1])
 		case "count":
@@ -619,6 +636,7 @@ func (c *Command) getScanOptions(txn *store.Txn, opts [][]byte) (*scanOptions, e
 		default:
 			return nil, xerror.ErrSyntax
 		}
+		i++
 	}
 	return scanOptions, nil
 }
@@ -716,9 +734,24 @@ func (c *Command) ScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	prefix := glob.Prefix(scanOpt.match)
-	start := GetKeyBytes(DataPrefix, txn.UserId, txn.DBId, KeyPrefix, utils.S2B(prefix))
-	prefixLen := len(start)
-	end := utils.PrefixNext(start)
+	p := GetKeyBytes(DataPrefix, txn.UserId, txn.DBId, KeyPrefix, utils.S2B(prefix))
+	prefixLen := len(p)
+	start := p
+	if scanOpt.start != "" {
+		if !strings.HasPrefix(scanOpt.start, prefix) {
+			return txn.SetError(xerror.ErrStartConflictsWithPrefix)
+		}
+		start = GetKeyBytes(DataPrefix, txn.UserId, txn.DBId, KeyPrefix, utils.S2B(scanOpt.start))
+	}
+	var end []byte
+	if scanOpt.end != "" {
+		if !strings.HasPrefix(scanOpt.end, prefix) {
+			return txn.SetError(xerror.ErrEndConflictsWithPrefix)
+		}
+		end = GetKeyBytes(DataPrefix, txn.UserId, txn.DBId, KeyPrefix, utils.S2B(scanOpt.end))
+	} else {
+		end = utils.PrefixNext(p)
+	}
 	start, err = c.checkCursor(scanOpt, cursor, fmt.Sprintf("%s:%s:%s", string(GeneralType),
 		string(scanOpt.typo), scanOpt.match), start)
 	if err == xerror.NotFoundCursor {
@@ -751,6 +784,7 @@ func (c *Command) scan(txn *store.Txn, start, end []byte, scanOpt *scanOptions) 
 	retKeys := make([][]byte, 0)
 	var lastKey []byte
 	var callbackErr error
+	var count int
 	callback := func(key, value []byte) bool {
 		lastKey = key
 		object, err := GetObjectFromKV(key, value)
@@ -780,8 +814,12 @@ func (c *Command) scan(txn *store.Txn, start, end []byte, scanOpt *scanOptions) 
 				return true
 			}
 		}
+		count++
 		retKeys = append(retKeys, object.Key)
-		return len(retKeys) < scanOpt.count
+		if scanOpt.withValue {
+			retKeys = append(retKeys, object.Value)
+		}
+		return count < scanOpt.count
 	}
 	utils.ZapLog.Debug("scan result", zap.String("remote", txn.RemoteAddr()),
 		zap.Uint64("timestamp", txn.Timestamp), zap.ByteStrings("result", retKeys), zap.ByteString("last", lastKey))

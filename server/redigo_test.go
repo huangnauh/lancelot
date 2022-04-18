@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+
 	redisgo "github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/assert"
 )
@@ -117,3 +120,53 @@ func TestRedisgoString(t *testing.T) {
 		})
 	}
 }
+
+var _ = Describe("Scan", func() {
+	var client redisgo.Conn
+	var err error
+
+	BeforeEach(func() {
+		client, err = redisgo.Dial("tcp", fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+			redisgo.DialReadTimeout(time.Second),
+			redisgo.DialWriteTimeout(time.Second),
+		)
+		Expect(err).NotTo(HaveOccurred())
+		_, err := client.Do("flushdb")
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		Expect(client.Close()).NotTo(HaveOccurred())
+	})
+
+	FDescribe("scanning", func() {
+		It("should Scan start end", func() {
+			for i := 0; i <= 1000; i++ {
+				_, err = client.Do("set", fmt.Sprintf("key%d", i), fmt.Sprintf("value%d", i))
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			resp, err := redisgo.Values(client.Do("scan", "0", "count", "2", "type", "string", "start", "key100", "end", "key200"))
+			Expect(err).NotTo(HaveOccurred())
+			var keys []string
+			var cursor int64
+			_, err = redisgo.Scan(resp, &cursor, &keys)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(keys).To(Equal([]string{"key100", "key1000"}))
+		})
+		It("should Scan withvalue", func() {
+			for i := 0; i <= 1000; i++ {
+				_, err = client.Do("set", fmt.Sprintf("key%d", i), fmt.Sprintf("value%d", i))
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			resp, err := redisgo.Values(client.Do("scan", "0", "count", "2", "type", "string", "withvalue", "start", "key100", "end", "key200"))
+			Expect(err).NotTo(HaveOccurred())
+			var keys []string
+			var cursor int64
+			_, err = redisgo.Scan(resp, &cursor, &keys)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(keys).To(Equal([]string{"key100", "value100", "key1000", "value1000"}))
+		})
+	})
+})
