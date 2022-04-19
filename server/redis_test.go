@@ -806,6 +806,51 @@ var _ = Describe("Commands", func() {
 			Expect(cursor).NotTo(BeZero())
 		})
 
+		It("should Scan start", func() {
+			for i := 0; i <= 1000; i++ {
+				set := client.Set(ctx, fmt.Sprintf("key%d", i), "hello", 0)
+				Expect(set.Err()).NotTo(HaveOccurred())
+			}
+
+			s := redis.NewScanCmd(ctx, client.Process, "scan", 0, "count", 2, "start", "key100")
+			err := client.Process(ctx, s)
+			Expect(err).NotTo(HaveOccurred())
+			keys, cursor, err := s.Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(keys).To(Equal([]string{"key100", "key1000"}))
+			Expect(cursor).NotTo(BeZero())
+		})
+
+		It("should Scan end", func() {
+			for i := 0; i <= 1000; i++ {
+				set := client.Set(ctx, fmt.Sprintf("key%d", i), "hello", 0)
+				Expect(set.Err()).NotTo(HaveOccurred())
+			}
+
+			s := redis.NewScanCmd(ctx, client.Process, "scan", 0, "count", 256, "start", "key100", "end", "key102")
+			err := client.Process(ctx, s)
+			Expect(err).NotTo(HaveOccurred())
+			keys, cursor, err := s.Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(keys).To(Equal([]string{"key100", "key1000", "key101"}))
+			Expect(cursor).To(BeZero())
+		})
+
+		It("should Scan end", func() {
+			for i := 0; i <= 1000; i++ {
+				set := client.Set(ctx, fmt.Sprintf("key%d", i), fmt.Sprintf("value%d", i), 0)
+				Expect(set.Err()).NotTo(HaveOccurred())
+			}
+
+			s := redis.NewScanCmd(ctx, client.Process, "scan", 0, "count", 256, "start", "key100", "end", "key102", "withvalue")
+			err := client.Process(ctx, s)
+			Expect(err).NotTo(HaveOccurred())
+			keys, cursor, err := s.Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(keys).To(Equal([]string{"key100", "value100", "key1000", "value1000", "key101", "value101"}))
+			Expect(cursor).To(BeZero())
+		})
+
 		It("should ScanType", func() {
 			for i := 0; i < 1000; i++ {
 				set := client.Set(ctx, fmt.Sprintf("key%d", i), "hello", 0)
