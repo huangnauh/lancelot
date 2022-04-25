@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/errors"
 	tikverr "github.com/tikv/client-go/v2/error"
 	"github.com/tikv/client-go/v2/kv"
 	"github.com/tikv/client-go/v2/oracle"
@@ -88,6 +89,30 @@ func (t *Txn) IsPessimistic() bool {
 		return config.GetDefaultConfig().Store.IsPessimistic
 	}
 	return t.Config.Store.IsPessimistic
+}
+
+func ErrorEqual(err1, err2 error) bool {
+	e1 := errors.Cause(err1)
+	e2 := errors.Cause(err2)
+
+	if e1 == e2 {
+		return true
+	}
+	if e1 == nil || e2 == nil {
+		return e1 == e2
+	}
+	return false
+}
+
+func returnErr(err error) error {
+	if tikverr.IsErrWriteConflict(err) {
+		return xerror.ErrKeyIsLocked
+	}
+	if ErrorEqual(err, tikverr.ErrLockAcquireFailAndNoWaitSet) ||
+		ErrorEqual(err, tikverr.ErrLockWaitTimeout) {
+		return xerror.ErrKeyIsLocked
+	}
+	return err
 }
 
 func (t *Txn) Begin() error {
@@ -180,14 +205,16 @@ func (t *Txn) Put(key, val []byte) error {
 		err := t.txn.LockKeysWithWaitTime(ctx, kv.LockNoWait, key)
 		cancel()
 		if err != nil {
-			return err
+			utils.ZapLog.Error("[txn] lock", zap.String("remote", t.RemoteAddr()),
+				zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.Error(err))
+			return returnErr(err)
 		}
 	}
 	err := t.txn.Set(key, val)
 	if err != nil {
 		utils.ZapLog.Error("[txn] set", zap.String("remote", t.RemoteAddr()),
 			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.Error(err))
-		return err
+		return returnErr(err)
 	}
 	utils.ZapLog.Debug("[txn] set", zap.String("remote", t.RemoteAddr()),
 		zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.ByteString("value", val))
@@ -203,14 +230,16 @@ func (t *Txn) Del(key []byte) error {
 		err := t.txn.LockKeysWithWaitTime(ctx, kv.LockNoWait, key)
 		cancel()
 		if err != nil {
-			return err
+			utils.ZapLog.Error("[txn] lock", zap.String("remote", t.RemoteAddr()),
+				zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.Error(err))
+			return returnErr(err)
 		}
 	}
 	err := t.txn.Delete(key)
 	if err != nil {
 		utils.ZapLog.Error("[txn] del", zap.String("remote", t.RemoteAddr()),
 			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.Error(err))
-		return err
+		return returnErr(err)
 	}
 	utils.ZapLog.Debug("[txn] del", zap.String("remote", t.RemoteAddr()),
 		zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key))
@@ -225,12 +254,15 @@ func (t *Txn) LockKeys(keys [][]byte) error {
 			return xerror.ErrExceedMaxSize
 		}
 	}
-	err := t.txn.LockKeysWithWaitTime(ctx, kv.LockNoWait, keys...)
+	err := t.txn.LockKeys(ctx, new(kv.LockCtx), keys...)
 	if err != nil {
 		utils.ZapLog.Error("[txn] lock", zap.String("remote", t.RemoteAddr()),
-			zap.Uint64("timestamp", t.Timestamp), zap.Error(err))
+			zap.Uint64("timestamp", t.Timestamp), zap.Error(err), zap.Any("keys", keys))
+		return returnErr(err)
 	}
-	return err
+	utils.ZapLog.Debug("[txn] lock", zap.String("remote", t.RemoteAddr()),
+		zap.Uint64("timestamp", t.Timestamp), zap.Any("keys", keys))
+	return nil
 }
 
 func (t *Txn) Reset() {

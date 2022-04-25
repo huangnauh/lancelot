@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/tikv/client-go/v2/tikv"
@@ -16,6 +17,14 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	err = txn.LockKeysWithWaitTime(context.Background(), 0, []byte("t"))
+	if err != nil {
+		panic(err)
+	}
+	err = txn.LockKeysWithWaitTime(context.Background(), 0, []byte("t"))
+	if err != nil {
+		panic(err)
+	}
 	it, err := txn.Iter([]byte("t"), []byte("u"))
 	if err != nil {
 		panic(err)
@@ -23,7 +32,8 @@ func main() {
 
 	for it.Valid() {
 		fmt.Printf("key: %s, value:%s\n", []byte(it.Key()), []byte(it.Value()))
-		it.Next()
+		// it.Next()
+		break
 	}
 	it.Close()
 }

@@ -522,7 +522,7 @@ start_server {
         wait_for_blocked_clients_count 0 500 10
         $watching_client exec
         $watching_client read
-    } {}
+    } {somevalue} {needs:debug}
 
     test "BRPOPLPUSH does not affect WATCH while still blocked" {
         set blocked_client [redis_deferring_client]
