@@ -20,6 +20,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const DefaultLockWait = 100
+
 // type RespFunc func(txn *Txn)
 
 type Txn struct {
@@ -202,7 +204,7 @@ func (t *Txn) Put(key, val []byte) error {
 	}
 	if t.IsPessimistic() {
 		ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.WriteTimeout)
-		err := t.txn.LockKeysWithWaitTime(ctx, kv.LockNoWait, key)
+		err := t.txn.LockKeysWithWaitTime(ctx, DefaultLockWait, key)
 		cancel()
 		if err != nil {
 			utils.ZapLog.Error("[txn] lock", zap.String("remote", t.RemoteAddr()),
@@ -227,7 +229,7 @@ func (t *Txn) Del(key []byte) error {
 	}
 	if t.IsPessimistic() {
 		ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.WriteTimeout)
-		err := t.txn.LockKeysWithWaitTime(ctx, kv.LockNoWait, key)
+		err := t.txn.LockKeysWithWaitTime(ctx, DefaultLockWait, key)
 		cancel()
 		if err != nil {
 			utils.ZapLog.Error("[txn] lock", zap.String("remote", t.RemoteAddr()),
