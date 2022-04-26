@@ -383,7 +383,7 @@ func (c *Command) listMany(txn *store.Txn, args [][]byte, cmd string) (interface
 	utils.ZapLog.Debug("block list", zap.ByteStrings("args", args))
 	for i := 0; i < len(args); i++ {
 		ret, err := c.ListHandle(txn, [][]byte{args[i]}, cmd, opt)
-		if err == store.KeyNotFound {
+		if err == store.KeyNotFound || err == xerror.ErrKeyIsLocked {
 			continue
 		} else if err != nil {
 			return nil, err

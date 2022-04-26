@@ -62,6 +62,7 @@ type Store struct {
 	DisableLockBackOff   bool          `yaml:"disable-lock-back-off" json:"disable-lock-back-off,omitempty"`
 	BatchLimit           int           `yaml:"batch-limit" json:"batch-limit,omitempty"`
 	CommitterConcurrency int           `yaml:"committer-concurrency" json:"committer-concurrency,omitempty"`
+	IsPessimistic        bool          `yaml:"is-pessimistic" json:"is-pessimistic,omitempty"`
 }
 
 type Lua struct {

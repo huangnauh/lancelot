@@ -5,8 +5,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/errors"
 	tikverr "github.com/tikv/client-go/v2/error"
-	tikvstore "github.com/tikv/client-go/v2/kv"
+	"github.com/tikv/client-go/v2/kv"
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
 	"github.com/tikv/client-go/v2/txnkv/transaction"
@@ -18,6 +19,8 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
 	"go.uber.org/zap"
 )
+
+const DefaultLockWait = 100
 
 // type RespFunc func(txn *Txn)
 
@@ -83,11 +86,45 @@ func (t *Txn) SetConfig(cfg *config.Config) {
 	t.Config = cfg
 }
 
+func (t *Txn) IsPessimistic() bool {
+	if t.Config == nil {
+		return config.GetDefaultConfig().Store.IsPessimistic
+	}
+	return t.Config.Store.IsPessimistic
+}
+
+func ErrorEqual(err1, err2 error) bool {
+	e1 := errors.Cause(err1)
+	e2 := errors.Cause(err2)
+
+	if e1 == e2 {
+		return true
+	}
+	if e1 == nil || e2 == nil {
+		return e1 == e2
+	}
+	return false
+}
+
+func returnErr(err error) error {
+	if tikverr.IsErrWriteConflict(err) {
+		return xerror.ErrKeyIsLocked
+	}
+	if ErrorEqual(err, tikverr.ErrLockAcquireFailAndNoWaitSet) ||
+		ErrorEqual(err, tikverr.ErrLockWaitTimeout) {
+		return xerror.ErrKeyIsLocked
+	}
+	return err
+}
+
 func (t *Txn) Begin() error {
 	tx, err := t.client.store.Begin()
 	if err != nil {
 		utils.ZapLog.Error("[txn] client begin", zap.String("remote", t.RemoteAddr()), zap.Error(err))
 		return err
+	}
+	if t.IsPessimistic() {
+		tx.SetPessimistic(true)
 	}
 	tx.SetVars(t.client.disableLockVars)
 	startTs := tx.StartTS()
@@ -165,11 +202,21 @@ func (t *Txn) Put(key, val []byte) error {
 	if len(val) >= utils.MAX_VALUE_SIZE {
 		return xerror.ErrExceedMaxSize
 	}
+	if t.IsPessimistic() {
+		ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.WriteTimeout)
+		err := t.txn.LockKeysWithWaitTime(ctx, DefaultLockWait, key)
+		cancel()
+		if err != nil {
+			utils.ZapLog.Error("[txn] lock", zap.String("remote", t.RemoteAddr()),
+				zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.Error(err))
+			return returnErr(err)
+		}
+	}
 	err := t.txn.Set(key, val)
 	if err != nil {
 		utils.ZapLog.Error("[txn] set", zap.String("remote", t.RemoteAddr()),
 			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.Error(err))
-		return err
+		return returnErr(err)
 	}
 	utils.ZapLog.Debug("[txn] set", zap.String("remote", t.RemoteAddr()),
 		zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.ByteString("value", val))
@@ -180,11 +227,21 @@ func (t *Txn) Del(key []byte) error {
 	if len(key) >= utils.MAX_KEY_SIZE {
 		return xerror.ErrExceedMaxSize
 	}
+	if t.IsPessimistic() {
+		ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.WriteTimeout)
+		err := t.txn.LockKeysWithWaitTime(ctx, DefaultLockWait, key)
+		cancel()
+		if err != nil {
+			utils.ZapLog.Error("[txn] lock", zap.String("remote", t.RemoteAddr()),
+				zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.Error(err))
+			return returnErr(err)
+		}
+	}
 	err := t.txn.Delete(key)
 	if err != nil {
 		utils.ZapLog.Error("[txn] del", zap.String("remote", t.RemoteAddr()),
 			zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key), zap.Error(err))
-		return err
+		return returnErr(err)
 	}
 	utils.ZapLog.Debug("[txn] del", zap.String("remote", t.RemoteAddr()),
 		zap.Uint64("timestamp", t.Timestamp), zap.ByteString("key", key))
@@ -199,12 +256,15 @@ func (t *Txn) LockKeys(keys [][]byte) error {
 			return xerror.ErrExceedMaxSize
 		}
 	}
-	err := t.txn.LockKeys(ctx, new(tikvstore.LockCtx), keys...)
+	err := t.txn.LockKeys(ctx, new(kv.LockCtx), keys...)
 	if err != nil {
 		utils.ZapLog.Error("[txn] lock", zap.String("remote", t.RemoteAddr()),
-			zap.Uint64("timestamp", t.Timestamp), zap.Error(err))
+			zap.Uint64("timestamp", t.Timestamp), zap.Error(err), zap.Any("keys", keys))
+		return returnErr(err)
 	}
-	return err
+	utils.ZapLog.Debug("[txn] lock", zap.String("remote", t.RemoteAddr()),
+		zap.Uint64("timestamp", t.Timestamp), zap.Any("keys", keys))
+	return nil
 }
 
 func (t *Txn) Reset() {

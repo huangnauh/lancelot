@@ -400,6 +400,7 @@ func ObjectDecode(b []byte, o *Object) error {
 }
 
 func setTxnObject(txn *store.Txn, key []byte, o *Object, change ChangeType) error {
+	utils.ZapLog.Debug("setTxnObject", zap.ByteString("key", key))
 	delta := int64(0)
 	var err error
 	if change&DeleteKeyType != 0 {
@@ -596,7 +597,7 @@ func (c *Command) BlockHandle(txn *store.Txn, args [][]byte, bfunc BFunc) (inter
 	}
 	timeout := time.Duration(second * float64(time.Second))
 	ret, err := bfunc(txn, args[0:len(args)-1])
-	if err != nil {
+	if err != nil && err != xerror.ErrKeyIsLocked {
 		return nil, err
 	}
 	if ret != nil {
@@ -637,12 +638,13 @@ func (c *Command) BlockHandle(txn *store.Txn, args [][]byte, bfunc BFunc) (inter
 					zap.String("remote", txn.RemoteAddr()))
 				return nil, err
 			}
+			utils.ZapLog.Debug("block handle", zap.Any("args", args))
 			err = txn.Begin()
 			if err != nil {
 				return nil, err
 			}
 			ret, err := bfunc(txn, args[0:len(args)-1])
-			if err != nil {
+			if err != nil && err != xerror.ErrKeyIsLocked {
 				return nil, err
 			}
 			if ret != nil {

@@ -454,6 +454,7 @@ start_server {
       r rpush list1{t} foo
 
       wait_for_blocked_clients_count 0 500 10
+      after 2000
 
       assert_equal {} [r lrange list1{t} 0 -1]
       assert_equal {} [r lrange list2{t} 0 -1]
@@ -522,7 +523,7 @@ start_server {
         wait_for_blocked_clients_count 0 500 10
         $watching_client exec
         $watching_client read
-    } {}
+    } {somevalue} {needs:debug}
 
     test "BRPOPLPUSH does not affect WATCH while still blocked" {
         set blocked_client [redis_deferring_client]
