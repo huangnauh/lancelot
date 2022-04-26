@@ -454,6 +454,7 @@ start_server {
       r rpush list1{t} foo
 
       wait_for_blocked_clients_count 0 500 10
+      after 2000
 
       assert_equal {} [r lrange list1{t} 0 -1]
       assert_equal {} [r lrange list2{t} 0 -1]
