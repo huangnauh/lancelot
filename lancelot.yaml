@@ -24,7 +24,7 @@ store:
   disable-lock-back-off: false
   batch-limit: 200
   committer-concurrency: 1024
-  is-pessimistic: true
+  is-pessimistic: false
 gc:
   tick-interval: 1s
   ttl-workers: 1
