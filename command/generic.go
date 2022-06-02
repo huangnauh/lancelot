@@ -33,7 +33,7 @@ func (c *Command) PersistHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(PERSIST_COMMAND)
 	}
-	return c.expire(txn, args, 0, true)
+	return c.expireHandle(txn, args, 0, true)
 }
 
 // EXPIRETIME key
@@ -87,7 +87,7 @@ func (c *Command) ExpireAtHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.InvalidExpireError(EXPIREAT_COMMAND))
 	}
 	newTTL := timestamp * 1000
-	return c.expire(txn, args, newTTL, false)
+	return c.expireHandle(txn, args, newTTL, false)
 }
 
 // PEXPIREAT key milliseconds-timestamp [NX|XX|GT|LT]
@@ -100,7 +100,7 @@ func (c *Command) PExpireAtHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.ErrNotInteger)
 	}
 	newTTL := timestamp
-	return c.expire(txn, args, newTTL, false)
+	return c.expireHandle(txn, args, newTTL, false)
 }
 
 // PEXPIRE key milliseconds [NX|XX|GT|LT]
@@ -116,7 +116,7 @@ func (c *Command) PExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(xerror.InvalidExpireError(PEXPIRE_COMMAND))
 	}
 	newTTL := txn.Now + milliseconds
-	return c.expire(txn, args, newTTL, false)
+	return c.expireHandle(txn, args, newTTL, false)
 }
 
 // (generic) EXPIRE key seconds [NX|XX|GT|LT]
@@ -135,7 +135,7 @@ func (c *Command) ExpireHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	newTTL := txn.Now + expire*1000
-	return c.expire(txn, args, newTTL, false)
+	return c.expireHandle(txn, args, newTTL, false)
 }
 
 func TTLSensitive(newTTL, oldTTL, sensitive int64) bool {
@@ -171,17 +171,28 @@ func TTLSensitive(newTTL, oldTTL, sensitive int64) bool {
 	return ttlSensitive <= delta
 }
 
-func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL bool) interface{} {
+func (c *Command) expireHandle(txn *store.Txn, args [][]byte, newTTL int64, clearTTL bool) interface{} {
+	ret, err := c.expire(txn, args, newTTL, clearTTL)
+	if txn.IsSkipConflict() && err == xerror.ErrKeyIsLocked {
+		return SimpleInt(0)
+	}
+	if err != nil {
+		return txn.SetError(err)
+	}
+	return ret
+}
+
+func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL bool) (redcon.SimpleInt, error) {
 	var err error
 	var i int
 	opt := &checkOption{}
 	if len(args) > 2 {
 		opt, i, err = getCheckOption(args[2:])
 		if err != nil {
-			return txn.SetError(err)
+			return 0, err
 		}
 		if len(args[2:]) > i {
-			return txn.SetError(xerror.UnsupportedOptionError(args[2+i]))
+			return 0, xerror.UnsupportedOptionError(args[2+i])
 		}
 	}
 
@@ -189,67 +200,67 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 	key := object.GetKeyBytes()
 	err = getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
-		return SimpleInt(0)
+		return 0, nil
 	} else if err != nil {
-		return txn.SetError(err)
+		return 0, err
 	}
 
 	if clearTTL {
 		if object.TTL == 0 {
-			return SimpleInt(0)
+			return 0, nil
 		}
 		// clean ttl key
 		ttlKey := object.GetTTLKeyBytes()
 		err = txn.Del(ttlKey)
 		if err != nil {
-			return txn.SetError(err)
+			return 0, err
 		}
 		object.TTL = 0
 		object.Timestamp = txn.Timestamp
 		err = setTxnObject(txn, key, object, 0)
 		if err != nil {
-			return txn.SetError(err)
+			return 0, err
 		}
-		return SimpleInt(1)
+		return 1, nil
 	}
 
 	if newTTL <= txn.Now {
 		err = DeleteKey(txn, key, object, txn.Now, MinusCount)
 		if err != nil {
-			return txn.SetError(err)
+			return 0, err
 		}
-		return SimpleInt(1)
+		return 1, nil
 	}
 
 	if object.TTL > 0 {
 		if opt.Check&CheckNotExist == CheckNotExist {
-			return SimpleInt(0)
+			return 0, nil
 		}
 
 		if newTTL >= object.TTL && opt.Check&CheckLT == CheckLT {
-			return SimpleInt(0)
+			return 0, nil
 		}
 
 		if newTTL <= object.TTL && opt.Check&CheckGT == CheckGT {
-			return SimpleInt(0)
+			return 0, nil
 		}
 
 		if !TTLSensitive(newTTL-txn.Now, object.TTL-txn.Now, txn.Config.Redis.TTLSensitive) {
-			return SimpleInt(1)
+			return 1, nil
 		}
 
 		ttlKey := object.GetTTLKeyBytes()
 		err = txn.Del(ttlKey)
 		if err != nil {
-			return err
+			return 0, err
 		}
 	} else {
 		if opt.Check&CheckExist == CheckExist {
-			return SimpleInt(0)
+			return 0, nil
 		}
 		// A non-volatile key is treated as an infinite TTL
 		if opt.Check&CheckGT == CheckGT {
-			return SimpleInt(0)
+			return 0, nil
 		}
 	}
 
@@ -262,13 +273,13 @@ func (c *Command) expire(txn *store.Txn, args [][]byte, newTTL int64, clearTTL b
 		err = txn.Put(ttlKey, EncodeTTLValue(object.Type, object.Value))
 	}
 	if err != nil {
-		return txn.SetError(err)
+		return 0, err
 	}
 	err = setTxnObject(txn, key, object, 0)
 	if err != nil {
-		return txn.SetError(err)
+		return 0, err
 	}
-	return SimpleInt(1)
+	return 1, nil
 }
 
 // (generic) EXISTS key [key ...]

@@ -62,7 +62,7 @@ type Store struct {
 	DisableLockBackOff   bool          `yaml:"disable-lock-back-off" json:"disable-lock-back-off,omitempty"`
 	BatchLimit           int           `yaml:"batch-limit" json:"batch-limit,omitempty"`
 	CommitterConcurrency int           `yaml:"committer-concurrency" json:"committer-concurrency,omitempty"`
-	IsPessimistic        bool          `yaml:"is-pessimistic" json:"is-pessimistic,omitempty"`
+	IsPessimistic        bool          `yaml:"is-pessimistic" json:"is-pessimistic"`
 }
 
 type Lua struct {
@@ -98,9 +98,10 @@ type Redis struct {
 	DisableCount               bool   `yaml:"disable-count" json:"disable-count,omitempty"`
 	ObjectHash                 uint16 `yaml:"object-hash" json:"object-hash,omitempty"`
 	ListType                   string `yaml:"list-type" json:"list-type,omitempty"`
-	TTLSensitive               int64  `yaml:"ttl-sensitive" json:"ttl-sensitive,omitempty"`
+	TTLSensitive               int64  `yaml:"ttl-sensitive" json:"ttl-sensitive"`
 	CursorExpireSecond         int    `yaml:"cursor-expirate-second" json:"cursor-expirate-second,omitempty"`
 	MaxSlowMessagePerSubscribe int    `yaml:"max-slow-msg-per-sub" json:"max-slow-msg-per-sub,omitempty"`
+	SkipConflict               bool   `yaml:"skip-conflict" json:"skip-conflict"`
 }
 
 type Log struct {
