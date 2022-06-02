@@ -446,6 +446,9 @@ func (c *Command) stringHandle(txn *store.Txn, args [][]byte, stringFunc StringF
 	}
 	object.Timestamp = txn.Timestamp
 	err = setTxnObject(txn, key, object, create)
+	if txn.IsSkipConflict() && err == xerror.ErrKeyIsLocked {
+		return value
+	}
 	if err != nil {
 		return txn.SetError(err)
 	}

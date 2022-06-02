@@ -21,7 +21,7 @@ TAGS="-needs:repl -needs:copy -needs:debug -needs:stralgo -needs:rand -needs:bit
 # sleep 2
 ./runtest --host 127.0.0.1 --port 6379 --single unit/type/lista --tags "$TAGS" --ignore-encoding  || exit 1
 # sleep 2
-./runtest --host 10.0.5.137 --port 16379 --single unit/bitops --tags "$TAGS" --ignore-encoding  || exit 1
+./runtest --host 127.0.0.1 --port 6379 --single unit/bitops --tags "$TAGS" --ignore-encoding  || exit 1
 # sleep 2
 ./runtest --host 127.0.0.1 --port 6379 --single unit/scan --tags "$TAGS" --ignore-encoding  || exit 1
 # sleep 2

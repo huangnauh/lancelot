@@ -86,11 +86,25 @@ func (t *Txn) SetConfig(cfg *config.Config) {
 	t.Config = cfg
 }
 
-func (t *Txn) IsPessimistic() bool {
-	if t.Config == nil {
-		return config.GetDefaultConfig().Store.IsPessimistic
+func (t *Txn) IsSkipConflict() bool {
+	cfg := t.Config
+	if cfg == nil {
+		c := config.GetDefaultConfig()
+		cfg = &c
 	}
-	return t.Config.Store.IsPessimistic
+	return cfg.Redis.SkipConflict
+}
+
+func (t *Txn) IsPessimistic() bool {
+	cfg := t.Config
+	if cfg == nil {
+		c := config.GetDefaultConfig()
+		cfg = &c
+	}
+	if cfg.Redis.SkipConflict {
+		return true
+	}
+	return cfg.Store.IsPessimistic
 }
 
 func ErrorEqual(err1, err2 error) bool {
@@ -155,7 +169,7 @@ func (t *Txn) Commit() error {
 		utils.ZapLog.Error("[txn] commit", zap.String("remote", t.RemoteAddr()),
 			zap.Uint64("timestamp", t.Timestamp), zap.Error(err))
 		t.Rollback()
-		return err
+		return returnErr(err)
 	}
 	utils.ZapLog.Debug("[txn] commit", zap.String("remote", t.RemoteAddr()),
 		zap.Uint64("timestamp", t.Timestamp))
