@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"context"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -126,6 +127,9 @@ func returnErr(err error) error {
 	}
 	if ErrorEqual(err, tikverr.ErrLockAcquireFailAndNoWaitSet) ||
 		ErrorEqual(err, tikverr.ErrLockWaitTimeout) {
+		return xerror.ErrKeyIsLocked
+	}
+	if strings.HasPrefix(err.Error(), "2PC prewrite lockedKeys") {
 		return xerror.ErrKeyIsLocked
 	}
 	return err

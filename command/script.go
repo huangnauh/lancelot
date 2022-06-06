@@ -15,6 +15,7 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/lua/bit"
 	"gitlab.s.upyun.com/platform/lancelot/lua/cjson"
 	"gitlab.s.upyun.com/platform/lancelot/lua/cmsgpack"
+	"gitlab.s.upyun.com/platform/lancelot/metric"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
@@ -317,6 +318,7 @@ func (c *Command) luaCall(txn *store.Txn, scriptCmd, cmd string, args [][]byte) 
 	if readonly && !txnHandle.ReadOnly {
 		return nil, xerror.ErrReadOnlyScript
 	}
+	metric.Metric.RequestTotal.WithLabelValues(txn.UserName, strconv.Itoa(int(txn.DBId)), cmd).Inc()
 	resp := txnHandle.Func(txn, args)
 	if txn.Err != nil {
 		return nil, txn.Err
@@ -454,7 +456,7 @@ func (c *Command) evalHandle(txn *store.Txn, args [][]byte, script_command strin
 	if len(args) < 2 {
 		return txn.SetWrongArgs(script_command)
 	}
-	utils.ZapLog.Info("evalHandle", zap.String("script", utils.B2S(args[0])))
+	utils.ZapLog.Debug("evalHandle", zap.String("script", utils.B2S(args[0])))
 	script := args[0]
 	numKeysStr := string(args[1])
 	numkeysInt64, err := strconv.ParseInt(numKeysStr, 10, 64)
