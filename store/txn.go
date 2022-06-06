@@ -298,8 +298,12 @@ type Iterator struct {
 	txn   *Txn
 }
 
-func (t *Txn) Iter(start, end []byte, reversed bool) (*Iterator, error) {
+func (t *Txn) Iter(start, end []byte, reversed bool, scanSize int) (*Iterator, error) {
 	var it tikv.Iterator
+	if scanSize > 0 {
+		snapshot := t.txn.GetSnapshot()
+		snapshot.SetScanBatchSize(scanSize)
+	}
 	var err error
 	if !reversed {
 		it, err = t.txn.Iter(start, end)
@@ -316,10 +320,10 @@ func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
 	var it tikv.Iterator
 	var err error
 	if bytes.Compare(end, start) >= 0 {
-		it, err = t.Iter(start, end, false)
+		it, err = t.Iter(start, end, false, 0)
 	} else {
 		start, end = end, start
-		it, err = t.Iter(start, end, true)
+		it, err = t.Iter(start, end, true, 0)
 	}
 	if err != nil {
 		utils.ZapLog.Error("[txn] iter", zap.String("remote", t.RemoteAddr()),

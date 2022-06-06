@@ -162,7 +162,7 @@ func (c *Command) doGC(start, end []byte, now int64, cfg *config.Config) ([]byte
 		return nil, nil, err
 	}
 	defer txn.Rollback()
-	it, err := txn.Iter(start, end, false)
+	it, err := txn.Iter(start, end, false, cfg.GC.TTLScanLimit)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -172,6 +172,7 @@ func (c *Command) doGC(start, end []byte, now int64, cfg *config.Config) ([]byte
 	var o *Object
 	finish := false
 	for it.Valid() {
+		count++
 		lastKey = it.Key()
 		if bytes.Compare(lastKey, end) >= 0 {
 			finish = true
@@ -185,6 +186,9 @@ func (c *Command) doGC(start, end []byte, now int64, cfg *config.Config) ([]byte
 			err = txn.Del(lastKey)
 			if err != nil {
 				utils.ZapLog.Error("[gc] del invalid ttl key", zap.ByteString("ttl key", lastKey), zap.Error(err))
+			}
+			if count >= cfg.GC.TTLScanLimit {
+				break
 			}
 			err = it.Next()
 			if err != nil {
@@ -233,18 +237,16 @@ func (c *Command) doGC(start, end []byte, now int64, cfg *config.Config) ([]byte
 			}
 		} else if len(object.Key) > 0 {
 			txn.Config = uconf
-			count++
 			utils.ZapLog.Debug("[gc] del key", zap.ByteString("ttl key", lastKey), zap.ByteString("key", object.Key))
 			err = CleanKey(txn, object.GetKeyBytes(), lastKey, object, 0, MinusCount|GCChange)
 			if err != nil {
 				utils.ZapLog.Error("[gc] del key", zap.ByteString("ttl key", lastKey), zap.Error(err))
 				return lastKey, nil, err
 			}
-			if count >= cfg.Store.BatchLimit {
-				break
-			}
 		}
-
+		if count >= cfg.GC.TTLScanLimit {
+			break
+		}
 		err = it.Next()
 		if err != nil {
 			utils.ZapLog.Error("[gc] iter next", zap.Error(err))

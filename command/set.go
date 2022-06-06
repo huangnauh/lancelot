@@ -324,7 +324,7 @@ func (c *Command) inter(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 				p := getKeyFunc(o, nil)
 				s := getKeyFunc(o, k)
 				e := utils.PrefixNext(p)
-				iter, err := txn.Iter(s, e, false)
+				iter, err := txn.Iter(s, e, false, 0)
 				if err != nil {
 					cbErr = err
 					return false
@@ -447,7 +447,7 @@ func (c *Command) union(txn *store.Txn, args [][]byte, typo ObjectType, getType 
 		}
 		s := p
 		e := utils.PrefixNext(p)
-		iter, err := txn.Iter(s, e, false)
+		iter, err := txn.Iter(s, e, false, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -605,7 +605,7 @@ func (c *Command) diff(txn *store.Txn, args [][]byte, typo ObjectType, getType i
 				p := getKeyFunc(o, nil)
 				s := getKeyFunc(o, k)
 				e := utils.PrefixNext(p)
-				iter, err := txn.Iter(s, e, false)
+				iter, err := txn.Iter(s, e, false, 0)
 				if err != nil {
 					cbErr = err
 					return false

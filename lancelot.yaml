@@ -28,7 +28,7 @@ store:
 gc:
   tick-interval: 1s
   ttl-workers: 1
-  ttl-batch-limit: 1
+  ttl-scan-limit: 1
 lua:
   init-pool-size: 1
   max-pool-size: 1
@@ -54,6 +54,7 @@ redis:
   ttl-sensitive: 0
   cursor-expirate-second: 600
   max-slow-msg-per-sub: 1000
+  skip-conflict: false
 sentinel:
   master-name: mymaster
   run-id: ba74de3a-1528-49eb-8178-60529af9f35e

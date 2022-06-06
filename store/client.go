@@ -236,7 +236,7 @@ func (c *Client) DeleteUntil(start, end []byte, limit int, callback KVCallback) 
 		return start, 0, err
 	}
 	defer txn.Rollback()
-	it, err := txn.Iter(start, end, false)
+	it, err := txn.Iter(start, end, false, 0)
 	if err != nil {
 		return start, 0, err
 	}

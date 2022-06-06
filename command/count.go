@@ -77,7 +77,7 @@ func ListCount(txn *store.Txn, userID uint16, dbID uint8, prefix PrefixType, key
 func DeleteCount(txn *store.Txn, userID uint16, dbID uint8, prefix PrefixType, key []byte, expire time.Time) error {
 	start := GetKeyBytes(CountPrefix, userID, dbID, prefix, key)
 	end := utils.PrefixNext(start)
-	it, err := txn.Iter(start, end, false)
+	it, err := txn.Iter(start, end, false, 0)
 	if err != nil {
 		return err
 	}

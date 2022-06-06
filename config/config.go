@@ -87,10 +87,11 @@ type Rpc struct {
 }
 
 type GC struct {
-	TickInterval  time.Duration `yaml:"tick-interval" json:"tick-interval,omitempty"`
-	TTLWorkers    int           `yaml:"ttl-workers" json:"ttl-workers,omitempty"`
-	TTLBatchLimit int           `yaml:"ttl-batch-limit" json:"ttl-batch-limit,omitempty"`
+	TickInterval time.Duration `yaml:"tick-interval" json:"tick-interval,omitempty"`
+	TTLWorkers   int           `yaml:"ttl-workers" json:"ttl-workers,omitempty"`
+	TTLScanLimit int           `yaml:"ttl-scan-limit" json:"ttl-scan-limit"`
 }
+
 type Redis struct {
 	ScanMaxCount               int    `yaml:"scan-max-count" json:"scan-max-count,omitempty"`
 	SetOperation               string `yaml:"set-operation" json:"set-operation,omitempty"`
@@ -174,9 +175,9 @@ var cfg = Config{
 		CommitterConcurrency: 1024,
 	},
 	GC: GC{
-		TickInterval:  time.Minute,
-		TTLWorkers:    5,
-		TTLBatchLimit: 100,
+		TickInterval: time.Minute,
+		TTLWorkers:   5,
+		TTLScanLimit: 10,
 	},
 	Lua: Lua{
 		InitPoolSize: 1,

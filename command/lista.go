@@ -118,7 +118,7 @@ func rangeRank(txn *store.Txn, object *Object, startIndex, endIndex int64, onlyK
 
 	if !startRevered || !endRevered {
 		utils.ZapLog.Debug("RangeRank", zap.ByteString("start", start), zap.ByteString("end", end))
-		iter, err := txn.Iter(start, end, false)
+		iter, err := txn.Iter(start, end, false, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -127,7 +127,7 @@ func rangeRank(txn *store.Txn, object *Object, startIndex, endIndex int64, onlyK
 
 	if startRevered || endRevered {
 		utils.ZapLog.Debug("RangeRank reversed", zap.ByteString("start", start), zap.ByteString("end", end))
-		iter, err := txn.Iter(start, end, true)
+		iter, err := txn.Iter(start, end, true, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -365,7 +365,7 @@ func alTrim(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface
 
 	if !startRevered || !endRevered {
 		utils.ZapLog.Debug("alRange", zap.ByteString("start", start), zap.ByteString("end", end))
-		iter, err := txn.Iter(start, end, false)
+		iter, err := txn.Iter(start, end, false, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -374,7 +374,7 @@ func alTrim(txn *store.Txn, object *Object, args [][]byte, opt *lOpt) (interface
 
 	if startRevered || endRevered {
 		utils.ZapLog.Debug("alRange reversed", zap.ByteString("start", start), zap.ByteString("end", end))
-		iter, err := txn.Iter(start, end, true)
+		iter, err := txn.Iter(start, end, true, 0)
 		if err != nil {
 			return nil, err
 		}
