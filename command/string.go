@@ -431,8 +431,11 @@ func (c *Command) stringHandle(txn *store.Txn, args [][]byte, stringFunc StringF
 	object := NewObject(txn, StringType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
+	conflict := false
 	if err == store.KeyNotFound {
 		create = PlusCount
+	} else if txn.IsSkipConflict() && err == xerror.ErrKeyIsLocked {
+		conflict = true
 	} else if err != nil {
 		return txn.SetError(err)
 	}
@@ -441,7 +444,7 @@ func (c *Command) stringHandle(txn *store.Txn, args [][]byte, stringFunc StringF
 	if err != nil {
 		return txn.SetError(err)
 	}
-	if !changed {
+	if !changed || conflict {
 		return value
 	}
 	object.Timestamp = txn.Timestamp

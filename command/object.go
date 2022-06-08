@@ -450,13 +450,13 @@ func getTxnObject(txn *store.Txn, key []byte, object *Object, clear bool) error 
 	}
 
 	if object.TTL > 0 && object.TTL <= txn.Now {
+		object.CleanValue(txn.Config.Redis.ObjectHash, getType)
 		if clear {
 			err = DeleteKey(txn, key, object, object.TTL, MinusCount)
 			if err != nil {
 				return err
 			}
 		}
-		object.CleanValue(txn.Config.Redis.ObjectHash, getType)
 		return store.KeyNotFound
 	}
 
