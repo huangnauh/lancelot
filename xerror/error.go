@@ -75,6 +75,8 @@ var (
 	ErrTimeoutNegative          = RedisNew("timeout is negative")
 	ErrLuaInvalidType           = RedisNew("lua invalid type")
 	ErrSyntax                   = RedisNew("syntax error")
+	ErrMustCreateRoot           = RedisNew("new objects must be created at the root")
+	ErrWrongStaticPath          = RedisNew("wrong static path")
 	ErrMinMaxString             = RedisNew("min or max not valid string range item")
 	ErrNotExpire                = RedisNew("not expire")
 	WrongTypeErr                = WrongTypeNew("Operation against a key holding the wrong kind of value")
