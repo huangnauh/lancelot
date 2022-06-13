@@ -19,7 +19,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/json-iterator/go v1.1.12
 	github.com/mmcloughlin/geohash v0.10.1-0.20210831075534-dc9a53a52fad
-	github.com/nitishm/go-rejson/v4 v4.0.0
+	github.com/nitishm/go-rejson/v4 v4.1.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.16.0
 	github.com/pingcap/errors v0.11.5-0.20210513014640-40f9a1999b3b
