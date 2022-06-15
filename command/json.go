@@ -1,14 +1,20 @@
 package command
 
 import (
+	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/spyzhov/ajson"
-	"gitlab.s.upyun.com/platform/lancelot/json"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
 	"go.uber.org/zap"
+)
+
+const (
+	quotes byte = '"'
+	quote  byte = '\''
 )
 
 // (json) JSON.DEL key [path]
@@ -98,6 +104,28 @@ func IsNormalElement(cmd string) bool {
 	}
 }
 
+func checkParent(parent *ajson.Node, element string) (bool, error) {
+	if parent.IsArray() {
+		index, err := strconv.Atoi(element)
+		if err != nil {
+			utils.ZapLog.Error("parent is not object",
+				zap.Any("parent type", parent.Type()),
+				zap.Any("parent", parent))
+			return false, nil
+		}
+		if index >= parent.Size() {
+			return false, xerror.ErrArrayOutOfRange
+		}
+	}
+	if !parent.IsObject() {
+		utils.ZapLog.Error("parent is not object",
+			zap.Any("parent type", parent.Type()),
+			zap.Any("parent", parent))
+		return false, nil
+	}
+	return true, nil
+}
+
 // (json) JSON.SET <key> <path> <json> [NX|XX]
 func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 3 || len(args) > 4 {
@@ -127,26 +155,40 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
 		if CheckExist == check {
-			return txn.SetError(xerror.ErrCheckFailed)
+			return nil
 		}
 		create = PlusCount
 		if jsonPath != "$" && jsonPath != "." {
 			return txn.SetError(xerror.ErrMustCreateRoot)
 		}
-		if !json.Valid(jsonValue) {
+		ok := json.Valid(jsonValue)
+		if !ok {
+			utils.ZapLog.Error("invalid json",
+				zap.ByteString("key", args[0]),
+				zap.ByteString("value", jsonValue),
+				zap.Error(err))
 			return txn.SetError(xerror.InvalidJsonError)
 		}
 		object.Value = jsonValue
 	} else if err != nil {
 		return txn.SetError(err)
-	} else if CheckNotExist == check {
-		return txn.SetError(xerror.ErrCheckFailed)
 	} else if jsonPath == "$" || jsonPath == "." {
-		if !json.Valid(jsonValue) {
+		if CheckNotExist == check {
+			return nil
+		}
+		ok := json.Valid(jsonValue)
+		if !ok {
+			utils.ZapLog.Error("invalid json",
+				zap.ByteString("key", args[0]),
+				zap.ByteString("value", jsonValue),
+				zap.Error(err))
 			return txn.SetError(xerror.InvalidJsonError)
 		}
 		object.Value = jsonValue
 	} else {
+		if strings.HasPrefix(jsonPath, ".") {
+			jsonPath = "$" + jsonPath
+		}
 		oldValue = object.Value
 		root, err := ajson.Unmarshal(oldValue)
 		if err != nil {
@@ -164,12 +206,15 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 				zap.Error(err))
 			return txn.SetError(xerror.ErrWrongStaticPath)
 		}
-		if len(commands) < 2 {
+		if len(commands) == 0 {
 			utils.ZapLog.Error("ParseJSONPath",
 				zap.String("jsonPath", jsonPath),
 				zap.Strings("commands", commands))
 			return txn.SetError(xerror.ErrWrongStaticPath)
 		}
+		utils.ZapLog.Debug("json.set", zap.Any("check", check),
+			zap.Any("root", root),
+			zap.Any("commands", commands))
 		nodes, err := ajson.ApplyJSONPath(root, commands)
 		if err != nil {
 			utils.ZapLog.Error("jsonpath",
@@ -184,28 +229,74 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 				zap.Error(err))
 			return txn.SetError(xerror.InvalidJsonError)
 		}
+		utils.ZapLog.Debug("json.set", zap.Any("check", check),
+			zap.Any("nodes", nodes))
 		if len(nodes) == 0 {
-			lastElement := commands[len(commands)-1]
+			lastElement, _ := ajson.Str(commands[len(commands)-1])
 			if !IsNormalElement(lastElement) {
 				return txn.SetError(xerror.ErrWrongStaticPath)
 			}
-			nodes, err := ajson.ApplyJSONPath(root, commands[:len(commands)-1])
-			if err != nil {
-				utils.ZapLog.Error("ApplyJSONPath",
-					zap.String("jsonPath", jsonPath),
-					zap.Strings("commands", commands[:len(commands)-1]),
-					zap.Error(err))
-				return txn.SetError(xerror.ErrWrongStaticPath)
+			if CheckExist == check {
+				return nil
 			}
-			if len(nodes) != 1 {
-				utils.ZapLog.Error("ApplyJSONPath",
-					zap.String("jsonPath", jsonPath),
-					zap.Strings("commands", commands[:len(commands)-1]),
-					zap.Error(err))
-				return txn.SetError(xerror.ErrWrongStaticPath)
+			if len(commands) == 1 {
+				if root.IsArray() {
+					index, err := strconv.Atoi(lastElement)
+					if err != nil {
+						utils.ZapLog.Error("parent is not object",
+							zap.Any("parent type", root.Type()),
+							zap.Any("parent", root))
+						return nil
+					}
+					if index >= root.Size() {
+						return txn.SetError(xerror.ErrArrayOutOfRange)
+					}
+				}
+				ok, err := checkParent(root, lastElement)
+				if err != nil {
+					return txn.SetError(err)
+				}
+				if !ok {
+					return nil
+				}
+			} else {
+				nodes, err := ajson.ApplyJSONPath(root, commands[:len(commands)-1])
+				if err != nil {
+					utils.ZapLog.Error("ApplyJSONPath",
+						zap.String("jsonPath", jsonPath),
+						zap.Strings("commands", commands[:len(commands)-1]),
+						zap.Error(err))
+					return txn.SetError(xerror.ErrWrongStaticPath)
+				}
+				if len(nodes) != 1 {
+					utils.ZapLog.Error("ApplyJSONPath",
+						zap.String("jsonPath", jsonPath),
+						zap.Strings("commands", commands[:len(commands)-1]),
+						zap.Any("nodes", nodes),
+						zap.Error(err))
+					return nil
+				}
+				parent := nodes[0]
+				ok, err := checkParent(parent, lastElement)
+				if err != nil {
+					return txn.SetError(err)
+				}
+				if !ok {
+					return nil
+				}
+				err = parent.AppendObject(lastElement, value)
+				if err != nil {
+					utils.ZapLog.Error("AppendObject",
+						zap.String("element", lastElement),
+						zap.Any("value", value),
+						zap.Error(err))
+					return txn.SetError(xerror.InvalidJsonError)
+				}
 			}
-			nodes[0].AppendObject(lastElement, value)
 		} else {
+			if CheckNotExist == check {
+				return nil
+			}
 			for _, node := range nodes {
 				err = node.SetNode(value)
 				if err != nil {
@@ -252,18 +343,34 @@ func (c *Command) JsonGetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return object.Value
 	}
 
+	jsonPath := utils.B2S(args[1])
+	if jsonPath == "." {
+		return object.Value
+	}
+
 	root, err := ajson.Unmarshal(object.Value)
 	if err != nil {
 		return txn.SetError(err)
 	}
 
 	if len(args) == 2 {
-		jsonPath := utils.B2S(args[1])
+		dotPrefix := strings.HasPrefix(jsonPath, ".")
+		if dotPrefix {
+			jsonPath = "$" + jsonPath
+		}
 		nodes, err := root.JSONPath(jsonPath)
 		if err != nil {
 			return txn.SetError(err)
 		}
-		result := ajson.ArrayNode("", nodes)
+		var result *ajson.Node
+		if dotPrefix {
+			if len(nodes) == 0 {
+				return txn.SetError(xerror.PathNotExistError(jsonPath))
+			}
+			result = nodes[0]
+		} else {
+			result = ajson.ArrayNode("", nodes)
+		}
 		data, err := ajson.Marshal(result)
 		if err != nil {
 			return txn.SetError(err)

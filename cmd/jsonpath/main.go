@@ -7,14 +7,14 @@ import (
 )
 
 func main() {
-	json := []byte(`{}`)
+	json := []byte(`{"price":100}`)
 
 	root, err := ajson.Unmarshal(json)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	nodes, err := root.JSONPath("$.price")
+	nodes, err := root.JSONPath(`$.["price"]`)
 	if err != nil {
 		fmt.Println(err)
 		return

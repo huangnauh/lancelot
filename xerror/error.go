@@ -77,6 +77,7 @@ var (
 	ErrSyntax                   = RedisNew("syntax error")
 	ErrMustCreateRoot           = RedisNew("new objects must be created at the root")
 	ErrWrongStaticPath          = RedisNew("wrong static path")
+	ErrArrayOutOfRange          = RedisNew("array index out of range")
 	ErrMinMaxString             = RedisNew("min or max not valid string range item")
 	ErrNotExpire                = RedisNew("not expire")
 	WrongTypeErr                = WrongTypeNew("Operation against a key holding the wrong kind of value")
@@ -234,6 +235,14 @@ func WrongUsernameString(username string) string {
 
 func WrongUsernameError(username string) error {
 	return RedisNew(WrongUsernameString(username))
+}
+
+func PathNotExist(path string) string {
+	return fmt.Sprintf("Path '%s' does not exist", path)
+}
+
+func PathNotExistError(path string) error {
+	return RedisNew(PathNotExist(path))
 }
 
 func MakeSafeErr(err error) error {
