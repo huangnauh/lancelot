@@ -242,7 +242,7 @@ func PathNotExist(path string) string {
 }
 
 func PathNotExistError(path string) error {
-	return RedisNew(PathNotExist(path))
+	return RedisNew(MakeSafeString(PathNotExist(path)))
 }
 
 func MakeSafeErr(err error) error {
@@ -251,7 +251,7 @@ func MakeSafeErr(err error) error {
 }
 
 func MakeSafeString(msg string) string {
-	return strings.Replace(msg, "\n", ` `, -1)
+	return strings.ReplaceAll(strings.ReplaceAll(msg, "\n", ` `), "\r", ` `)
 }
 
 func MakeSafe(err string) error {

@@ -2,6 +2,7 @@ package command
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -186,9 +187,7 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 		object.Value = jsonValue
 	} else {
-		if strings.HasPrefix(jsonPath, ".") {
-			jsonPath = "$" + jsonPath
-		}
+		jsonPath, _ = checkRootPath(jsonPath)
 		oldValue = object.Value
 		root, err := ajson.Unmarshal(oldValue)
 		if err != nil {
@@ -324,6 +323,40 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	return OK
 }
 
+func checkRootPath(jsonPath string) (string, bool) {
+	if strings.HasPrefix(jsonPath, "$") {
+		return jsonPath, true
+	}
+	if strings.HasPrefix(jsonPath, ".") {
+		return fmt.Sprintf("$%s", jsonPath), false
+	}
+	return fmt.Sprintf("$.%s", jsonPath), false
+}
+
+func (c *Command) jsonGet(txn *store.Txn, object *Object, root *ajson.Node, path []byte) (*ajson.Node, error) {
+	jsonPath := utils.B2S(path)
+	if jsonPath == "." {
+		return root, nil
+	}
+	jsonPath, rootPrefix := checkRootPath(jsonPath)
+	nodes, err := root.JSONPath(jsonPath)
+	if err != nil {
+		utils.ZapLog.Error("invalid jsonpath",
+			zap.String("path", jsonPath), zap.Error(err))
+		return nil, xerror.InvalidJsonPathError
+	}
+	var result *ajson.Node
+	if !rootPrefix {
+		if len(nodes) == 0 {
+			return nil, xerror.PathNotExistError(jsonPath)
+		}
+		result = nodes[0]
+	} else {
+		result = ajson.ArrayNode("", nodes)
+	}
+	return result, nil
+}
+
 // (json) JSON.GET key [path [path ...]]
 func (c *Command) JsonGetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 1 {
@@ -343,37 +376,20 @@ func (c *Command) JsonGetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return object.Value
 	}
 
-	jsonPath := utils.B2S(args[1])
-	if jsonPath == "." {
-		return object.Value
-	}
-
 	root, err := ajson.Unmarshal(object.Value)
 	if err != nil {
-		return txn.SetError(err)
+		utils.ZapLog.Error("object value invalid json",
+			zap.ByteString("value", object.Value), zap.Error(err))
+		return txn.SetError(xerror.InvalidJsonError)
 	}
-
 	if len(args) == 2 {
-		dotPrefix := strings.HasPrefix(jsonPath, ".")
-		if dotPrefix {
-			jsonPath = "$" + jsonPath
-		}
-		nodes, err := root.JSONPath(jsonPath)
+		result, err := c.jsonGet(txn, object, root, args[1])
 		if err != nil {
 			return txn.SetError(err)
-		}
-		var result *ajson.Node
-		if dotPrefix {
-			if len(nodes) == 0 {
-				return txn.SetError(xerror.PathNotExistError(jsonPath))
-			}
-			result = nodes[0]
-		} else {
-			result = ajson.ArrayNode("", nodes)
 		}
 		data, err := ajson.Marshal(result)
 		if err != nil {
-			return txn.SetError(err)
+			return txn.SetError(xerror.InvalidJsonError)
 		}
 		return data
 	}
@@ -381,19 +397,15 @@ func (c *Command) JsonGetHandle(txn *store.Txn, args [][]byte) interface{} {
 	m := make(map[string]*ajson.Node)
 	result := ajson.ObjectNode("", m)
 	for i := 1; i < len(args); i++ {
-		path := utils.B2S(args[i])
-		if path == "" {
-			return txn.SetError(xerror.InvalidJsonPathError)
-		}
-		if _, ok := m[path]; ok {
+		jsonPath := utils.B2S(args[i])
+		if _, ok := m[jsonPath]; ok {
 			continue
 		}
-		nodes, err := root.JSONPath(path)
+		ret, err := c.jsonGet(txn, object, root, args[i])
 		if err != nil {
 			return txn.SetError(err)
 		}
-		a := ajson.ArrayNode("", nodes)
-		m[path] = a
+		m[jsonPath] = ret
 	}
 	data, err := ajson.Marshal(result)
 	if err != nil {

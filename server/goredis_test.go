@@ -11,6 +11,7 @@ import (
 	redis "github.com/go-redis/redis/v8"
 	"github.com/nitishm/go-rejson/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var docs = map[string]interface{}{
@@ -26,7 +27,7 @@ var docs = map[string]interface{}{
 			map[string]bool{"subdict": true}},
 		"dict": map[string]interface{}{"a": 1, "b": "2", "c": nil},
 	},
-	"scales": map[string]interface{}{
+	"scalars": map[string]interface{}{
 		"unicode":  "string value",
 		"NoneType": nil,
 		"bool":     true,
@@ -39,8 +40,8 @@ var docs = map[string]interface{}{
 		"bool":     true,
 		"int":      42,
 		"float":    -1.2,
-		"dict":     map[string]string{},
-		"list":     []string{},
+		"dict":     map[string]interface{}{"foo": "1", "bar": "2"},
+		"list":     []interface{}{"foo", "bar"},
 	},
 	"types": map[string]interface{}{
 		"null":    nil,
@@ -71,12 +72,14 @@ var testInvalidJsonResult = []string{
 	"\n",
 	"\f",
 }
+
+// https://github.com/RedisJSON/RedisJSON/blob/a31f2dabbc15c004d0cec7d1c25cc966b33a0a0b/tests/pytest/test.py#L119-L122
 var testInvalidJsonPath = []string{
-	"",
-	" ",
-	"\u0000",
-	"\n",
-	"\f",
+	// "",
+	// " ",
+	// "\u0000",
+	// "\n",
+	// "\f",
 	".\"",
 	// ".\u0000",
 	// ".\n\f",
@@ -135,6 +138,124 @@ func TestRedisJsonValue(t *testing.T) {
 	}
 }
 
+func TestJsonGetPartsOfValuesDocumentOneByOne(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	defer func() {
+		err := c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	_, err := c.Del(context.Background(), "getparts").Result()
+	assert.NoError(t, err)
+
+	res, err := rh.JSONSet("getparts", ".", docs["values"])
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	args := make([]interface{}, 0)
+	args = append(args, "JSON.GET", "getparts")
+	for k, v := range docs["values"].(map[string]interface{}) {
+		resBytes, err := Bytes(rh.JSONGet("getparts", fmt.Sprintf(".%s", k)))
+		assert.NoError(t, err)
+		vBytes, err := json.Marshal(v)
+		assert.NoError(t, err)
+		assert.Equal(t, vBytes, resBytes)
+		args = append(args, k)
+	}
+	ctx := context.Background()
+	cmd := redis.NewStringCmd(ctx, args...)
+	_ = c.Process(ctx, cmd)
+	str, err := cmd.Result()
+	assert.NoError(t, err)
+	values, err := json.Marshal(docs["values"])
+	assert.NoError(t, err)
+	require.JSONEq(t, str, string(values))
+}
+
+func TestJsonGetNonExistantPathsFromBasicDocumentShouldFail(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	defer func() {
+		err := c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	_, err := c.Del(context.Background(), "getnotexist").Result()
+	assert.NoError(t, err)
+
+	res, err := rh.JSONSet("getnotexist", ".", docs["scalars"])
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	// Paths that do not exist
+	paths := []string{".foo", "boo", ".key1[0]", ".key2.bar", ".key5[99]", `.key5["moo"]`}
+	for _, path := range paths {
+		_, err = rh.JSONGet("getnotexist", path)
+		assert.Contains(t, err.Error(), "does not exist")
+	}
+}
+
+func TestJsonGetWithPathErrors(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	defer func() {
+		err := c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	_, err := c.Del(context.Background(), "getwithpath").Result()
+	assert.NoError(t, err)
+
+	res, err := rh.JSONSet("getwithpath", ".", map[string]string{})
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	_, err = Bytes(rh.JSONGet("getwithpath", "gar\x00\x00bage"))
+	assert.EqualError(t, err, "ERR Path '$.gar\x00\x00bage' does not exist")
+	_, err = Bytes(rh.JSONGet("getwithpath", "not\x0d\x0aallowed by protocol"))
+	assert.EqualError(t, err, "ERR Path '$.not  allowed by protocol' does not exist")
+}
+
+func TestJsonSetWithPathErrors(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	defer func() {
+		err := c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	_, err := c.Del(context.Background(), "setwithpath").Result()
+	assert.NoError(t, err)
+
+	res, err := rh.JSONSet("setwithpath", ".", map[string]string{})
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	// diff with RedisJson
+	// https://github.com/RedisJSON/RedisJSON/blob/a31f2dabbc15c004d0cec7d1c25cc966b33a0a0b/tests/pytest/test.py#L237-L239
+	res, err = rh.JSONSet("setwithpath", "$..f", 1)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	// diff RedisJson
+	// https://github.com/RedisJSON/RedisJSON/blob/a31f2dabbc15c004d0cec7d1c25cc966b33a0a0b/tests/pytest/test.py#L241-L243
+	res, err = rh.JSONSet("setwithpath", "$[0]", 1)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+
+	res, err = Bytes(rh.JSONGet("setwithpath", "."))
+	assert.NoError(t, err)
+	assert.Equal(t, []byte(`{"f":1,"0":1}`), res)
+}
+
 func TestJsonGetWithBracketNotation(t *testing.T) {
 	t.Parallel()
 	c := redis.NewClient(&redis.Options{
@@ -151,6 +272,12 @@ func TestJsonGetWithBracketNotation(t *testing.T) {
 	res, err := rh.JSONSet("getwithbracket", ".", []interface{}{1, 2, 3})
 	assert.NoError(t, err)
 	assert.Equal(t, "OK", res)
+	res, err = Bytes(rh.JSONGet("getwithbracket", ".[1]"))
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("2"), res)
+	res, err = Bytes(rh.JSONGet("getwithbracket", "[1]"))
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("2"), res)
 	res, err = Bytes(rh.JSONGet("getwithbracket", "$[1]"))
 	assert.NoError(t, err)
 	assert.Equal(t, []byte("[2]"), res)
@@ -452,8 +579,7 @@ func TestJsonInvalidPath(t *testing.T) {
 		cmd := redis.NewStatusCmd(ctx, "JSON.SET", "invalidjsonpath", tt, "null")
 		_ = c.Process(ctx, cmd)
 		_, err := cmd.Result()
-		assert.EqualError(t, err, "ERR wrong static path",
-			fmt.Sprintf("path %s", tt))
+		assert.Error(t, err, fmt.Sprintf("path %s", tt))
 	}
 }
 
