@@ -138,6 +138,90 @@ func TestRedisJsonValue(t *testing.T) {
 	}
 }
 
+func TestJsonDelCommand(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	defer func() {
+		err := c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	_, err := c.Del(context.Background(), "jsondel").Result()
+	assert.NoError(t, err)
+	res, err := rh.JSONSet("jsondel", ".", map[string]string{})
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = rh.JSONDel("jsondel", ".")
+	assert.NoError(t, err)
+	assert.Equal(t, 1, res)
+	n, err := c.Exists(context.Background(), "jsondel").Result()
+	assert.NoError(t, err)
+	assert.Equal(t, 0, n)
+
+	// Test deleting an empty object
+	res, err = rh.JSONSet("jsondel", ".", map[string]string{"foo": "bar", "baz": "qux"})
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = rh.JSONDel("jsondel", ".baz")
+	assert.NoError(t, err)
+	assert.Equal(t, 1, res)
+	res, err = rh.JSONObjLen("jsondel", ".")
+}
+
+func TestJsonMgetCommand(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	defer func() {
+		err := c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	keys := make([]string, 5)
+	for i := 0; i < 5; i++ {
+		key := fmt.Sprintf("mget:%d", i)
+		keys[i] = key
+		_, err := c.Del(context.Background(), key).Result()
+		assert.NoError(t, err)
+		res, err := rh.JSONSet(key, ".", docs["basic"])
+		assert.NoError(t, err)
+		assert.Equal(t, "OK", res)
+	}
+	basic, err := json.Marshal(docs["basic"])
+	assert.NoError(t, err)
+	res, err := rh.JSONMGet(".", keys...)
+	assert.NoError(t, err)
+	assert.Equal(t, len(keys), len(res.([]interface{})))
+	for _, v := range res.([]interface{}) {
+		assert.JSONEq(t, string(basic), string(v.([]byte)))
+	}
+	// Test an MGET that fails for one key
+	r, err := rh.JSONMGet("42isnotapath", "mget:0", "mget:1")
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(r.([]interface{})))
+	for _, v := range r.([]interface{}) {
+		assert.Equal(t, nil, v)
+	}
+	_, err = c.Del(context.Background(), "mget:test").Result()
+	assert.NoError(t, err)
+	res, err = rh.JSONSet("mget:test", ".", `{"bull":4.2}`)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	r, err = rh.JSONMGet(".bool", "mget:0", "mget:test", "mget:1")
+	assert.NoError(t, err)
+	v := r.([]interface{})
+	assert.Equal(t, 3, len(v))
+	trueData, _ := json.Marshal(true)
+	assert.Equal(t, trueData, v[0])
+	assert.Equal(t, nil, v[1])
+	assert.Equal(t, trueData, v[2])
+}
+
 func TestJsonGetPartsOfValuesDocumentOneByOne(t *testing.T) {
 	t.Parallel()
 	c := redis.NewClient(&redis.Options{
@@ -218,9 +302,9 @@ func TestJsonGetWithPathErrors(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "OK", res)
 	_, err = Bytes(rh.JSONGet("getwithpath", "gar\x00\x00bage"))
-	assert.EqualError(t, err, "ERR Path '$.gar\x00\x00bage' does not exist")
+	assert.Contains(t, err.Error(), "does not exist")
 	_, err = Bytes(rh.JSONGet("getwithpath", "not\x0d\x0aallowed by protocol"))
-	assert.EqualError(t, err, "ERR Path '$.not  allowed by protocol' does not exist")
+	assert.Contains(t, err.Error(), "does not exist")
 }
 
 func TestJsonSetWithPathErrors(t *testing.T) {

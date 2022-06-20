@@ -7,15 +7,11 @@ import (
 	"strings"
 
 	"github.com/spyzhov/ajson"
+	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
 	"go.uber.org/zap"
-)
-
-const (
-	quotes byte = '"'
-	quote  byte = '\''
 )
 
 // (json) JSON.DEL key [path]
@@ -37,6 +33,10 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	}
 
 	jsonPath := utils.B2S(args[1])
+	if jsonPath == "." || jsonPath == "$" {
+		return DeleteKeyReturn(txn, key, object, 0, MinusCount)
+	}
+	jsonPath, _ = checkRootPath(jsonPath)
 	root, err := ajson.Unmarshal(object.Value)
 	if err != nil {
 		utils.ZapLog.Error("json",
@@ -348,13 +348,141 @@ func (c *Command) jsonGet(txn *store.Txn, object *Object, root *ajson.Node, path
 	var result *ajson.Node
 	if !rootPrefix {
 		if len(nodes) == 0 {
-			return nil, xerror.PathNotExistError(jsonPath)
+			return nil, xerror.ErrPathNotExist
 		}
 		result = nodes[0]
 	} else {
 		result = ajson.ArrayNode("", nodes)
 	}
 	return result, nil
+}
+
+type JsonCallback func(o *ajson.Node) (interface{}, error)
+
+func getObjLen(o *ajson.Node) (interface{}, error) {
+	if o.IsObject() {
+		return redcon.SimpleInt(o.Size()), nil
+	}
+	return nil, xerror.ErrPathNotObject
+}
+
+func getObjKeys(o *ajson.Node) (interface{}, error) {
+	if o.IsObject() {
+		return o.Keys(), nil
+	}
+	return nil, xerror.ErrPathNotObject
+}
+
+func getArrLen(o *ajson.Node) (interface{}, error) {
+	if o.IsArray() {
+		return redcon.SimpleInt(o.Size()), nil
+	}
+	return nil, xerror.ErrPathNotArray
+}
+
+// JSON.ARRLEN key [path]
+func (c *Command) JsonArrLenHandle(txn *store.Txn, args [][]byte) interface{} {
+	return c.jsonCallbackHandle(txn, args, getArrLen)
+}
+
+// JSON.OBJLEN key [path]
+func (c *Command) JsonObjLenHandle(txn *store.Txn, args [][]byte) interface{} {
+	return c.jsonCallbackHandle(txn, args, getObjLen)
+}
+
+// (json) JSON.OBJKEYS key [path]
+func (c *Command) JsonObjKeysHandle(txn *store.Txn, args [][]byte) interface{} {
+	return c.jsonCallbackHandle(txn, args, getObjKeys)
+}
+
+func (c *Command) jsonCallbackHandle(txn *store.Txn, args [][]byte, callback JsonCallback) interface{} {
+	if len(args) != 1 && len(args) != 2 {
+		return txn.SetWrongArgs(JSONGET_COMMAND)
+	}
+	var path []byte
+	if len(args) == 1 {
+		path = []byte(".")
+	} else {
+		path = args[1]
+	}
+	result, err := c.jsonGetHandle(txn, args[0], path)
+	if err != nil {
+		return txn.SetError(err)
+	}
+	if !strings.HasPrefix(utils.B2S(path), "$") {
+		ret, err := callback(result)
+		if err != nil {
+			return txn.SetError(err)
+		}
+		return ret
+	}
+
+	ret := make([]interface{}, 0)
+	arr, err := result.GetArray()
+	if err != nil {
+		return txn.SetError(err)
+	}
+	for _, v := range arr {
+		c, err := callback(v)
+		if err == nil {
+			ret = append(ret, c)
+		} else {
+			ret = append(ret, nil)
+		}
+	}
+	return ret
+}
+
+func (c *Command) jsonGetHandle(txn *store.Txn, k, path []byte) (*ajson.Node, error) {
+	object := NewObject(txn, StringType, k)
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, false)
+	if err == store.KeyNotFound {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	root, err := ajson.Unmarshal(object.Value)
+	if err != nil {
+		utils.ZapLog.Error("object value invalid json",
+			zap.ByteString("value", object.Value), zap.Error(err))
+		return nil, xerror.InvalidJsonError
+	}
+	result, err := c.jsonGet(txn, object, root, path)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// (json) JSON.MGET key [key ...] path
+func (c *Command) JsonMgetHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 2 {
+		return txn.SetWrongArgs(JSONGET_COMMAND)
+	}
+	path := args[len(args)-1]
+	ret := make([]interface{}, 0, len(args)-1)
+	for _, k := range args[:len(args)-1] {
+		result, err := c.jsonGetHandle(txn, k, path)
+		if err == xerror.ErrPathNotExist {
+			ret = append(ret, nil)
+			continue
+		}
+		if err != nil {
+			return txn.SetError(err)
+		}
+		if result == nil {
+			ret = append(ret, nil)
+			continue
+		}
+
+		data, err := ajson.Marshal(result)
+		if err != nil {
+			return txn.SetError(xerror.InvalidJsonError)
+		}
+		ret = append(ret, data)
+	}
+	return ret
 }
 
 // (json) JSON.GET key [path [path ...]]

@@ -96,6 +96,9 @@ var (
 	ErrResultNan                = RedisNew("resulting score is not a number (NaN)")
 	ErrStoreOption              = RedisNew("STORE option in GEORADIUS is not compatible with WITHDIST, WITHHASH and WITHCOORDS options")
 	ErrKeyIsLocked              = RedisNew("key is locked")
+	ErrPathNotExist             = RedisNew("Path does not exist")
+	ErrPathNotObject            = RedisNew("Path does not an object")
+	ErrPathNotArray             = RedisNew("Path does not an array")
 
 	MissingTxn        = RedisNew("missing transcation")
 	InvalidTxn        = RedisNew("invalid transcation")
