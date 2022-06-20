@@ -125,6 +125,7 @@ var (
 	NotFoundCursor             = RedisNew("not found cursor")
 	InvalidChannel             = RedisNew("invalid channel name")
 	InvalidPartition           = RedisNew("invalid partition")
+	ErrInvalidIndex            = RedisNew("invalid index")
 	ErrOutOfRange              = RedisNew("index out of range")
 	ErrDBIndexOutOfRange       = RedisNew("DB index is out of range")
 	ErrOverflow                = RedisNew("increment or decrement would overflow")

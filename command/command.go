@@ -1153,6 +1153,31 @@ func NewCommand(red *redcon.Server) *Command {
 			Typo:     JsonType,
 			ReadOnly: true,
 		},
+		JSONARRINDEX_COMMAND: {
+			Name:     JSONARRINDEX_COMMAND,
+			Func:     c.JsonArrIndexHandle,
+			ID:       167,
+			Typo:     JsonType,
+			ReadOnly: true,
+		},
+		JSONARRAPPEND_COMMAND: {
+			Name: JSONARRAPPEND_COMMAND,
+			Func: c.JsonArrAppendHandle,
+			ID:   168,
+			Typo: JsonType,
+		},
+		JSONARRINSERT_COMMAND: {
+			Name: JSONARRINSERT_COMMAND,
+			Func: c.JsonArrInsertHandle,
+			ID:   169,
+			Typo: JsonType,
+		},
+		JSONARRPOP_COMMAND: {
+			Name: JSONARRPOP_COMMAND,
+			Func: c.JsonArrPopHandle,
+			ID:   170,
+			Typo: JsonType,
+		},
 		// ------------------- json end 191 ---------------------------
 		// ------------------- script start 192 ---------------------------
 

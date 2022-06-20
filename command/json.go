@@ -14,6 +14,19 @@ import (
 	"go.uber.org/zap"
 )
 
+func (c *Command) setJsonValue(txn *store.Txn, key []byte, object *Object, root *ajson.Node) error {
+	result, err := ajson.Marshal(root)
+	if err != nil {
+		utils.ZapLog.Error("json",
+			zap.Any("root", root),
+			zap.Error(err))
+		return err
+	}
+	object.Value = result
+	object.Timestamp = txn.Timestamp
+	return setTxnObject(txn, key, object, 0)
+}
+
 // (json) JSON.DEL key [path]
 func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 || len(args) != 2 {
@@ -62,16 +75,7 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 	}
 	if len(nodes) > 0 {
-		result, err := ajson.Marshal(root)
-		if err != nil {
-			utils.ZapLog.Error("json",
-				zap.Any("root", root),
-				zap.Error(err))
-			return txn.SetError(err)
-		}
-		object.Value = result
-		object.Timestamp = txn.Timestamp
-		err = setTxnObject(txn, key, object, 0)
+		err = c.setJsonValue(txn, key, object, root)
 		if err != nil {
 			return txn.SetError(err)
 		}
@@ -357,47 +361,164 @@ func (c *Command) jsonGet(txn *store.Txn, object *Object, root *ajson.Node, path
 	return result, nil
 }
 
-type JsonCallback func(o *ajson.Node) (interface{}, error)
+type JsonCallback func(o *ajson.Node, args [][]byte) (interface{}, bool, error)
 
-func getObjLen(o *ajson.Node) (interface{}, error) {
+func getObjLen(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	if o.IsObject() {
-		return redcon.SimpleInt(o.Size()), nil
+		return redcon.SimpleInt(o.Size()), false, nil
 	}
-	return nil, xerror.ErrPathNotObject
+	return nil, false, xerror.ErrPathNotObject
 }
 
-func getObjKeys(o *ajson.Node) (interface{}, error) {
+func getObjKeys(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	if o.IsObject() {
-		return o.Keys(), nil
+		return o.Keys(), false, nil
 	}
-	return nil, xerror.ErrPathNotObject
+	return nil, false, xerror.ErrPathNotObject
 }
 
-func getArrLen(o *ajson.Node) (interface{}, error) {
+func getArrLen(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	if o.IsArray() {
-		return redcon.SimpleInt(o.Size()), nil
+		return redcon.SimpleInt(o.Size()), false, nil
 	}
-	return nil, xerror.ErrPathNotArray
+	return nil, false, xerror.ErrPathNotArray
 }
 
-// JSON.ARRLEN key [path]
-func (c *Command) JsonArrLenHandle(txn *store.Txn, args [][]byte) interface{} {
-	return c.jsonCallbackHandle(txn, args, getArrLen)
+func getArrIndex(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+	value, err := ajson.Unmarshal(args[0])
+	if err != nil {
+		utils.ZapLog.Error("arrindex",
+			zap.ByteString("value", args[0]),
+			zap.Error(err))
+		return redcon.SimpleInt(0), false, xerror.InvalidJsonError
+	}
+	// utils.ZapLog.Info("arrindex",
+	// 	zap.ByteString("value", args[0]),
+	// 	zap.Any("object", o))
+	if !o.IsArray() {
+		return redcon.SimpleInt(0), false, xerror.ErrPathNotArray
+	}
+	len := o.Size()
+	for index := 0; index < len; index++ {
+		av, err := o.GetIndex(index)
+		if err != nil {
+			utils.ZapLog.Error("arrindex",
+				zap.Any("array", o),
+				zap.Int("index", index),
+				zap.Error(err))
+			return redcon.SimpleInt(0), false, xerror.InvalidJsonError
+		}
+		ok, _ := value.Eq(av)
+		if ok {
+			return redcon.SimpleInt(index), false, nil
+		}
+	}
+	return redcon.SimpleInt(-1), false, nil
 }
 
-// JSON.OBJLEN key [path]
-func (c *Command) JsonObjLenHandle(txn *store.Txn, args [][]byte) interface{} {
-	return c.jsonCallbackHandle(txn, args, getObjLen)
+func appendArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+	change := false
+	for _, v := range args {
+		value, err := ajson.Unmarshal(v)
+		if err != nil {
+			utils.ZapLog.Error("arrindex",
+				zap.ByteString("value", v),
+				zap.Error(err))
+			return redcon.SimpleInt(0), false, xerror.InvalidJsonError
+		}
+		err = o.AppendArray(value)
+		if err != nil {
+			utils.ZapLog.Error("arrindex",
+				zap.ByteString("value", v),
+				zap.Error(err))
+			return nil, false, err
+		}
+		utils.ZapLog.Info("arrindex",
+			zap.Any("array", o),
+			zap.ByteString("value", v),
+		)
+		change = true
+	}
+	return redcon.SimpleInt(o.Size()), change, nil
 }
 
-// (json) JSON.OBJKEYS key [path]
-func (c *Command) JsonObjKeysHandle(txn *store.Txn, args [][]byte) interface{} {
-	return c.jsonCallbackHandle(txn, args, getObjKeys)
+func insertArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+	index, err := strconv.Atoi(utils.B2S(args[0]))
+	if err != nil {
+		utils.ZapLog.Error("arrindex", zap.ByteString("index", args[0]), zap.Error(err))
+		return redcon.SimpleInt(0), false, xerror.InvalidJsonError
+	}
+	vs := make([]*ajson.Node, 0, len(args)-1)
+	for _, v := range args[1:] {
+		value, err := ajson.Unmarshal(v)
+		if err != nil {
+			utils.ZapLog.Error("arrindex",
+				zap.ByteString("value", v),
+				zap.Error(err))
+			return redcon.SimpleInt(0), false, xerror.InvalidJsonError
+		}
+		vs = append(vs, value)
+	}
+	if len(vs) == 0 {
+		return redcon.SimpleInt(o.Size()), false, nil
+	}
+	err = o.InsertArray(index, vs...)
+	if err != nil {
+		utils.ZapLog.Error("arrindex",
+			zap.Any("values", vs),
+			zap.Error(err))
+		return nil, false, err
+	}
+	return redcon.SimpleInt(o.Size()), true, nil
 }
 
-func (c *Command) jsonCallbackHandle(txn *store.Txn, args [][]byte, callback JsonCallback) interface{} {
-	if len(args) != 1 && len(args) != 2 {
-		return txn.SetWrongArgs(JSONGET_COMMAND)
+func popArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+	if !o.IsArray() {
+		return nil, false, xerror.ErrPathNotArray
+	}
+	n := o.Size()
+	if n == 0 {
+		return nil, false, nil
+	}
+	index := n - 1
+	var err error
+	if len(args) > 0 {
+		index, err = strconv.Atoi(utils.B2S(args[0]))
+		if err != nil {
+			utils.ZapLog.Error("arrindex",
+				zap.ByteString("index", args[0]), zap.Error(err))
+			return nil, false, xerror.ErrInvalidIndex
+		}
+		if index >= n {
+			index = n - 1
+		}
+		if index <= -n {
+			index = 0
+		}
+	}
+	v, err := o.PopIndex(index)
+	if err != nil {
+		utils.ZapLog.Error("arrindex",
+			zap.Any("array", o),
+			zap.Int("index", index),
+			zap.Error(err))
+		return nil, false, err
+	}
+	value, err := v.Value()
+	if err != nil {
+		utils.ZapLog.Error("arrindex",
+			zap.Any("array", o),
+			zap.Int("index", index),
+			zap.Error(err))
+		return nil, false, err
+	}
+	return value, true, nil
+}
+
+// JSON.ARRPOP key [ path [index]]
+func (c *Command) JsonArrPopHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 1 || len(args) > 3 {
+		return txn.SetWrongArgs(JSONARRPOP_COMMAND)
 	}
 	var path []byte
 	if len(args) == 1 {
@@ -405,38 +526,144 @@ func (c *Command) jsonCallbackHandle(txn *store.Txn, args [][]byte, callback Jso
 	} else {
 		path = args[1]
 	}
-	result, err := c.jsonGetHandle(txn, args[0], path)
+	var a [][]byte
+	if len(args) == 3 {
+		a = [][]byte{args[2]}
+	}
+	return c.jsonCallbackHandle(txn, args[0], path, a, true, popArr)
+}
+
+// JSON.ARRINSERT key path index value [value ...]
+func (c *Command) JsonArrInsertHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 4 {
+		return txn.SetWrongArgs(JSONARRINSERT_COMMAND)
+	}
+	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], true, insertArr)
+}
+
+// JSON.ARRAPPEND key path value [value ...]
+func (c *Command) JsonArrAppendHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) < 3 {
+		return txn.SetWrongArgs(JSONARRAPPEND_COMMAND)
+	}
+	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], true, appendArr)
+}
+
+// JSON.ARRINDEX key path value
+func (c *Command) JsonArrIndexHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 3 {
+		return txn.SetWrongArgs(JSONARRINDEX_COMMAND)
+	}
+	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], false, getArrIndex)
+}
+
+// JSON.ARRLEN key [path]
+func (c *Command) JsonArrLenHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 && len(args) != 2 {
+		return txn.SetWrongArgs(JSONARRLEN_COMMAND)
+	}
+	var path []byte
+	if len(args) == 1 {
+		path = []byte(".")
+	} else {
+		path = args[1]
+	}
+	return c.jsonCallbackHandle(txn, args[0], path, nil, false, getArrLen)
+}
+
+// JSON.OBJLEN key [path]
+func (c *Command) JsonObjLenHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 && len(args) != 2 {
+		return txn.SetWrongArgs(JSONOBJLEN_COMMAND)
+	}
+	var path []byte
+	if len(args) == 1 {
+		path = []byte(".")
+	} else {
+		path = args[1]
+	}
+	return c.jsonCallbackHandle(txn, args[0], path, nil, false, getObjLen)
+}
+
+// (json) JSON.OBJKEYS key [path]
+func (c *Command) JsonObjKeysHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 && len(args) != 2 {
+		return txn.SetWrongArgs(JSONOBJKEYS_COMMAND)
+	}
+	var path []byte
+	if len(args) == 1 {
+		path = []byte(".")
+	} else {
+		path = args[1]
+	}
+	return c.jsonCallbackHandle(txn, args[0], path, nil, false, getObjKeys)
+}
+
+func (c *Command) jsonCallbackHandle(txn *store.Txn, k, path []byte, args [][]byte, clear bool, callback JsonCallback) interface{} {
+	object := NewObject(txn, StringType, k)
+	key := object.GetKeyBytes()
+	err := getTxnObject(txn, key, object, clear)
 	if err != nil {
 		return txn.SetError(err)
 	}
-	if !strings.HasPrefix(utils.B2S(path), "$") {
-		ret, err := callback(result)
-		if err != nil {
-			return txn.SetError(err)
-		}
-		return ret
+	root, err := ajson.Unmarshal(object.Value)
+	if err != nil {
+		utils.ZapLog.Error("object value invalid json",
+			zap.ByteString("value", object.Value), zap.Error(err))
+		return txn.SetError(xerror.InvalidJsonError)
 	}
 
-	ret := make([]interface{}, 0)
-	arr, err := result.GetArray()
-	if err != nil {
-		return txn.SetError(err)
+	rootPrefix := false
+	var nodes []*ajson.Node
+	jsonPath := utils.B2S(path)
+	if jsonPath == "." {
+		nodes = []*ajson.Node{root}
+	} else {
+		jsonPath, rootPrefix = checkRootPath(jsonPath)
+		nodes, err = root.JSONPath(jsonPath)
+		if err != nil {
+			utils.ZapLog.Error("invalid jsonpath",
+				zap.String("path", jsonPath), zap.Error(err))
+			return txn.SetError(xerror.InvalidJsonPathError)
+		}
 	}
-	for _, v := range arr {
-		c, err := callback(v)
+	if !rootPrefix && len(nodes) == 0 {
+		return txn.SetError(xerror.ErrPathNotExist)
+	}
+
+	change := false
+	ret := make([]interface{}, 0)
+	for _, node := range nodes {
+		c, isChange, err := callback(node, args)
 		if err == nil {
 			ret = append(ret, c)
 		} else {
 			ret = append(ret, nil)
 		}
+		if isChange {
+			change = true
+		}
 	}
+	if change {
+		utils.ZapLog.Info("json callback",
+			zap.Any("root", root))
+		err = c.setJsonValue(txn, key, object, root)
+		if err != nil {
+			return txn.SetError(err)
+		}
+	}
+
+	if !rootPrefix {
+		return ret[0]
+	}
+
 	return ret
 }
 
-func (c *Command) jsonGetHandle(txn *store.Txn, k, path []byte) (*ajson.Node, error) {
+func (c *Command) jsonGetHandle(txn *store.Txn, k, path []byte, clear bool) (*ajson.Node, error) {
 	object := NewObject(txn, StringType, k)
 	key := object.GetKeyBytes()
-	err := getTxnObject(txn, key, object, false)
+	err := getTxnObject(txn, key, object, clear)
 	if err == store.KeyNotFound {
 		return nil, nil
 	} else if err != nil {
@@ -463,7 +690,7 @@ func (c *Command) JsonMgetHandle(txn *store.Txn, args [][]byte) interface{} {
 	path := args[len(args)-1]
 	ret := make([]interface{}, 0, len(args)-1)
 	for _, k := range args[:len(args)-1] {
-		result, err := c.jsonGetHandle(txn, k, path)
+		result, err := c.jsonGetHandle(txn, k, path, false)
 		if err == xerror.ErrPathNotExist {
 			ret = append(ret, nil)
 			continue
