@@ -138,6 +138,120 @@ func TestRedisJsonValue(t *testing.T) {
 	}
 }
 
+func TestJsonArrayCRUD(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	defer func() {
+		err := c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	_, err := c.Del(context.Background(), "jsonarray").Result()
+	assert.NoError(t, err)
+
+	// Test creation of an empty array
+	res, err := rh.JSONSet("jsonarray", ".", []string{})
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = rh.JSONType("jsonarray", ".")
+	assert.NoError(t, err)
+	assert.Equal(t, "array", res)
+	res, err = rh.JSONArrLen("jsonarray", ".")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), res)
+
+	// Test failure of setting an element at different positons in an empty array
+	_, err = rh.JSONSet("jsonarray", "[0]", 0)
+	assert.Contains(t, err.Error(), "index out of range")
+	_, err = rh.JSONSet("jsonarray", "[19]", 0)
+	assert.Contains(t, err.Error(), "index out of range")
+	_, err = rh.JSONSet("jsonarray", "[-1]", 0)
+	assert.Contains(t, err.Error(), "index out of range")
+
+	//  Test appending and inserting elements to the array
+	res, err = rh.JSONArrAppend("jsonarray", ".", 1)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), res)
+	res, err = rh.JSONArrLen("jsonarray", ".")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), res)
+	res, err = rh.JSONArrInsert("jsonarray", ".", 0, -1)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(2), res)
+	res, err = rh.JSONArrLen("jsonarray", ".")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(2), res)
+	res, err = Bytes(rh.JSONGet("jsonarray", "."))
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("[-1,1]"), res)
+	res, err = rh.JSONArrInsert("jsonarray", ".", -1, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), res)
+	res, err = Bytes(rh.JSONGet("jsonarray", "."))
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("[-1,0,1]"), res)
+	res, err = rh.JSONArrInsert("jsonarray", ".", -3, -3, -2)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(5), res)
+	res, err = Bytes(rh.JSONGet("jsonarray", "."))
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("[-3,-2,-1,0,1]"), res)
+	res, err = rh.JSONArrAppend("jsonarray", ".", 2, 3)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(7), res)
+	res, err = Bytes(rh.JSONGet("jsonarray", "."))
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("[-3,-2,-1,0,1,2,3]"), res)
+
+	//Test replacing elements in the array
+	res, err = rh.JSONSet("jsonarray", "[0]", "-inf")
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = rh.JSONSet("jsonarray", "[-1]", "+inf")
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = rh.JSONSet("jsonarray", "[3]", nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = Bytes(rh.JSONGet("jsonarray", "."))
+	assert.NoError(t, err)
+	assert.Equal(t, []byte(`["-inf",-2,-1,null,1,2,"+inf"]`), res)
+
+	//Test deleting from the array
+	res, err = rh.JSONDel("jsonarray", "[1]")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), res)
+	res, err = rh.JSONDel("jsonarray", "[-2]")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), res)
+	res, err = Bytes(rh.JSONGet("jsonarray", "."))
+	assert.NoError(t, err)
+	assert.Equal(t, []byte(`["-inf",-1,null,1,"+inf"]`), res)
+
+	//Test trimming the array
+	res, err = rh.JSONArrTrim("jsonarray", ".", 1, -1)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(4), res)
+	res, err = Bytes(rh.JSONGet("jsonarray", "."))
+	assert.NoError(t, err)
+	assert.Equal(t, []byte(`[-1,null,1,"+inf"]`), res)
+	res, err = rh.JSONArrTrim("jsonarray", ".", 0, -2)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), res)
+	res, err = Bytes(rh.JSONGet("jsonarray", "."))
+	assert.NoError(t, err)
+	assert.Equal(t, []byte(`[-1,null,1]`), res)
+	res, err = rh.JSONArrTrim("jsonarray", ".", 1, 1)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), res)
+	res, err = Bytes(rh.JSONGet("jsonarray", "."))
+	assert.NoError(t, err)
+	assert.Equal(t, []byte(`[null]`), res)
+}
+
 func TestJsonDelCommand(t *testing.T) {
 	t.Parallel()
 	c := redis.NewClient(&redis.Options{
@@ -156,10 +270,10 @@ func TestJsonDelCommand(t *testing.T) {
 	assert.Equal(t, "OK", res)
 	res, err = rh.JSONDel("jsondel", ".")
 	assert.NoError(t, err)
-	assert.Equal(t, 1, res)
+	assert.Equal(t, int64(1), res)
 	n, err := c.Exists(context.Background(), "jsondel").Result()
 	assert.NoError(t, err)
-	assert.Equal(t, 0, n)
+	assert.Equal(t, int64(0), n)
 
 	// Test deleting an empty object
 	res, err = rh.JSONSet("jsondel", ".", map[string]string{"foo": "bar", "baz": "qux"})
@@ -167,8 +281,13 @@ func TestJsonDelCommand(t *testing.T) {
 	assert.Equal(t, "OK", res)
 	res, err = rh.JSONDel("jsondel", ".baz")
 	assert.NoError(t, err)
-	assert.Equal(t, 1, res)
+	assert.Equal(t, int64(1), res)
 	res, err = rh.JSONObjLen("jsondel", ".")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), res)
+	res, err = rh.JSONType("jsondel", ".baz")
+	assert.NoError(t, err)
+	assert.Equal(t, nil, res)
 }
 
 func TestJsonMgetCommand(t *testing.T) {

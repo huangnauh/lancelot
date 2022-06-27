@@ -29,7 +29,7 @@ func (c *Command) setJsonValue(txn *store.Txn, key []byte, object *Object, root 
 
 // (json) JSON.DEL key [path]
 func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 1 || len(args) != 2 {
+	if len(args) != 1 && len(args) != 2 {
 		return txn.SetWrongArgs(JSONDEL_COMMAND)
 	}
 	object := NewObject(txn, StringType, args[0])
@@ -65,6 +65,9 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 			zap.Error(err))
 		return txn.SetError(err)
 	}
+	utils.ZapLog.Debug("json.del",
+		zap.String("jsonPath", jsonPath),
+		zap.Any("nodes", nodes))
 	for _, node := range nodes {
 		err = node.Delete()
 		if err != nil {
@@ -81,7 +84,7 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 	}
 
-	return len(nodes)
+	return redcon.SimpleInt(len(nodes))
 }
 
 func IsNormalElement(cmd string) bool {
@@ -109,7 +112,7 @@ func IsNormalElement(cmd string) bool {
 	}
 }
 
-func checkParent(parent *ajson.Node, element string) (bool, error) {
+func checkParent(parent *ajson.Node, element string, value *ajson.Node) (bool, error) {
 	if parent.IsArray() {
 		index, err := strconv.Atoi(element)
 		if err != nil {
@@ -118,8 +121,26 @@ func checkParent(parent *ajson.Node, element string) (bool, error) {
 				zap.Any("parent", parent))
 			return false, nil
 		}
+		size := parent.Size()
+		if size == 0 {
+			return false, xerror.ErrArrayOutOfRange
+		}
+		if index < 0 {
+			index += size
+		}
+		if index < 0 {
+			index = 0
+		}
 		if index >= parent.Size() {
 			return false, xerror.ErrArrayOutOfRange
+		}
+		old, err := parent.GetIndex(index)
+		if err != nil {
+			return false, xerror.ErrArrayOutOfRange
+		}
+		err = old.SetNode(value)
+		if err != nil {
+			return false, xerror.InvalidJsonError
 		}
 	}
 	if !parent.IsObject() {
@@ -127,6 +148,14 @@ func checkParent(parent *ajson.Node, element string) (bool, error) {
 			zap.Any("parent type", parent.Type()),
 			zap.Any("parent", parent))
 		return false, nil
+	}
+	err := parent.AppendObject(element, value)
+	if err != nil {
+		utils.ZapLog.Error("AppendObject",
+			zap.String("element", element),
+			zap.Any("value", value),
+			zap.Error(err))
+		return false, xerror.InvalidJsonError
 	}
 	return true, nil
 }
@@ -242,27 +271,8 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 			if CheckExist == check {
 				return nil
 			}
-			if len(commands) == 1 {
-				if root.IsArray() {
-					index, err := strconv.Atoi(lastElement)
-					if err != nil {
-						utils.ZapLog.Error("parent is not object",
-							zap.Any("parent type", root.Type()),
-							zap.Any("parent", root))
-						return nil
-					}
-					if index >= root.Size() {
-						return txn.SetError(xerror.ErrArrayOutOfRange)
-					}
-				}
-				ok, err := checkParent(root, lastElement)
-				if err != nil {
-					return txn.SetError(err)
-				}
-				if !ok {
-					return nil
-				}
-			} else {
+			parent := root
+			if len(commands) > 1 {
 				nodes, err := ajson.ApplyJSONPath(root, commands[:len(commands)-1])
 				if err != nil {
 					utils.ZapLog.Error("ApplyJSONPath",
@@ -279,22 +289,14 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 						zap.Error(err))
 					return nil
 				}
-				parent := nodes[0]
-				ok, err := checkParent(parent, lastElement)
-				if err != nil {
-					return txn.SetError(err)
-				}
-				if !ok {
-					return nil
-				}
-				err = parent.AppendObject(lastElement, value)
-				if err != nil {
-					utils.ZapLog.Error("AppendObject",
-						zap.String("element", lastElement),
-						zap.Any("value", value),
-						zap.Error(err))
-					return txn.SetError(xerror.InvalidJsonError)
-				}
+				parent = nodes[0]
+			}
+			ok, err := checkParent(parent, lastElement, value)
+			if err != nil {
+				return txn.SetError(err)
+			}
+			if !ok {
+				return nil
 			}
 		} else {
 			if CheckNotExist == check {
@@ -363,6 +365,24 @@ func (c *Command) jsonGet(txn *store.Txn, object *Object, root *ajson.Node, path
 
 type JsonCallback func(o *ajson.Node, args [][]byte) (interface{}, bool, error)
 
+func getType(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+	switch o.Type() {
+	case ajson.Null:
+		return "null", false, nil
+	case ajson.String:
+		return "string", false, nil
+	case ajson.Numeric:
+		return "integer", false, nil
+	case ajson.Bool:
+		return "boolean", false, nil
+	case ajson.Array:
+		return "array", false, nil
+	case ajson.Object:
+		return "object", false, nil
+	default:
+		return "", false, nil
+	}
+}
 func getObjLen(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	if o.IsObject() {
 		return redcon.SimpleInt(o.Size()), false, nil
@@ -472,6 +492,39 @@ func insertArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	return redcon.SimpleInt(o.Size()), true, nil
 }
 
+func trimArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+	if !o.IsArray() {
+		return nil, false, xerror.ErrPathNotArray
+	}
+	n := o.Size()
+	if n == 0 {
+		return redcon.SimpleInt(0), false, nil
+	}
+	start, err := strconv.Atoi(utils.B2S(args[0]))
+	if err != nil {
+		utils.ZapLog.Error("arrtrim",
+			zap.ByteString("start", args[0]), zap.Error(err))
+		return nil, false, xerror.ErrNotInteger
+	}
+	end, err := strconv.Atoi(utils.B2S(args[1]))
+	if err != nil {
+		utils.ZapLog.Error("arrtrim",
+			zap.ByteString("end", args[1]), zap.Error(err))
+		return nil, false, xerror.ErrNotInteger
+	}
+	change, err := o.TrimIndex(start, end)
+	if err != nil {
+		utils.ZapLog.Error("arrtrim",
+			zap.Int("start", start),
+			zap.Int("end", end),
+			zap.Error(err))
+		return nil, false, err
+	}
+	utils.ZapLog.Debug("arrtrim", zap.Int("start", start),
+		zap.Int("end", end), zap.Any("object", o))
+	return redcon.SimpleInt(o.Size()), change, nil
+}
+
 func popArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	if !o.IsArray() {
 		return nil, false, xerror.ErrPathNotArray
@@ -513,6 +566,14 @@ func popArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 		return nil, false, err
 	}
 	return value, true, nil
+}
+
+// JSON.ARRTRIM key path start stop
+func (c *Command) JsonArrTrimHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 4 {
+		return txn.SetWrongArgs(JSONARRTRIM_COMMAND)
+	}
+	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], true, trimArr)
 }
 
 // JSON.ARRPOP key [ path [index]]
@@ -583,6 +644,20 @@ func (c *Command) JsonObjLenHandle(txn *store.Txn, args [][]byte) interface{} {
 		path = args[1]
 	}
 	return c.jsonCallbackHandle(txn, args[0], path, nil, false, getObjLen)
+}
+
+// JSON.TYPE key [path]
+func (c *Command) JsonTypeHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 && len(args) != 2 {
+		return txn.SetWrongArgs(JSONTYPE_COMMAND)
+	}
+	var path []byte
+	if len(args) == 1 {
+		path = []byte(".")
+	} else {
+		path = args[1]
+	}
+	return c.jsonCallbackHandle(txn, args[0], path, nil, false, getType)
 }
 
 // (json) JSON.OBJKEYS key [path]

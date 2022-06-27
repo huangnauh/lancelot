@@ -1178,6 +1178,19 @@ func NewCommand(red *redcon.Server) *Command {
 			ID:   170,
 			Typo: JsonType,
 		},
+		JSONARRTRIM_COMMAND: {
+			Name: JSONARRTRIM_COMMAND,
+			Func: c.JsonArrTrimHandle,
+			ID:   171,
+			Typo: JsonType,
+		},
+		JSONTYPE_COMMAND: {
+			Name:     JSONTYPE_COMMAND,
+			Func:     c.JsonTypeHandle,
+			ID:       172,
+			Typo:     JsonType,
+			ReadOnly: true,
+		},
 		// ------------------- json end 191 ---------------------------
 		// ------------------- script start 192 ---------------------------
 
