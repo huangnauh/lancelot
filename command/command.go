@@ -1191,6 +1191,13 @@ func NewCommand(red *redcon.Server) *Command {
 			Typo:     JsonType,
 			ReadOnly: true,
 		},
+		JSONTOGGLE_COMMAND: {
+			Name:     JSONTOGGLE_COMMAND,
+			Func:     c.JsonToggleHandle,
+			ID:       173,
+			Typo:     JsonType,
+			ReadOnly: true,
+		},
 		// ------------------- json end 191 ---------------------------
 		// ------------------- script start 192 ---------------------------
 

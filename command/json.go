@@ -398,6 +398,21 @@ func getObjKeys(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	return nil, false, xerror.ErrPathNotObject
 }
 
+func toggle(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+	b, err := o.GetBool()
+	if err != nil {
+		return nil, false, xerror.ErrPathNotBool
+	}
+	err = o.SetBool(!b)
+	if err != nil {
+		return nil, false, xerror.ErrPathNotBool
+	}
+	if b {
+		return redcon.SimpleInt(0), true, nil
+	}
+	return redcon.SimpleInt(1), true, nil
+}
+
 func getArrLen(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	if o.IsArray() {
 		return redcon.SimpleInt(o.Size()), false, nil
@@ -579,6 +594,7 @@ var JsonCallbackFucs = map[string]JsonCallback{
 	JSONARRINSERT_COMMAND: insertArr,
 	JSONARRTRIM_COMMAND:   trimArr,
 	JSONARRPOP_COMMAND:    popArr,
+	JSONTOGGLE_COMMAND:    toggle,
 }
 
 // JSON.ARRTRIM key path start stop
@@ -629,6 +645,20 @@ func (c *Command) JsonArrIndexHandle(txn *store.Txn, args [][]byte) interface{} 
 		return txn.SetWrongArgs(JSONARRINDEX_COMMAND)
 	}
 	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], false, JSONARRINDEX_COMMAND)
+}
+
+// JSON.TOGGLE key [path]
+func (c *Command) JsonToggleHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 && len(args) != 2 {
+		return txn.SetWrongArgs(JSONTOGGLE_COMMAND)
+	}
+	var path []byte
+	if len(args) == 1 {
+		path = []byte(".")
+	} else {
+		path = args[1]
+	}
+	return c.jsonCallbackHandle(txn, args[0], path, nil, true, JSONTOGGLE_COMMAND)
 }
 
 // JSON.ARRLEN key [path]
@@ -729,11 +759,13 @@ func (c *Command) jsonCallbackHandle(txn *store.Txn, k, path []byte, args [][]by
 
 	change := false
 	ret := make([]interface{}, 0)
+	var reterr error
 	for _, node := range nodes {
 		c, isChange, err := callback(node, args)
 		if err == nil {
 			ret = append(ret, c)
 		} else {
+			reterr = err
 			ret = append(ret, nil)
 		}
 		if isChange {
@@ -750,6 +782,9 @@ func (c *Command) jsonCallbackHandle(txn *store.Txn, k, path []byte, args [][]by
 	}
 
 	if !rootPrefix {
+		if reterr != nil {
+			return txn.SetError(reterr)
+		}
 		return ret[0]
 	}
 

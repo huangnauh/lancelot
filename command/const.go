@@ -42,6 +42,7 @@ const (
 	JSONARRINSERT_COMMAND        = "json.arrinsert"
 	JSONARRPOP_COMMAND           = "json.arrpop"
 	JSONARRTRIM_COMMAND          = "json.arrtrim"
+	JSONTOGGLE_COMMAND           = "json.toggle"
 	ZCARD_COMMAND                = "zcard"
 	ZCOUNT_COMMAND               = "zcount"
 	ZPOPMIN_COMMAND              = "zpopmin"
