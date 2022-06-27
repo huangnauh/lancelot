@@ -292,6 +292,30 @@ func TestJsonToggleCommand(t *testing.T) {
 	assert.Contains(t, err.Error(), "not a bool")
 }
 
+func TestJsonClearCommand(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	defer func() {
+		err := c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	res, err := rh.JSONSet("jsondel", ".", map[string]interface{}{
+		"n": 42, "s": "42", "arr": []interface{}{
+			map[string]int{"n": 44},
+			map[string]interface{}{"n": map[string]interface{}{"a": 1, "b": 2}},
+			map[string]interface{}{"n2": map[string]interface{}{"x": 3.02, "n": []interface{}{"to", "be", "cleared", 4}, "y": 4.91}},
+			nil,
+		},
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+
+}
+
 func TestJsonDelCommand(t *testing.T) {
 	t.Parallel()
 	c := redis.NewClient(&redis.Options{

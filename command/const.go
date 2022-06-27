@@ -32,6 +32,7 @@ const (
 	JSONSET_COMMAND              = "json.set"
 	JSONGET_COMMAND              = "json.get"
 	JSONDEL_COMMAND              = "json.del"
+	JSONCLEAR_COMMAND            = "json.clear"
 	JSONTYPE_COMMAND             = "json.type"
 	JSONMGET_COMMAND             = "json.mget"
 	JSONOBJKEYS_COMMAND          = "json.objkeys"

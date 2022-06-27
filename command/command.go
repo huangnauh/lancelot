@@ -1198,6 +1198,12 @@ func NewCommand(red *redcon.Server) *Command {
 			Typo:     JsonType,
 			ReadOnly: true,
 		},
+		JSONCLEAR_COMMAND: {
+			Name: JSONCLEAR_COMMAND,
+			Func: c.JsonClearHandle,
+			ID:   174,
+			Typo: JsonType,
+		},
 		// ------------------- json end 191 ---------------------------
 		// ------------------- script start 192 ---------------------------
 

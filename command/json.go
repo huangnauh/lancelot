@@ -27,11 +27,22 @@ func (c *Command) setJsonValue(txn *store.Txn, key []byte, object *Object, root 
 	return setTxnObject(txn, key, object, 0)
 }
 
+// (json) JSON.CLEAR key [path]
+func (c *Command) JsonClearHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 && len(args) != 2 {
+		return txn.SetWrongArgs(JSONCLEAR_COMMAND)
+	}
+	return c.jsonClearOrDelHandle(txn, args, false)
+}
+
 // (json) JSON.DEL key [path]
 func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 && len(args) != 2 {
 		return txn.SetWrongArgs(JSONDEL_COMMAND)
 	}
+	return c.jsonClearOrDelHandle(txn, args, true)
+}
+func (c *Command) jsonClearOrDelHandle(txn *store.Txn, args [][]byte, delete bool) interface{} {
 	object := NewObject(txn, StringType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
@@ -41,15 +52,10 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetError(err)
 	}
 
-	if object.Value == nil || len(args) == 1 {
+	if object.Value == nil {
 		return DeleteKeyReturn(txn, key, object, 0, MinusCount)
 	}
 
-	jsonPath := utils.B2S(args[1])
-	if jsonPath == "." || jsonPath == "$" {
-		return DeleteKeyReturn(txn, key, object, 0, MinusCount)
-	}
-	jsonPath, _ = checkRootPath(jsonPath)
 	root, err := ajson.Unmarshal(object.Value)
 	if err != nil {
 		utils.ZapLog.Error("json",
@@ -58,6 +64,31 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 			zap.Error(err))
 		return txn.SetError(err)
 	}
+
+	jsonPath := "."
+	if len(args) == 2 {
+		jsonPath = utils.B2S(args[1])
+	}
+	if jsonPath == "." || jsonPath == "$" {
+		if delete {
+			// delete
+			return DeleteKeyReturn(txn, key, object, 0, MinusCount)
+		}
+		// clear
+		change, err := root.Clear()
+		if err != nil {
+			return txn.SetError(xerror.InvalidJsonError)
+		}
+		if !change {
+			return redcon.SimpleInt(0)
+		}
+		err = c.setJsonValue(txn, key, object, root)
+		if err != nil {
+			return txn.SetError(err)
+		}
+		return redcon.SimpleInt(1)
+	}
+	jsonPath, _ = checkRootPath(jsonPath)
 	nodes, err := root.JSONPath(jsonPath)
 	if err != nil {
 		utils.ZapLog.Error("jsonpath",
@@ -68,16 +99,26 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	utils.ZapLog.Debug("json.del",
 		zap.String("jsonPath", jsonPath),
 		zap.Any("nodes", nodes))
+	change := false
 	for _, node := range nodes {
-		err = node.Delete()
+		if delete {
+			change = true
+			err = node.Delete()
+		} else {
+			var c bool
+			c, err = node.Clear()
+			if c {
+				change = true
+			}
+		}
 		if err != nil {
-			utils.ZapLog.Error("delete node",
+			utils.ZapLog.Error("delete/clear node",
 				zap.Any("node", node),
 				zap.Error(err))
-			return txn.SetError(err)
+			return txn.SetError(xerror.InvalidJsonError)
 		}
 	}
-	if len(nodes) > 0 {
+	if change {
 		err = c.setJsonValue(txn, key, object, root)
 		if err != nil {
 			return txn.SetError(err)
