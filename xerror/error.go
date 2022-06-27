@@ -87,6 +87,7 @@ var (
 	UnsupportCmdFromScript      = RedisNew("This Redis command is not allowed from scripts")
 	UnknownCmdFromScript        = RedisNew("Unknown Redis command called from Lua script")
 	UnsupportFlushOption        = RedisNew("SCRIPT FLUSH only support SYNC|ASYNC option.")
+	UnsupportCmd                = RedisNew("This Redis command is not allowed")
 	WRONGPASS                   = RedisNew("WRONGPASS invalid username-password pair or user is disabled.")
 	ErrAuthentication           = RedisNew("Authentication required.")
 	ErrExceedMaxSize            = RedisNew("exceeds maximum allowed size")

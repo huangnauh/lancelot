@@ -36,7 +36,7 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
-		return 0
+		return redcon.SimpleInt(0)
 	} else if err != nil {
 		return txn.SetError(err)
 	}
@@ -383,6 +383,7 @@ func getType(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 		return "", false, nil
 	}
 }
+
 func getObjLen(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	if o.IsObject() {
 		return redcon.SimpleInt(o.Size()), false, nil
@@ -568,12 +569,24 @@ func popArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	return value, true, nil
 }
 
+var JsonCallbackFucs = map[string]JsonCallback{
+	JSONTYPE_COMMAND:      getType,
+	JSONOBJLEN_COMMAND:    getObjLen,
+	JSONOBJKEYS_COMMAND:   getObjKeys,
+	JSONARRLEN_COMMAND:    getArrLen,
+	JSONARRINDEX_COMMAND:  getArrIndex,
+	JSONARRAPPEND_COMMAND: appendArr,
+	JSONARRINSERT_COMMAND: insertArr,
+	JSONARRTRIM_COMMAND:   trimArr,
+	JSONARRPOP_COMMAND:    popArr,
+}
+
 // JSON.ARRTRIM key path start stop
 func (c *Command) JsonArrTrimHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 4 {
 		return txn.SetWrongArgs(JSONARRTRIM_COMMAND)
 	}
-	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], true, trimArr)
+	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], true, JSONARRTRIM_COMMAND)
 }
 
 // JSON.ARRPOP key [ path [index]]
@@ -591,7 +604,7 @@ func (c *Command) JsonArrPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) == 3 {
 		a = [][]byte{args[2]}
 	}
-	return c.jsonCallbackHandle(txn, args[0], path, a, true, popArr)
+	return c.jsonCallbackHandle(txn, args[0], path, a, true, JSONARRPOP_COMMAND)
 }
 
 // JSON.ARRINSERT key path index value [value ...]
@@ -599,7 +612,7 @@ func (c *Command) JsonArrInsertHandle(txn *store.Txn, args [][]byte) interface{}
 	if len(args) < 4 {
 		return txn.SetWrongArgs(JSONARRINSERT_COMMAND)
 	}
-	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], true, insertArr)
+	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], true, JSONARRINSERT_COMMAND)
 }
 
 // JSON.ARRAPPEND key path value [value ...]
@@ -607,7 +620,7 @@ func (c *Command) JsonArrAppendHandle(txn *store.Txn, args [][]byte) interface{}
 	if len(args) < 3 {
 		return txn.SetWrongArgs(JSONARRAPPEND_COMMAND)
 	}
-	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], true, appendArr)
+	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], true, JSONARRAPPEND_COMMAND)
 }
 
 // JSON.ARRINDEX key path value
@@ -615,7 +628,7 @@ func (c *Command) JsonArrIndexHandle(txn *store.Txn, args [][]byte) interface{} 
 	if len(args) != 3 {
 		return txn.SetWrongArgs(JSONARRINDEX_COMMAND)
 	}
-	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], false, getArrIndex)
+	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], false, JSONARRINDEX_COMMAND)
 }
 
 // JSON.ARRLEN key [path]
@@ -629,7 +642,7 @@ func (c *Command) JsonArrLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	} else {
 		path = args[1]
 	}
-	return c.jsonCallbackHandle(txn, args[0], path, nil, false, getArrLen)
+	return c.jsonCallbackHandle(txn, args[0], path, nil, false, JSONARRLEN_COMMAND)
 }
 
 // JSON.OBJLEN key [path]
@@ -643,7 +656,7 @@ func (c *Command) JsonObjLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	} else {
 		path = args[1]
 	}
-	return c.jsonCallbackHandle(txn, args[0], path, nil, false, getObjLen)
+	return c.jsonCallbackHandle(txn, args[0], path, nil, false, JSONOBJLEN_COMMAND)
 }
 
 // JSON.TYPE key [path]
@@ -657,7 +670,7 @@ func (c *Command) JsonTypeHandle(txn *store.Txn, args [][]byte) interface{} {
 	} else {
 		path = args[1]
 	}
-	return c.jsonCallbackHandle(txn, args[0], path, nil, false, getType)
+	return c.jsonCallbackHandle(txn, args[0], path, nil, false, JSONTYPE_COMMAND)
 }
 
 // (json) JSON.OBJKEYS key [path]
@@ -671,10 +684,10 @@ func (c *Command) JsonObjKeysHandle(txn *store.Txn, args [][]byte) interface{} {
 	} else {
 		path = args[1]
 	}
-	return c.jsonCallbackHandle(txn, args[0], path, nil, false, getObjKeys)
+	return c.jsonCallbackHandle(txn, args[0], path, nil, false, JSONOBJKEYS_COMMAND)
 }
 
-func (c *Command) jsonCallbackHandle(txn *store.Txn, k, path []byte, args [][]byte, clear bool, callback JsonCallback) interface{} {
+func (c *Command) jsonCallbackHandle(txn *store.Txn, k, path []byte, args [][]byte, clear bool, cmd string) interface{} {
 	object := NewObject(txn, StringType, k)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, clear)
@@ -703,7 +716,15 @@ func (c *Command) jsonCallbackHandle(txn *store.Txn, k, path []byte, args [][]by
 		}
 	}
 	if !rootPrefix && len(nodes) == 0 {
+		if cmd == JSONTYPE_COMMAND {
+			return nil
+		}
 		return txn.SetError(xerror.ErrPathNotExist)
+	}
+
+	callback := JsonCallbackFucs[cmd]
+	if callback == nil {
+		return txn.SetError(xerror.UnsupportCmd)
 	}
 
 	change := false
