@@ -47,7 +47,11 @@ func (c *Command) jsonClearOrDelHandle(txn *store.Txn, args [][]byte, delete boo
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
-		return redcon.SimpleInt(0)
+		if delete {
+			return redcon.SimpleInt(0)
+		} else {
+			return txn.SetError(xerror.ErrPathNotExist)
+		}
 	} else if err != nil {
 		return txn.SetError(err)
 	}
@@ -99,16 +103,16 @@ func (c *Command) jsonClearOrDelHandle(txn *store.Txn, args [][]byte, delete boo
 	utils.ZapLog.Debug("json.del",
 		zap.String("jsonPath", jsonPath),
 		zap.Any("nodes", nodes))
-	change := false
+	change := 0
 	for _, node := range nodes {
 		if delete {
-			change = true
+			change++
 			err = node.Delete()
 		} else {
 			var c bool
 			c, err = node.Clear()
 			if c {
-				change = true
+				change++
 			}
 		}
 		if err != nil {
@@ -118,14 +122,14 @@ func (c *Command) jsonClearOrDelHandle(txn *store.Txn, args [][]byte, delete boo
 			return txn.SetError(xerror.InvalidJsonError)
 		}
 	}
-	if change {
+	if change > 0 {
 		err = c.setJsonValue(txn, key, object, root)
 		if err != nil {
 			return txn.SetError(err)
 		}
 	}
 
-	return redcon.SimpleInt(len(nodes))
+	return redcon.SimpleInt(change)
 }
 
 func IsNormalElement(cmd string) bool {
@@ -469,14 +473,49 @@ func getArrIndex(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 			zap.Error(err))
 		return redcon.SimpleInt(0), false, xerror.InvalidJsonError
 	}
+	var start, end int
+	if len(args) > 1 {
+		start, err = strconv.Atoi(utils.B2S(args[1]))
+		if err != nil {
+			utils.ZapLog.Error("arrtrim",
+				zap.ByteString("start", args[0]), zap.Error(err))
+			return nil, false, xerror.ErrNotInteger
+		}
+	}
+	if len(args) > 2 {
+		end, err = strconv.Atoi(utils.B2S(args[2]))
+		if err != nil {
+			utils.ZapLog.Error("arrtrim",
+				zap.ByteString("end", args[1]), zap.Error(err))
+			return nil, false, xerror.ErrNotInteger
+		}
+	}
 	// utils.ZapLog.Info("arrindex",
 	// 	zap.ByteString("value", args[0]),
 	// 	zap.Any("object", o))
 	if !o.IsArray() {
 		return redcon.SimpleInt(0), false, xerror.ErrPathNotArray
 	}
-	len := o.Size()
-	for index := 0; index < len; index++ {
+	length := o.Size()
+	if length == 0 {
+		return redcon.SimpleInt(-1), false, nil
+	}
+	if start < 0 {
+		start += length
+	}
+	if start < 0 {
+		start = 0
+	}
+	if end == 0 {
+		end = length
+	}
+	if end < 0 {
+		end += length
+	}
+	if end <= start {
+		return redcon.SimpleInt(-1), false, nil
+	}
+	for index := start; index < end; index++ {
 		av, err := o.GetIndex(index)
 		if err != nil {
 			utils.ZapLog.Error("arrindex",
@@ -544,7 +583,7 @@ func insertArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 		utils.ZapLog.Error("arrindex",
 			zap.Any("values", vs),
 			zap.Error(err))
-		return nil, false, err
+		return nil, false, xerror.ErrOutOfRange
 	}
 	return redcon.SimpleInt(o.Size()), true, nil
 }
@@ -680,9 +719,9 @@ func (c *Command) JsonArrAppendHandle(txn *store.Txn, args [][]byte) interface{}
 	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], true, JSONARRAPPEND_COMMAND)
 }
 
-// JSON.ARRINDEX key path value
+// JSON.ARRINDEX key path value [ start [stop]]
 func (c *Command) JsonArrIndexHandle(txn *store.Txn, args [][]byte) interface{} {
-	if len(args) != 3 {
+	if len(args) < 3 || len(args) > 5 {
 		return txn.SetWrongArgs(JSONARRINDEX_COMMAND)
 	}
 	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], false, JSONARRINDEX_COMMAND)

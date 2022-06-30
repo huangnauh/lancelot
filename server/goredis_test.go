@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"testing"
 	"time"
 
@@ -138,19 +139,397 @@ func TestRedisJsonValue(t *testing.T) {
 	}
 }
 
+func TestJsonArrPopCommand(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	defer func() {
+		_, err := c.Del(context.Background(), "arrpop").Result()
+		assert.NoError(t, err)
+		err = c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	jv := `[1,2,3,4,5,6,7,8,9]`
+	var v interface{}
+	err := json.Unmarshal([]byte(jv), &v)
+	assert.NoError(t, err)
+	res, err := rh.JSONSet("arrpop", ".", v)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	ctx := context.Background()
+	cmd := redis.NewFloatCmd(ctx, "JSON.ArrPop", "arrpop")
+	_ = c.Process(ctx, cmd)
+	i, err := cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, float64(9), i)
+	cmd = redis.NewFloatCmd(ctx, "JSON.ArrPop", "arrpop", ".")
+	_ = c.Process(ctx, cmd)
+	i, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, float64(8), i)
+	res, err = rh.JSONArrPop("arrpop", ".", -1)
+	assert.NoError(t, err)
+	resf, err := strconv.ParseFloat(string(res.([]byte)), 64)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(7), resf)
+	res, err = rh.JSONArrPop("arrpop", ".", -2)
+	assert.NoError(t, err)
+	resf, err = strconv.ParseFloat(string(res.([]byte)), 64)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(5), resf)
+	res, err = rh.JSONArrPop("arrpop", ".", 0)
+	assert.NoError(t, err)
+	resf, err = strconv.ParseFloat(string(res.([]byte)), 64)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(1), resf)
+	res, err = rh.JSONArrPop("arrpop", ".", 2)
+	assert.NoError(t, err)
+	resf, err = strconv.ParseFloat(string(res.([]byte)), 64)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(4), resf)
+	res, err = rh.JSONArrPop("arrpop", ".", 99)
+	assert.NoError(t, err)
+	resf, err = strconv.ParseFloat(string(res.([]byte)), 64)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(6), resf)
+	res, err = rh.JSONArrPop("arrpop", ".", -99)
+	assert.NoError(t, err)
+	resf, err = strconv.ParseFloat(string(res.([]byte)), 64)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(2), resf)
+	cmd = redis.NewFloatCmd(ctx, "JSON.ArrPop", "arrpop")
+	_ = c.Process(ctx, cmd)
+	i, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, float64(3), i)
+	cmd = redis.NewFloatCmd(ctx, "JSON.ArrPop", "arrpop")
+	_ = c.Process(ctx, cmd)
+	_, err = cmd.Result()
+	assert.Equal(t, redis.Nil, err)
+	cmd = redis.NewFloatCmd(ctx, "JSON.ArrPop", "arrpop", ".")
+	_ = c.Process(ctx, cmd)
+	_, err = cmd.Result()
+	assert.Equal(t, redis.Nil, err)
+	cmd = redis.NewFloatCmd(ctx, "JSON.ArrPop", "arrpop", ".", 2)
+	_ = c.Process(ctx, cmd)
+	_, err = cmd.Result()
+	assert.Equal(t, redis.Nil, err)
+}
+
+func TestJsonArrTrimCommand(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	defer func() {
+		_, err := c.Del(context.Background(), "arrtrim").Result()
+		assert.NoError(t, err)
+		err = c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	jv := `{ "arr": [0, 1, 2, 3, 2, 1, 0] }`
+	var v interface{}
+	err := json.Unmarshal([]byte(jv), &v)
+	assert.NoError(t, err)
+	res, err := rh.JSONSet("arrtrim", ".", v)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = rh.JSONArrTrim("arrtrim", ".arr", 1, -2)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(5), res)
+	resBytes, err := Bytes(rh.JSONGet("arrtrim", ".arr"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[1, 2, 3, 2, 1]`, string(resBytes))
+	res, err = rh.JSONArrTrim("arrtrim", ".arr", 0, 99)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(5), res)
+	resBytes, err = Bytes(rh.JSONGet("arrtrim", ".arr"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[1, 2, 3, 2, 1]`, string(resBytes))
+	res, err = rh.JSONArrTrim("arrtrim", ".arr", 0, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), res)
+	resBytes, err = Bytes(rh.JSONGet("arrtrim", ".arr"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[1, 2, 3]`, string(resBytes))
+	res, err = rh.JSONArrTrim("arrtrim", ".arr", 99, 2)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), res)
+	resBytes, err = Bytes(rh.JSONGet("arrtrim", ".arr"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[]`, string(resBytes))
+	res, err = rh.JSONArrTrim("arrtrim", ".arr", -1, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), res)
+	resBytes, err = Bytes(rh.JSONGet("arrtrim", ".arr"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[]`, string(resBytes))
+	res, err = rh.JSONSet("arrtrim", ".", v)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = rh.JSONArrTrim("arrtrim", ".arr", -1, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), res)
+	resBytes, err = Bytes(rh.JSONGet("arrtrim", ".arr"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[]`, string(resBytes))
+	res, err = rh.JSONSet("arrtrim", ".", v)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = rh.JSONArrTrim("arrtrim", ".arr", -4, 1)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), res)
+	resBytes, err = Bytes(rh.JSONGet("arrtrim", ".arr"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[]`, string(resBytes))
+
+}
+
+func TestJsonArrIndexMixCommand(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	defer func() {
+		_, err := c.Del(context.Background(), "arrindexmix").Result()
+		assert.NoError(t, err)
+		err = c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	jv := `{ "arr": [0, 1, 2, 3, 2, 1, 0, {"val": 4}, {"val": 9}, [3,4,8], ["a", "b", 8]] }`
+	var v interface{}
+	err := json.Unmarshal([]byte(jv), &v)
+	assert.NoError(t, err)
+	res, err := rh.JSONSet("arrindexmix", ".", v)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", 0)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", 3)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", 4)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(-1), res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", 0, 1)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(6), res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", 0, -5)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(6), res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", 0, 6)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(6), res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", 0, 4, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(6), res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", 0, 5, -1)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(6), res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", 2, -2, 6)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(-1), res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", "foo")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(-1), res)
+
+	res, err = rh.JSONArrInsert("arrindexmix", ".arr", 4, []int{4})
+	assert.NoError(t, err)
+	assert.Equal(t, int64(12), res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", 3)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", 2, 3)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(5), res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", []int{4})
+	assert.NoError(t, err)
+	assert.Equal(t, int64(4), res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", map[string]int{"val": 4})
+	assert.NoError(t, err)
+	assert.Equal(t, int64(8), res)
+	res, err = rh.JSONArrIndex("arrindexmix", ".arr", []interface{}{"a", "b", 8})
+	assert.NoError(t, err)
+	assert.Equal(t, int64(11), res)
+}
+
+func TestJsonArrInsertCommand(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	defer func() {
+		_, err := c.Del(context.Background(), "jsonarrinsert").Result()
+		assert.NoError(t, err)
+		err = c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	jvs := [][2]string{
+		{`{ "arr": [] }`, ".arr"},
+		{`[]`, "."},
+	}
+	for _, jv := range jvs {
+		var v interface{}
+		err := json.Unmarshal([]byte(jv[0]), &v)
+		assert.NoError(t, err)
+		res, err := rh.JSONSet("jsonarrinsert", ".", v)
+		assert.NoError(t, err)
+		assert.Equal(t, "OK", res)
+		res, err = rh.JSONArrInsert("jsonarrinsert", jv[1], 0, 1)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), res)
+		res, err = rh.JSONArrInsert("jsonarrinsert", jv[1], -1, 2)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(2), res)
+		res, err = rh.JSONArrInsert("jsonarrinsert", jv[1], -2, 3)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(3), res)
+		res, err = rh.JSONArrInsert("jsonarrinsert", jv[1], 3, 4)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(4), res)
+		resBytes, err := Bytes(rh.JSONGet("jsonarrinsert", jv[1]))
+		assert.NoError(t, err)
+		assert.JSONEq(t, `[3,2,1,4]`, string(resBytes))
+		res, err = rh.JSONArrInsert("jsonarrinsert", jv[1], 1, 5)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(5), res)
+		res, err = rh.JSONArrInsert("jsonarrinsert", jv[1], -2, 6)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(6), res)
+		resBytes, err = Bytes(rh.JSONGet("jsonarrinsert", jv[1]))
+		assert.NoError(t, err)
+		assert.JSONEq(t, `[3,5,2,6,1,4]`, string(resBytes))
+		res, err = rh.JSONArrInsert("jsonarrinsert", jv[1], -3,
+			7, map[string]string{"A": "Z"}, 9)
+		assert.NoError(t, err)
+		assert.Equal(t, int64(9), res)
+		resBytes, err = Bytes(rh.JSONGet("jsonarrinsert", jv[1]))
+		assert.NoError(t, err)
+		assert.JSONEq(t, `[3,5,2,7,{"A":"Z"},9,6,1,4]`, string(resBytes))
+		_, err = rh.JSONArrInsert("jsonarrinsert", jv[1], -10, 10)
+		assert.Contains(t, err.Error(), "out of range")
+		resBytes, err = Bytes(rh.JSONGet("jsonarrinsert", jv[1]))
+		assert.NoError(t, err)
+		assert.JSONEq(t, `[3,5,2,7,{"A":"Z"},9,6,1,4]`, string(resBytes))
+		_, err = rh.JSONArrInsert("jsonarrinsert", jv[1], 10, 10)
+		assert.Contains(t, err.Error(), "out of range")
+		resBytes, err = Bytes(rh.JSONGet("jsonarrinsert", jv[1]))
+		assert.NoError(t, err)
+		assert.JSONEq(t, `[3,5,2,7,{"A":"Z"},9,6,1,4]`, string(resBytes))
+	}
+}
+
+func TestJsonArrIndexCommand(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	defer func() {
+		_, err := c.Del(context.Background(), "jsonarrindex").Result()
+		assert.NoError(t, err)
+		err = c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	res, err := rh.JSONSet("jsonarrindex", ".", map[string]interface{}{
+		"arr": []int{0, 1, 2, 3, 2, 1, 0}})
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", 0)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", 3)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", 4)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(-1), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", 0, 1)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(6), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", 0, -1)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(6), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", 0, 6)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(6), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", 0, 4, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(6), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", 0, -5, -1)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(-1), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", 0, 5, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(6), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", 2, -2, 6)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(-1), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", "foo")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(-1), res)
+
+	res, err = rh.JSONArrInsert("jsonarrindex", ".arr", 4, []int{4})
+	assert.NoError(t, err)
+	assert.Equal(t, int64(8), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", 3)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", 2, 3)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(5), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", []int{4})
+	assert.NoError(t, err)
+	assert.Equal(t, int64(4), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", ".arr", 1)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), res)
+	res, err = rh.JSONArrIndex("jsonarrindex", "$.arr", 1)
+	assert.NoError(t, err)
+	resBytes, err := json.Marshal(res)
+	assert.NoError(t, err)
+	assert.Equal(t, `[1]`, string(resBytes))
+	res, err = rh.JSONArrIndex("jsonarrindex", "$.arr", 2, 1, 4)
+	assert.NoError(t, err)
+	resBytes, err = json.Marshal(res)
+	assert.NoError(t, err)
+	assert.Equal(t, `[2]`, string(resBytes))
+	res, err = rh.JSONArrIndex("jsonarrindex", "$.arr", 6)
+	assert.NoError(t, err)
+	resBytes, err = json.Marshal(res)
+	assert.NoError(t, err)
+	assert.Equal(t, `[-1]`, string(resBytes))
+	res, err = rh.JSONArrIndex("jsonarrindex", "$.arr", 3, 0, 2)
+	assert.NoError(t, err)
+	resBytes, err = json.Marshal(res)
+	assert.NoError(t, err)
+	assert.Equal(t, `[-1]`, string(resBytes))
+}
+
 func TestJsonArrayCRUD(t *testing.T) {
 	t.Parallel()
 	c := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
 		Password: cfg.Auth.Pass})
 	defer func() {
-		err := c.Close()
+		_, err := c.Del(context.Background(), "jsonarray").Result()
+		assert.NoError(t, err)
+		err = c.Close()
 		assert.NoError(t, err)
 	}()
 	rh := rejson.NewReJSONHandler()
 	rh.SetGoRedisClient(c)
-	_, err := c.Del(context.Background(), "jsonarray").Result()
-	assert.NoError(t, err)
 
 	// Test creation of an empty array
 	res, err := rh.JSONSet("jsonarray", ".", []string{})
@@ -292,6 +671,75 @@ func TestJsonToggleCommand(t *testing.T) {
 	assert.Contains(t, err.Error(), "not a bool")
 }
 
+func TestJsonClearScalar(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	defer func() {
+		err := c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	res, err := rh.JSONSet("jsonclearscalar", ".", docs["basic"])
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+
+	// Clear numeric values
+	ctx := context.Background()
+	cmd := redis.NewIntCmd(ctx, "JSON.Clear", "jsonclearscalar", "$.int")
+	_ = c.Process(ctx, cmd)
+	del, err := cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, del, int64(1))
+	resBytes, err := Bytes(rh.JSONGet("jsonclearscalar", "$.int"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, "[0]", string(resBytes))
+
+	cmd = redis.NewIntCmd(ctx, "JSON.Clear", "jsonclearscalar", "$.num")
+	_ = c.Process(ctx, cmd)
+	del, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, del, int64(1))
+	resBytes, err = Bytes(rh.JSONGet("jsonclearscalar", "$.num"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, "[0]", string(resBytes))
+
+	cmd = redis.NewIntCmd(ctx, "JSON.Clear", "jsonclearscalar", "$..a")
+	_ = c.Process(ctx, cmd)
+	del, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, del, int64(1))
+	resBytes, err = Bytes(rh.JSONGet("jsonclearscalar", "$..a"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, "[0]", string(resBytes))
+
+	res, err = rh.JSONSet("jsonclearscalar", ".", docs["scalars"])
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	cmd = redis.NewIntCmd(ctx, "JSON.Clear", "jsonclearscalar", "$.*")
+	_ = c.Process(ctx, cmd)
+	del, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, del, int64(2))
+	resBytes, err = Bytes(rh.JSONGet("jsonclearscalar", "$.*"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[null,true,0,0,"string value"]`, string(resBytes))
+	// Do not clear already cleared values
+	cmd = redis.NewIntCmd(ctx, "JSON.Clear", "jsonclearscalar", "$.*")
+	_ = c.Process(ctx, cmd)
+	del, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, del, int64(0))
+	//  Do not clear null scalar
+	cmd = redis.NewIntCmd(ctx, "JSON.Clear", "jsonclearscalar", "$.NoneType")
+	_ = c.Process(ctx, cmd)
+	del, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, del, int64(0))
+}
+
 func TestJsonClearCommand(t *testing.T) {
 	t.Parallel()
 	c := redis.NewClient(&redis.Options{
@@ -303,17 +751,156 @@ func TestJsonClearCommand(t *testing.T) {
 	}()
 	rh := rejson.NewReJSONHandler()
 	rh.SetGoRedisClient(c)
-	res, err := rh.JSONSet("jsondel", ".", map[string]interface{}{
-		"n": 42, "s": "42", "arr": []interface{}{
+	jsonValue := map[string]interface{}{
+		"n": 42, "s": "42",
+		"arr": []interface{}{
 			map[string]int{"n": 44},
-			map[string]interface{}{"n": map[string]interface{}{"a": 1, "b": 2}},
-			map[string]interface{}{"n2": map[string]interface{}{"x": 3.02, "n": []interface{}{"to", "be", "cleared", 4}, "y": 4.91}},
+			"s",
+			map[string]interface{}{
+				"n": map[string]interface{}{
+					"a": 1,
+					"b": 2,
+				},
+			},
+			map[string]interface{}{
+				"n2": map[string]interface{}{
+					"x": 3.02,
+					"n": []interface{}{"to", "be", "cleared", 4},
+					"y": 4.91,
+				},
+			},
 			nil,
 		},
-	})
+	}
+	res, err := rh.JSONSet("jsonclear", ".", jsonValue)
 	assert.NoError(t, err)
 	assert.Equal(t, "OK", res)
 
+	resBytes, err := Bytes(rh.JSONGet("jsonclear", "$..n"))
+	assert.NoError(t, err)
+	assert.Equal(t, `[42,44,{"a":1,"b":2},["to","be","cleared",4]]`, string(resBytes))
+
+	// Make sure specific obj content exists before clear
+	objContent := `[{"a":1,"b":2}]`
+	objContentLegacy := `{"a":1,"b":2}`
+	resBytes, err = Bytes(rh.JSONGet("jsonclear", "$.arr[2].n"))
+	assert.NoError(t, err)
+	assert.Equal(t, objContent, string(resBytes))
+	resBytes, err = Bytes(rh.JSONGet("jsonclear", ".arr[2].n"))
+	assert.NoError(t, err)
+	assert.Equal(t, objContentLegacy, string(resBytes))
+	//Make sure specific arr content exists before clear
+	arrContent := `[["to","be","cleared",4]]`
+	arrContentLegacy := `["to","be","cleared",4]`
+	resBytes, err = Bytes(rh.JSONGet("jsonclear", "$.arr[3].n2.n"))
+	assert.NoError(t, err)
+	assert.Equal(t, arrContent, string(resBytes))
+	resBytes, err = Bytes(rh.JSONGet("jsonclear", ".arr[3].n2.n"))
+	assert.NoError(t, err)
+	assert.Equal(t, arrContentLegacy, string(resBytes))
+
+	// Clear obj and arr with specific paths
+	ctx := context.Background()
+	cmd := redis.NewIntCmd(ctx, "JSON.Clear", "jsonclear", "$.arr[2].n")
+	_ = c.Process(ctx, cmd)
+	del, err := cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, del, int64(1))
+	cmd = redis.NewIntCmd(ctx, "JSON.Clear", "jsonclear", "$.arr[3].n2.n")
+	_ = c.Process(ctx, cmd)
+	del, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, del, int64(1))
+
+	// No clear on inappropriate path (not null)
+	cmd = redis.NewIntCmd(ctx, "JSON.Clear", "jsonclear", "$.arr[4]")
+	_ = c.Process(ctx, cmd)
+	del, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, del, int64(0))
+
+	// Make sure specific obj content was cleared
+	resBytes, err = Bytes(rh.JSONGet("jsonclear", "$.arr[2].n"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, "[{}]", string(resBytes))
+	resBytes, err = Bytes(rh.JSONGet("jsonclear", ".arr[2].n"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, "{}", string(resBytes))
+	resBytes, err = Bytes(rh.JSONGet("jsonclear", "$.arr[3].n2.n"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, "[[]]", string(resBytes))
+	resBytes, err = Bytes(rh.JSONGet("jsonclear", ".arr[3].n2.n"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, "[]", string(resBytes))
+
+	//Make sure only appropriate content (obj and arr) was cleared
+	resBytes, err = Bytes(rh.JSONGet("jsonclear", "$..n"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[42,44,{},[]]`, string(resBytes))
+
+	// Clear dynamic path
+	s := `{"n":42,"s":"42","arr":[{"n":44},"s",{"n":{"a":1,"b":2}},{"n2":{"x":3.02,"n":["to","be","cleared",4],"y":4.91}}]}`
+	jv := make(map[string]interface{})
+	err = json.Unmarshal([]byte(s), &jv)
+	assert.NoError(t, err)
+	res, err = rh.JSONSet("jsonclear", ".", jv)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	cmd = redis.NewIntCmd(ctx, "JSON.Clear", "jsonclear", "$.arr.*")
+	_ = c.Process(ctx, cmd)
+	del, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, del, int64(3))
+	resBytes, err = Bytes(rh.JSONGet("jsonclear", "$"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[{"n":42,"s":"42","arr":[{},"s",{},{}]}]`, string(resBytes))
+
+	// Clear root
+	cl := make(map[string]interface{})
+	err = json.Unmarshal([]byte(objContentLegacy), &cl)
+	assert.NoError(t, err)
+	res, err = rh.JSONSet("jsonclear", "$", cl)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	cmd = redis.NewIntCmd(ctx, "JSON.Clear", "jsonclear")
+	_ = c.Process(ctx, cmd)
+	del, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, del, int64(1))
+	resBytes, err = Bytes(rh.JSONGet("jsonclear", "$"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[{}]`, string(resBytes))
+
+	// Clear none existing path
+	s = `{"a":[1,2], "b":{"c":"d"}}`
+	jv = make(map[string]interface{})
+	err = json.Unmarshal([]byte(s), &jv)
+	assert.NoError(t, err)
+	res, err = rh.JSONSet("jsonclear", ".", jv)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	cmd = redis.NewIntCmd(ctx, "JSON.Clear", "jsonclear", "$.c")
+	_ = c.Process(ctx, cmd)
+	del, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, del, int64(0))
+	resBytes, err = Bytes(rh.JSONGet("jsonclear", "$"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[{"a":[1,2], "b":{"c":"d"}}]`, string(resBytes))
+	cmd = redis.NewIntCmd(ctx, "JSON.Clear", "jsonclear", "$.b..a")
+	_ = c.Process(ctx, cmd)
+	del, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, del, int64(0))
+	resBytes, err = Bytes(rh.JSONGet("jsonclear", "$"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[{"a":[1,2], "b":{"c":"d"}}]`, string(resBytes))
+
+	//Key doesn't exist
+	cmd = redis.NewIntCmd(ctx, "JSON.Clear", "notexists", "$.c")
+	_ = c.Process(ctx, cmd)
+	_, err = cmd.Result()
+	assert.Contains(t, err.Error(), "not exist")
 }
 
 func TestJsonDelCommand(t *testing.T) {
