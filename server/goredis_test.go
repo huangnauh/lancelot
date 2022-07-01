@@ -139,6 +139,31 @@ func TestRedisJsonValue(t *testing.T) {
 	}
 }
 
+func TestJsonTypeCommand(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	key := "arrtype"
+	defer func() {
+		_, err := c.Del(context.Background(), key).Result()
+		assert.NoError(t, err)
+		err = c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	for k, v := range docs["types"].(map[string]interface{}) {
+		res, err := rh.JSONSet(key, ".", v)
+		assert.NoError(t, err)
+		assert.Equal(t, "OK", res)
+		res, err = rh.JSONType(key, ".")
+		assert.NoError(t, err)
+		assert.Equal(t, res, k)
+	}
+
+}
+
 func TestJsonArrPopCommand(t *testing.T) {
 	t.Parallel()
 	c := redis.NewClient(&redis.Options{
@@ -217,6 +242,13 @@ func TestJsonArrPopCommand(t *testing.T) {
 	_ = c.Process(ctx, cmd)
 	_, err = cmd.Result()
 	assert.Equal(t, redis.Nil, err)
+	res, err = rh.JSONSet("arrpop", ".", 1)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	cmd = redis.NewFloatCmd(ctx, "JSON.ArrPop", "arrpop")
+	_ = c.Process(ctx, cmd)
+	_, err = cmd.Result()
+	assert.Contains(t, err.Error(), "not an array")
 }
 
 func TestJsonArrTrimCommand(t *testing.T) {
@@ -287,7 +319,11 @@ func TestJsonArrTrimCommand(t *testing.T) {
 	resBytes, err = Bytes(rh.JSONGet("arrtrim", ".arr"))
 	assert.NoError(t, err)
 	assert.JSONEq(t, `[]`, string(resBytes))
-
+	res, err = rh.JSONSet("arrtrim", ".", 1)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	_, err = rh.JSONArrTrim("arrtrim", ".", 0, 1)
+	assert.Contains(t, err.Error(), "not an array")
 }
 
 func TestJsonArrIndexMixCommand(t *testing.T) {

@@ -417,7 +417,12 @@ func getType(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	case ajson.String:
 		return "string", false, nil
 	case ajson.Numeric:
-		return "integer", false, nil
+		val, _ := o.GetNumeric()
+		if val == float64(int(val)) {
+			return "integer", false, nil
+		} else {
+			return "number", false, nil
+		}
 	case ajson.Bool:
 		return "boolean", false, nil
 	case ajson.Array:
