@@ -434,6 +434,17 @@ func getType(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	}
 }
 
+func getStrLen(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+	if o.IsString() {
+		val, err := o.GetString()
+		if err != nil {
+			return redcon.SimpleInt(0), false, xerror.ErrPathNotString
+		}
+		return redcon.SimpleInt(len(val)), false, nil
+	}
+	return redcon.SimpleInt(0), false, xerror.ErrPathNotString
+}
+
 func getObjLen(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	if o.IsObject() {
 		return redcon.SimpleInt(o.Size()), false, nil
@@ -680,6 +691,7 @@ var JsonCallbackFucs = map[string]JsonCallback{
 	JSONARRTRIM_COMMAND:   trimArr,
 	JSONARRPOP_COMMAND:    popArr,
 	JSONTOGGLE_COMMAND:    toggle,
+	JSONSTRLEN_COMMAND:    getStrLen,
 }
 
 // JSON.ARRTRIM key path start stop
@@ -760,6 +772,20 @@ func (c *Command) JsonArrLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	return c.jsonCallbackHandle(txn, args[0], path, nil, false, JSONARRLEN_COMMAND)
 }
 
+// JSON.STRLEN key [path]
+func (c *Command) JsonStrLenHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 1 && len(args) != 2 {
+		return txn.SetWrongArgs(JSONSTRLEN_COMMAND)
+	}
+	var path []byte
+	if len(args) == 1 {
+		path = []byte(".")
+	} else {
+		path = args[1]
+	}
+	return c.jsonCallbackHandle(txn, args[0], path, nil, false, JSONSTRLEN_COMMAND)
+}
+
 // JSON.OBJLEN key [path]
 func (c *Command) JsonObjLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 && len(args) != 2 {
@@ -806,6 +832,13 @@ func (c *Command) jsonCallbackHandle(txn *store.Txn, k, path []byte, args [][]by
 	object := NewObject(txn, StringType, k)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, clear)
+	if err == store.KeyNotFound {
+		if cmd == JSONSTRLEN_COMMAND ||
+			cmd == JSONARRLEN_COMMAND ||
+			cmd == JSONOBJLEN_COMMAND {
+			return nil
+		}
+	}
 	if err != nil {
 		return txn.SetError(err)
 	}

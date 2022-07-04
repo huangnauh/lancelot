@@ -1204,6 +1204,10 @@ func NewCommand(red *redcon.Server) *Command {
 			ID:   174,
 			Typo: JsonType,
 		},
+		JSONSTRLEN_COMMAND: {
+			Name: JSONSTRLEN_COMMAND,
+			Func: c.JsonStrLenHandle,
+		},
 		// ------------------- json end 191 ---------------------------
 		// ------------------- script start 192 ---------------------------
 

@@ -99,6 +99,7 @@ var (
 	ErrKeyIsLocked              = RedisNew("key is locked")
 	ErrPathNotExist             = RedisNew("Path does not exist")
 	ErrPathNotObject            = RedisNew("Path does not an object")
+	ErrPathNotString            = RedisNew("Path does not a string")
 	ErrPathNotBool              = RedisNew("Path does not exist or not a bool")
 	ErrPathNotArray             = RedisNew("Path does not an array")
 

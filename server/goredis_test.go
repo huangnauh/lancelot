@@ -139,6 +139,49 @@ func TestRedisJsonValue(t *testing.T) {
 	}
 }
 
+func TestJsonStrLenCommand(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	key := "strlen"
+	defer func() {
+		_, err := c.Del(context.Background(), key).Result()
+		assert.NoError(t, err)
+		err = c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	_, err := rh.JSONArrLen("notexists", ".bar")
+	assert.Equal(t, redis.Nil, err)
+	res, err := rh.JSONSet(key, ".", docs["basic"])
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = rh.JSONStrLen(key, ".string")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(12), res)
+	res, err = rh.JSONObjLen(key, ".dict")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), res)
+	res, err = rh.JSONArrLen(key, ".arr")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(6), res)
+
+	_, err = rh.JSONArrLen(key, ".bool")
+	assert.Contains(t, err.Error(), "not an array")
+	_, err = rh.JSONStrLen(key, ".none")
+	assert.Contains(t, err.Error(), "not a string")
+	_, err = rh.JSONObjLen(key, ".int")
+	assert.Contains(t, err.Error(), "not an object")
+	_, err = rh.JSONStrLen(key, ".num")
+	assert.Contains(t, err.Error(), "not a string")
+	_, err = rh.JSONArrLen(key, ".foo")
+	assert.Contains(t, err.Error(), "not exist")
+	_, err = rh.JSONArrLen(key, ".arr[999]")
+	assert.Contains(t, err.Error(), "not exist")
+}
+
 func TestJsonTypeCommand(t *testing.T) {
 	t.Parallel()
 	c := redis.NewClient(&redis.Options{
