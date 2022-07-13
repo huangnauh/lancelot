@@ -139,6 +139,126 @@ func TestRedisJsonValue(t *testing.T) {
 	}
 }
 
+func TestJsonNumIncrCommand(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	key := "numincr"
+	defer func() {
+		_, err := c.Del(context.Background(), key).Result()
+		assert.NoError(t, err)
+		err = c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	res, err := rh.JSONSet(key, ".", map[string]interface{}{
+		"foo": 0, "bar": "baz",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = rh.JSONNumIncrBy(key, ".foo", 1)
+	assert.NoError(t, err)
+	resf, err := strconv.ParseFloat(string(res.([]byte)), 64)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(1), resf)
+	res, err = rh.JSONGet(key, ".foo")
+	assert.NoError(t, err)
+	resf, err = strconv.ParseFloat(string(res.([]byte)), 64)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(1), resf)
+
+	ctx := context.Background()
+	cmd := redis.NewFloatCmd(ctx, "JSON.NumIncrby", key, ".foo", 2)
+	err = c.Process(ctx, cmd)
+	assert.NoError(t, err)
+	f, err := cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, float64(3), f)
+	cmd = redis.NewFloatCmd(ctx, "JSON.NumIncrby", key, ".foo", .5)
+	err = c.Process(ctx, cmd)
+	assert.NoError(t, err)
+	f, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, float64(3.5), f)
+
+	cmd = redis.NewFloatCmd(ctx, "JSON.NumIncrby", key, ".bar", 1)
+	_ = c.Process(ctx, cmd)
+	_, err = cmd.Result()
+	assert.Contains(t, err.Error(), "not a number")
+	cmd = redis.NewFloatCmd(ctx, "JSON.NumIncrby", key, ".fuzz", 1)
+	_ = c.Process(ctx, cmd)
+	_, err = cmd.Result()
+	assert.Contains(t, err.Error(), "Path does not exist")
+
+	res, err = rh.JSONSet(key, ".", 0)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	cmd = redis.NewFloatCmd(ctx, "JSON.NumIncrby", key, ".", 1)
+	err = c.Process(ctx, cmd)
+	assert.NoError(t, err)
+	f, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, float64(1), f)
+	cmd = redis.NewFloatCmd(ctx, "JSON.NumIncrby", key, ".", 1.5)
+	err = c.Process(ctx, cmd)
+	assert.NoError(t, err)
+	f, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, float64(2.5), f)
+
+	res, err = rh.JSONSet(key, ".", map[string]interface{}{
+		"foo": 0, "bar": 42,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	cmd = redis.NewFloatCmd(ctx, "JSON.NUMINCRBY", key, "foo", 1)
+	err = c.Process(ctx, cmd)
+	assert.NoError(t, err)
+	f, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, float64(1), f)
+	cmd = redis.NewFloatCmd(ctx, "JSON.NUMMULTBY", key, "bar", 2)
+	err = c.Process(ctx, cmd)
+	assert.NoError(t, err)
+	f, err = cmd.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, float64(84), f)
+	resBytes, err := Bytes(rh.JSONGet(key, "."))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `{"foo": 1, "bar": 84}`, string(resBytes))
+}
+
+func TestJsonObjKeysCommand(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	key := "objkeys"
+	defer func() {
+		_, err := c.Del(context.Background(), key).Result()
+		assert.NoError(t, err)
+		err = c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	res, err := rh.JSONSet(key, ".", docs["types"])
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = rh.JSONObjKeys(key, ".")
+	assert.NoError(t, err)
+	types := docs["types"].(map[string]interface{})
+	assert.Equal(t, len(types), len(res.([]string)))
+	for _, k := range res.([]string) {
+		_, ok := types[k]
+		assert.Equal(t, ok, true)
+	}
+	_, err = rh.JSONObjKeys(key, ".null")
+	assert.Contains(t, err.Error(), "not an object")
+}
+
 func TestJsonStrLenCommand(t *testing.T) {
 	t.Parallel()
 	c := redis.NewClient(&redis.Options{

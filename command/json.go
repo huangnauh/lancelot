@@ -3,6 +3,7 @@ package command
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -408,9 +409,9 @@ func (c *Command) jsonGet(txn *store.Txn, object *Object, root *ajson.Node, path
 	return result, nil
 }
 
-type JsonCallback func(o *ajson.Node, args [][]byte) (interface{}, bool, error)
+type JsonCallback func(o *ajson.Node, args []interface{}) (interface{}, bool, error)
 
-func getType(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+func getType(o *ajson.Node, args []interface{}) (interface{}, bool, error) {
 	switch o.Type() {
 	case ajson.Null:
 		return "null", false, nil
@@ -434,7 +435,7 @@ func getType(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	}
 }
 
-func getStrLen(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+func getStrLen(o *ajson.Node, args []interface{}) (interface{}, bool, error) {
 	if o.IsString() {
 		val, err := o.GetString()
 		if err != nil {
@@ -445,21 +446,21 @@ func getStrLen(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	return redcon.SimpleInt(0), false, xerror.ErrPathNotString
 }
 
-func getObjLen(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+func getObjLen(o *ajson.Node, args []interface{}) (interface{}, bool, error) {
 	if o.IsObject() {
 		return redcon.SimpleInt(o.Size()), false, nil
 	}
 	return nil, false, xerror.ErrPathNotObject
 }
 
-func getObjKeys(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+func getObjKeys(o *ajson.Node, args []interface{}) (interface{}, bool, error) {
 	if o.IsObject() {
 		return o.Keys(), false, nil
 	}
 	return nil, false, xerror.ErrPathNotObject
 }
 
-func toggle(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+func toggle(o *ajson.Node, args []interface{}) (interface{}, bool, error) {
 	b, err := o.GetBool()
 	if err != nil {
 		return nil, false, xerror.ErrPathNotBool
@@ -474,38 +475,14 @@ func toggle(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	return redcon.SimpleInt(1), true, nil
 }
 
-func getArrLen(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+func getArrLen(o *ajson.Node, args []interface{}) (interface{}, bool, error) {
 	if o.IsArray() {
 		return redcon.SimpleInt(o.Size()), false, nil
 	}
 	return nil, false, xerror.ErrPathNotArray
 }
 
-func getArrIndex(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
-	value, err := ajson.Unmarshal(args[0])
-	if err != nil {
-		utils.ZapLog.Error("arrindex",
-			zap.ByteString("value", args[0]),
-			zap.Error(err))
-		return redcon.SimpleInt(0), false, xerror.InvalidJsonError
-	}
-	var start, end int
-	if len(args) > 1 {
-		start, err = strconv.Atoi(utils.B2S(args[1]))
-		if err != nil {
-			utils.ZapLog.Error("arrtrim",
-				zap.ByteString("start", args[0]), zap.Error(err))
-			return nil, false, xerror.ErrNotInteger
-		}
-	}
-	if len(args) > 2 {
-		end, err = strconv.Atoi(utils.B2S(args[2]))
-		if err != nil {
-			utils.ZapLog.Error("arrtrim",
-				zap.ByteString("end", args[1]), zap.Error(err))
-			return nil, false, xerror.ErrNotInteger
-		}
-	}
+func getArrIndex(o *ajson.Node, args []interface{}) (interface{}, bool, error) {
 	// utils.ZapLog.Info("arrindex",
 	// 	zap.ByteString("value", args[0]),
 	// 	zap.Any("object", o))
@@ -516,6 +493,10 @@ func getArrIndex(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	if length == 0 {
 		return redcon.SimpleInt(-1), false, nil
 	}
+
+	value := args[0].(*ajson.Node)
+	start := args[1].(int)
+	end := args[2].(int)
 	if start < 0 {
 		start += length
 	}
@@ -548,53 +529,98 @@ func getArrIndex(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	return redcon.SimpleInt(-1), false, nil
 }
 
-func appendArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+func appendArr(o *ajson.Node, args []interface{}) (interface{}, bool, error) {
 	change := false
 	for _, v := range args {
-		value, err := ajson.Unmarshal(v)
+		value := v.(*ajson.Node)
+		err := o.AppendArray(value)
 		if err != nil {
 			utils.ZapLog.Error("arrindex",
-				zap.ByteString("value", v),
-				zap.Error(err))
-			return redcon.SimpleInt(0), false, xerror.InvalidJsonError
-		}
-		err = o.AppendArray(value)
-		if err != nil {
-			utils.ZapLog.Error("arrindex",
-				zap.ByteString("value", v),
+				zap.Any("value", v),
 				zap.Error(err))
 			return nil, false, err
 		}
-		utils.ZapLog.Info("arrindex",
-			zap.Any("array", o),
-			zap.ByteString("value", v),
-		)
+		// utils.ZapLog.Info("arrindex",
+		// 	zap.Any("array", o),
+		// 	zap.Any("value", v),
+		// )
 		change = true
 	}
 	return redcon.SimpleInt(o.Size()), change, nil
 }
 
-func insertArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
-	index, err := strconv.Atoi(utils.B2S(args[0]))
+func numIncrBy(o *ajson.Node, args []interface{}) (interface{}, bool, error) {
+	return numby(o, args, INCR)
+}
+
+func numMultBy(o *ajson.Node, args []interface{}) (interface{}, bool, error) {
+	return numby(o, args, MULT)
+}
+
+func numby(o *ajson.Node, args []interface{}, opt string) (interface{}, bool, error) {
+	num := args[0].(float64)
+	v, err := o.GetNumeric()
 	if err != nil {
-		utils.ZapLog.Error("arrindex", zap.ByteString("index", args[0]), zap.Error(err))
-		return redcon.SimpleInt(0), false, xerror.InvalidJsonError
+		utils.ZapLog.Error("numby", zap.Float64("num", num), zap.Error(err))
+		return 0, false, xerror.ErrPathNotNumber
 	}
+	var newV float64
+	if opt == INCR {
+		if num == 0 {
+			return v, false, nil
+		}
+		ok := utils.ValidIncrementFloat(v, num)
+		if !ok {
+			return 0, false, xerror.ErrOverflow
+		}
+		newV = v + num
+	} else if opt == MULT {
+		if num == 1 || v == 0 {
+			return v, false, nil
+		}
+		ok := utils.ValidMultiFloat(v, num)
+		if !ok {
+			return 0, false, xerror.ErrOverflow
+		}
+		newV = v * num
+	}
+	err = o.SetNumeric(newV)
+	if err != nil {
+		utils.ZapLog.Error("numby", zap.Float64("num", num), zap.Error(err))
+		return 0, false, xerror.InvalidJsonError
+	}
+	return newV, true, nil
+}
+
+func appendStr(o *ajson.Node, args []interface{}) (interface{}, bool, error) {
+	value := args[0].(string)
+	v, err := o.GetString()
+	if err != nil {
+		utils.ZapLog.Error("str-append", zap.String("value", value), zap.Error(err))
+		return redcon.SimpleInt(0), false, xerror.ErrPathNotString
+	}
+	if value == "" {
+		return redcon.SimpleInt(len(v)), false, nil
+	}
+	newV := v + value
+	err = o.SetString(newV)
+	if err != nil {
+		utils.ZapLog.Error("str-append", zap.String("value", value), zap.Error(err))
+		return redcon.SimpleInt(0), false, xerror.ErrPathNotString
+	}
+	return redcon.SimpleInt(len(newV)), true, nil
+}
+
+func insertArr(o *ajson.Node, args []interface{}) (interface{}, bool, error) {
+	index := args[0].(int)
 	vs := make([]*ajson.Node, 0, len(args)-1)
 	for _, v := range args[1:] {
-		value, err := ajson.Unmarshal(v)
-		if err != nil {
-			utils.ZapLog.Error("arrindex",
-				zap.ByteString("value", v),
-				zap.Error(err))
-			return redcon.SimpleInt(0), false, xerror.InvalidJsonError
-		}
-		vs = append(vs, value)
+		vs = append(vs, v.(*ajson.Node))
 	}
 	if len(vs) == 0 {
 		return redcon.SimpleInt(o.Size()), false, nil
 	}
-	err = o.InsertArray(index, vs...)
+	err := o.InsertArray(index, vs...)
 	if err != nil {
 		utils.ZapLog.Error("arrindex",
 			zap.Any("values", vs),
@@ -604,7 +630,7 @@ func insertArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	return redcon.SimpleInt(o.Size()), true, nil
 }
 
-func trimArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+func trimArr(o *ajson.Node, args []interface{}) (interface{}, bool, error) {
 	if !o.IsArray() {
 		return nil, false, xerror.ErrPathNotArray
 	}
@@ -612,18 +638,8 @@ func trimArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	if n == 0 {
 		return redcon.SimpleInt(0), false, nil
 	}
-	start, err := strconv.Atoi(utils.B2S(args[0]))
-	if err != nil {
-		utils.ZapLog.Error("arrtrim",
-			zap.ByteString("start", args[0]), zap.Error(err))
-		return nil, false, xerror.ErrNotInteger
-	}
-	end, err := strconv.Atoi(utils.B2S(args[1]))
-	if err != nil {
-		utils.ZapLog.Error("arrtrim",
-			zap.ByteString("end", args[1]), zap.Error(err))
-		return nil, false, xerror.ErrNotInteger
-	}
+	start := args[0].(int)
+	end := args[1].(int)
 	change, err := o.TrimIndex(start, end)
 	if err != nil {
 		utils.ZapLog.Error("arrtrim",
@@ -637,7 +653,7 @@ func trimArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	return redcon.SimpleInt(o.Size()), change, nil
 }
 
-func popArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
+func popArr(o *ajson.Node, args []interface{}) (interface{}, bool, error) {
 	if !o.IsArray() {
 		return nil, false, xerror.ErrPathNotArray
 	}
@@ -648,12 +664,7 @@ func popArr(o *ajson.Node, args [][]byte) (interface{}, bool, error) {
 	index := n - 1
 	var err error
 	if len(args) > 0 {
-		index, err = strconv.Atoi(utils.B2S(args[0]))
-		if err != nil {
-			utils.ZapLog.Error("arrindex",
-				zap.ByteString("index", args[0]), zap.Error(err))
-			return nil, false, xerror.ErrInvalidIndex
-		}
+		index = args[0].(int)
 		if index >= n {
 			index = n - 1
 		}
@@ -690,8 +701,11 @@ var JsonCallbackFucs = map[string]JsonCallback{
 	JSONARRINSERT_COMMAND: insertArr,
 	JSONARRTRIM_COMMAND:   trimArr,
 	JSONARRPOP_COMMAND:    popArr,
+	JSONNUMINCRBY_COMMAND: numIncrBy,
+	JSONNUMMULTBY_COMMAND: numMultBy,
 	JSONTOGGLE_COMMAND:    toggle,
 	JSONSTRLEN_COMMAND:    getStrLen,
+	JSONSTRAPPEND_COMMAND: appendStr,
 }
 
 // JSON.ARRTRIM key path start stop
@@ -699,7 +713,19 @@ func (c *Command) JsonArrTrimHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 4 {
 		return txn.SetWrongArgs(JSONARRTRIM_COMMAND)
 	}
-	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], true, JSONARRTRIM_COMMAND)
+	start, err := strconv.Atoi(utils.B2S(args[2]))
+	if err != nil {
+		utils.ZapLog.Error("arrtrim",
+			zap.ByteString("start", args[2]), zap.Error(err))
+		return txn.SetError(xerror.ErrNotInteger)
+	}
+	end, err := strconv.Atoi(utils.B2S(args[3]))
+	if err != nil {
+		utils.ZapLog.Error("arrtrim",
+			zap.ByteString("end", args[3]), zap.Error(err))
+		return txn.SetError(xerror.ErrNotInteger)
+	}
+	return c.jsonCallbackHandle(txn, args[0], args[1], []interface{}{start, end}, true, JSONARRTRIM_COMMAND)
 }
 
 // JSON.ARRPOP key [ path [index]]
@@ -713,11 +739,17 @@ func (c *Command) JsonArrPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	} else {
 		path = args[1]
 	}
-	var a [][]byte
+	var values []interface{}
 	if len(args) == 3 {
-		a = [][]byte{args[2]}
+		index, err := strconv.Atoi(utils.B2S(args[2]))
+		if err != nil {
+			utils.ZapLog.Error("arrindex",
+				zap.ByteString("index", args[2]), zap.Error(err))
+			return txn.SetError(xerror.ErrInvalidIndex)
+		}
+		values = []interface{}{index}
 	}
-	return c.jsonCallbackHandle(txn, args[0], path, a, true, JSONARRPOP_COMMAND)
+	return c.jsonCallbackHandle(txn, args[0], path, values, true, JSONARRPOP_COMMAND)
 }
 
 // JSON.ARRINSERT key path index value [value ...]
@@ -725,7 +757,25 @@ func (c *Command) JsonArrInsertHandle(txn *store.Txn, args [][]byte) interface{}
 	if len(args) < 4 {
 		return txn.SetWrongArgs(JSONARRINSERT_COMMAND)
 	}
-	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], true, JSONARRINSERT_COMMAND)
+
+	values := make([]interface{}, 0, len(args)-2)
+	index, err := strconv.Atoi(utils.B2S(args[2]))
+	if err != nil {
+		utils.ZapLog.Error("arrinsert", zap.ByteString("index", args[2]), zap.Error(err))
+		return txn.SetError(xerror.ErrInvalidIndex)
+	}
+	values = append(values, index)
+	for _, v := range args[3:] {
+		value, err := ajson.Unmarshal(v)
+		if err != nil {
+			utils.ZapLog.Error("arrindex",
+				zap.ByteString("value", v),
+				zap.Error(err))
+			return txn.SetError(xerror.InvalidJsonError)
+		}
+		values = append(values, value)
+	}
+	return c.jsonCallbackHandle(txn, args[0], args[1], values, true, JSONARRINSERT_COMMAND)
 }
 
 // JSON.ARRAPPEND key path value [value ...]
@@ -733,7 +783,18 @@ func (c *Command) JsonArrAppendHandle(txn *store.Txn, args [][]byte) interface{}
 	if len(args) < 3 {
 		return txn.SetWrongArgs(JSONARRAPPEND_COMMAND)
 	}
-	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], true, JSONARRAPPEND_COMMAND)
+	values := make([]interface{}, 0, len(args)-2)
+	for _, v := range args[2:] {
+		value, err := ajson.Unmarshal(v)
+		if err != nil {
+			utils.ZapLog.Error("arrindex",
+				zap.ByteString("value", v),
+				zap.Error(err))
+			return txn.SetError(xerror.InvalidJsonError)
+		}
+		values = append(values, value)
+	}
+	return c.jsonCallbackHandle(txn, args[0], args[1], values, true, JSONARRAPPEND_COMMAND)
 }
 
 // JSON.ARRINDEX key path value [ start [stop]]
@@ -741,7 +802,88 @@ func (c *Command) JsonArrIndexHandle(txn *store.Txn, args [][]byte) interface{} 
 	if len(args) < 3 || len(args) > 5 {
 		return txn.SetWrongArgs(JSONARRINDEX_COMMAND)
 	}
-	return c.jsonCallbackHandle(txn, args[0], args[1], args[2:], false, JSONARRINDEX_COMMAND)
+	value, err := ajson.Unmarshal(args[0])
+	if err != nil {
+		utils.ZapLog.Error("arrindex",
+			zap.ByteString("value", args[0]),
+			zap.Error(err))
+		return txn.SetError(xerror.InvalidJsonError)
+	}
+	var start, end int
+	if len(args) > 1 {
+		start, err = strconv.Atoi(utils.B2S(args[1]))
+		if err != nil {
+			utils.ZapLog.Error("arrtrim",
+				zap.ByteString("start", args[0]), zap.Error(err))
+			return txn.SetError(xerror.ErrNotInteger)
+		}
+	}
+	if len(args) > 2 {
+		end, err = strconv.Atoi(utils.B2S(args[2]))
+		if err != nil {
+			utils.ZapLog.Error("arrtrim",
+				zap.ByteString("end", args[1]), zap.Error(err))
+			return txn.SetError(xerror.ErrNotInteger)
+		}
+	}
+	return c.jsonCallbackHandle(txn, args[0], args[1], []interface{}{value, start, end}, false, JSONARRINDEX_COMMAND)
+}
+
+// JSON.STRAPPEND key [path] value
+func (c *Command) JsonStrAppendHandle(txn *store.Txn, args [][]byte) interface{} {
+	var path, argValue []byte
+	if len(args) == 2 {
+		path = []byte(".")
+		argValue = args[1]
+	} else if len(args) == 3 {
+		path = args[1]
+		argValue = args[2]
+	} else {
+		return txn.SetWrongArgs(JSONSTRAPPEND_COMMAND)
+	}
+	value, err := ajson.Unmarshal(argValue)
+	if err != nil {
+		utils.ZapLog.Error("str-append",
+			zap.ByteString("value", argValue),
+			zap.Error(err))
+		return txn.SetError(xerror.InvalidJsonError)
+	}
+	str, err := value.GetString()
+	if err != nil {
+		utils.ZapLog.Error("append-str",
+			zap.Any("value", value),
+			zap.Error(err))
+		return txn.SetError(xerror.ErrPathNotString)
+	}
+	return c.jsonCallbackHandle(txn, args[0], path, []interface{}{str}, true, JSONSTRAPPEND_COMMAND)
+}
+
+// JSON.NUMINCRBY key path value
+func (c *Command) JsonNumIncrByHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 3 {
+		return txn.SetWrongArgs(JSONNUMINCRBY_COMMAND)
+	}
+	num, err := strconv.ParseFloat(utils.B2S(args[2]), 64)
+	if err != nil || math.IsNaN(num) || math.IsInf(num, 0) {
+		utils.ZapLog.Error("numIncrby", zap.ByteString("key", args[0]),
+			zap.ByteString("incr", args[2]), zap.Error(err))
+		return txn.SetError(xerror.ErrInvalidFloat)
+	}
+	return c.jsonCallbackHandle(txn, args[0], args[1], []interface{}{num}, true, JSONNUMINCRBY_COMMAND)
+}
+
+// JSON.NUMMULTBY key path value
+func (c *Command) JsonNumMultByHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 3 {
+		return txn.SetWrongArgs(JSONNUMMULTBY_COMMAND)
+	}
+	num, err := strconv.ParseFloat(utils.B2S(args[2]), 64)
+	if err != nil || math.IsNaN(num) || math.IsInf(num, 0) {
+		utils.ZapLog.Error("numMultby", zap.ByteString("key", args[0]),
+			zap.ByteString("mult", args[2]), zap.Error(err))
+		return txn.SetError(xerror.ErrInvalidFloat)
+	}
+	return c.jsonCallbackHandle(txn, args[0], args[1], []interface{}{num}, true, JSONNUMMULTBY_COMMAND)
 }
 
 // JSON.TOGGLE key [path]
@@ -828,7 +970,7 @@ func (c *Command) JsonObjKeysHandle(txn *store.Txn, args [][]byte) interface{} {
 	return c.jsonCallbackHandle(txn, args[0], path, nil, false, JSONOBJKEYS_COMMAND)
 }
 
-func (c *Command) jsonCallbackHandle(txn *store.Txn, k, path []byte, args [][]byte, clear bool, cmd string) interface{} {
+func (c *Command) jsonCallbackHandle(txn *store.Txn, k, path []byte, args []interface{}, clear bool, cmd string) interface{} {
 	object := NewObject(txn, StringType, k)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, clear)

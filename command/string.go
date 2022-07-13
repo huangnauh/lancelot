@@ -43,6 +43,8 @@ const (
 	GET = "get"
 	//INCR
 	INCR = "incr"
+	// MULT
+	MULT = "mult"
 
 	NoCheck CheckType = 0x00
 	// Only set the key if it does not already exist.

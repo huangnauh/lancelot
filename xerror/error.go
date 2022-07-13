@@ -102,6 +102,7 @@ var (
 	ErrPathNotString            = RedisNew("Path does not a string")
 	ErrPathNotBool              = RedisNew("Path does not exist or not a bool")
 	ErrPathNotArray             = RedisNew("Path does not an array")
+	ErrPathNotNumber            = RedisNew("Path does not a number")
 
 	MissingTxn        = RedisNew("missing transcation")
 	InvalidTxn        = RedisNew("invalid transcation")

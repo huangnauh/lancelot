@@ -67,3 +67,16 @@ func ValidIncrementFloat(v, i float64) bool {
 	}
 	return true
 }
+
+func ValidMultiFloat(v, i float64) bool {
+	if v < 0 {
+		v = -v
+	}
+	if i < 0 {
+		i = -i
+	}
+	if (v >= 1) && math.MaxFloat64/v < i {
+		return false
+	}
+	return true
+}

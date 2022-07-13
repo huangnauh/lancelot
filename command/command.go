@@ -1205,8 +1205,29 @@ func NewCommand(red *redcon.Server) *Command {
 			Typo: JsonType,
 		},
 		JSONSTRLEN_COMMAND: {
-			Name: JSONSTRLEN_COMMAND,
-			Func: c.JsonStrLenHandle,
+			Name:     JSONSTRLEN_COMMAND,
+			Func:     c.JsonStrLenHandle,
+			ID:       175,
+			Typo:     JsonType,
+			ReadOnly: true,
+		},
+		JSONNUMINCRBY_COMMAND: {
+			Name: JSONNUMINCRBY_COMMAND,
+			Func: c.JsonNumIncrByHandle,
+			ID:   176,
+			Typo: JsonType,
+		},
+		JSONNUMMULTBY_COMMAND: {
+			Name: JSONNUMMULTBY_COMMAND,
+			Func: c.JsonNumMultByHandle,
+			ID:   177,
+			Typo: JsonType,
+		},
+		JSONSTRAPPEND_COMMAND: {
+			Name: JSONSTRAPPEND_COMMAND,
+			Func: c.JsonStrAppendHandle,
+			ID:   178,
+			Typo: JsonType,
 		},
 		// ------------------- json end 191 ---------------------------
 		// ------------------- script start 192 ---------------------------
