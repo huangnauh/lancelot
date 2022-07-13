@@ -44,7 +44,7 @@ func (c *Command) JsonDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	return c.jsonClearOrDelHandle(txn, args, true)
 }
 func (c *Command) jsonClearOrDelHandle(txn *store.Txn, args [][]byte, delete bool) interface{} {
-	object := NewObject(txn, StringType, args[0])
+	object := NewObject(txn, JsonType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, true)
 	if err == store.KeyNotFound {
@@ -228,7 +228,7 @@ func (c *Command) JsonSetHandle(txn *store.Txn, args [][]byte) interface{} {
 		}
 	}
 
-	object := NewObject(txn, StringType, args[0])
+	object := NewObject(txn, JsonType, args[0])
 	key := object.GetKeyBytes()
 	var create ChangeType
 	var oldValue []byte
@@ -971,7 +971,7 @@ func (c *Command) JsonObjKeysHandle(txn *store.Txn, args [][]byte) interface{} {
 }
 
 func (c *Command) jsonCallbackHandle(txn *store.Txn, k, path []byte, args []interface{}, clear bool, cmd string) interface{} {
-	object := NewObject(txn, StringType, k)
+	object := NewObject(txn, JsonType, k)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, clear)
 	if err == store.KeyNotFound {
@@ -1052,7 +1052,7 @@ func (c *Command) jsonCallbackHandle(txn *store.Txn, k, path []byte, args []inte
 }
 
 func (c *Command) jsonGetHandle(txn *store.Txn, k, path []byte, clear bool) (*ajson.Node, error) {
-	object := NewObject(txn, StringType, k)
+	object := NewObject(txn, JsonType, k)
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, clear)
 	if err == store.KeyNotFound {
@@ -1109,7 +1109,7 @@ func (c *Command) JsonGetHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongArgs(JSONGET_COMMAND)
 	}
 
-	object := NewObject(txn, StringType, args[0])
+	object := NewObject(txn, JsonType, args[0])
 	key := object.GetKeyBytes()
 	err := getTxnObject(txn, key, object, false)
 	if err == store.KeyNotFound {
