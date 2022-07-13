@@ -53,7 +53,7 @@ require (
 
 replace (
 	github.com/go-redis/redis/v8 v8.11.4 => github.com/huangnauh/redis/v8 v8.11.5-0.20211029022615-7f6b8adada1c
-	github.com/spyzhov/ajson v0.7.1 => github.com/huangnauh/ajson v0.7.2-a
+	github.com/spyzhov/ajson v0.7.1 => github.com/huangnauh/ajson v0.7.2-b
 	github.com/tikv/client-go/v2 v2.0.0-alpha.0.20211011083157-49c8dd23f1f0 => github.com/huangnauh/client-go/v2 v2.0.0-alpha.0.20220304080027-748d059ebe31
 	github.com/yuin/gopher-lua v0.0.0-20210529063254-f4c35e4016d9 => github.com/huangnauh/gopher-lua v0.0.0-20210930062039-32ec5e06c52a
 	google.golang.org/grpc => google.golang.org/grpc v1.29.1

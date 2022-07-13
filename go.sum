@@ -436,8 +436,8 @@ github.com/hashicorp/mdns v1.0.0/go.mod h1:tL+uN++7HEJ6SQLQ2/p+z2pH24WQKWjBPkE0m
 github.com/hashicorp/memberlist v0.1.3/go.mod h1:ajVTdAv/9Im8oMAAj5G31PhhMCZJV2pPBoIllUwCN7I=
 github.com/hashicorp/serf v0.8.2/go.mod h1:6hOLApaqBFA1NXqRQAsxw9QxuDEvNxSQRwA/JwenrHc=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
-github.com/huangnauh/ajson v0.7.2-a h1:8XlM8Xgeycp+AfJvqsgTU8C8y2h5u7kS2yz7W1cgtkk=
-github.com/huangnauh/ajson v0.7.2-a/go.mod h1:V+oq/7G2xWswUuKkBPqVkn9NDPU9vr3Ubnt7isb76TY=
+github.com/huangnauh/ajson v0.7.2-b h1:uhrRzrgwr/FAj6cBl2tklnU506ScKHQRFaQjqU6rVgg=
+github.com/huangnauh/ajson v0.7.2-b/go.mod h1:V+oq/7G2xWswUuKkBPqVkn9NDPU9vr3Ubnt7isb76TY=
 github.com/huangnauh/client-go/v2 v2.0.0-alpha.0.20220304080027-748d059ebe31 h1:EDOz8sbq5JqwcZ+0rZuS0TDBoZJCYI88sVRHInj7UOk=
 github.com/huangnauh/client-go/v2 v2.0.0-alpha.0.20220304080027-748d059ebe31/go.mod h1:00plYwQsQ5kBUmafHO+JkjznGgFaBokMZl82TZIbsQk=
 github.com/huangnauh/gopher-lua v0.0.0-20210930062039-32ec5e06c52a h1:sJszCP0VWByrmUpkwPY4EgzDa+bNRwB8//ypg5eJ1Qo=
