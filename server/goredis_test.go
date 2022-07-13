@@ -228,6 +228,43 @@ func TestJsonNumIncrCommand(t *testing.T) {
 	resBytes, err := Bytes(rh.JSONGet(key, "."))
 	assert.NoError(t, err)
 	assert.JSONEq(t, `{"foo": 1, "bar": 84}`, string(resBytes))
+
+	res, err = rh.JSONSet(key, ".", 1.6350000000001313e+308)
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	cmd = redis.NewFloatCmd(ctx, "JSON.NUMINCRBY", key, ".", 1.6350000000001313e+308)
+	err = c.Process(ctx, cmd)
+	assert.Contains(t, err.Error(), "overflow")
+	cmd = redis.NewFloatCmd(ctx, "JSON.NUMMULTBY", key, ".", 2)
+	err = c.Process(ctx, cmd)
+	assert.Contains(t, err.Error(), "overflow")
+	res, err = rh.JSONGet(key, ".")
+	assert.NoError(t, err)
+	resf, err = strconv.ParseFloat(string(res.([]byte)), 64)
+	assert.NoError(t, err)
+	assert.Equal(t, 1.6350000000001313e+308, resf)
+	res, err = rh.JSONSet(key, "$", map[string]interface{}{
+		"l1": map[string]interface{}{
+			"l2_a": 1.6350000000001313e+308,
+			"l2_b": 2,
+		}})
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	cmd1 := redis.NewSliceCmd(ctx, "JSON.NUMINCRBY", key, "$.l1.l2_a", 1.6350000000001313e+308)
+	err = c.Process(ctx, cmd1)
+	assert.NoError(t, err)
+	slice, err := cmd1.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, []interface{}{nil}, slice)
+	cmd1 = redis.NewSliceCmd(ctx, "JSON.NUMMULTBY", key, "$.l1.l2_a", 1.6350000000001313e+308)
+	err = c.Process(ctx, cmd1)
+	assert.NoError(t, err)
+	slice, err = cmd1.Result()
+	assert.NoError(t, err)
+	assert.Equal(t, []interface{}{nil}, slice)
+	resBytes, err = Bytes(rh.JSONGet(key, "$"))
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[{"l1":{"l2_a":1.6350000000001313e308,"l2_b":2}}]`, string(resBytes))
 }
 
 func TestJsonObjKeysCommand(t *testing.T) {
@@ -257,6 +294,37 @@ func TestJsonObjKeysCommand(t *testing.T) {
 	}
 	_, err = rh.JSONObjKeys(key, ".null")
 	assert.Contains(t, err.Error(), "not an object")
+}
+
+func TestJsonStrCommands(t *testing.T) {
+	t.Parallel()
+	c := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort),
+		Password: cfg.Auth.Pass})
+	key := "jsonstr"
+	defer func() {
+		_, err := c.Del(context.Background(), key).Result()
+		assert.NoError(t, err)
+		err = c.Close()
+		assert.NoError(t, err)
+	}()
+	rh := rejson.NewReJSONHandler()
+	rh.SetGoRedisClient(c)
+	res, err := rh.JSONSet(key, ".", "foo")
+	assert.NoError(t, err)
+	assert.Equal(t, "OK", res)
+	res, err = rh.JSONType(key, ".")
+	assert.NoError(t, err)
+	assert.Equal(t, res, "string")
+	res, err = rh.JSONStrLen(key, ".")
+	assert.NoError(t, err)
+	assert.Equal(t, res, int64(3))
+	res, err = rh.JSONStrAppend(key, ".", `"bar"`)
+	assert.NoError(t, err)
+	assert.Equal(t, res, int64(6))
+	resBytes, err := Bytes(rh.JSONGet(key, "."))
+	assert.NoError(t, err)
+	assert.Equal(t, `"foobar"`, string(resBytes))
 }
 
 func TestJsonStrLenCommand(t *testing.T) {
