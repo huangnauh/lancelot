@@ -802,27 +802,27 @@ func (c *Command) JsonArrIndexHandle(txn *store.Txn, args [][]byte) interface{} 
 	if len(args) < 3 || len(args) > 5 {
 		return txn.SetWrongArgs(JSONARRINDEX_COMMAND)
 	}
-	value, err := ajson.Unmarshal(args[0])
+	value, err := ajson.Unmarshal(args[2])
 	if err != nil {
 		utils.ZapLog.Error("arrindex",
-			zap.ByteString("value", args[0]),
+			zap.ByteString("value", args[2]),
 			zap.Error(err))
 		return txn.SetError(xerror.InvalidJsonError)
 	}
 	var start, end int
-	if len(args) > 1 {
-		start, err = strconv.Atoi(utils.B2S(args[1]))
+	if len(args) > 3 {
+		start, err = strconv.Atoi(utils.B2S(args[3]))
 		if err != nil {
 			utils.ZapLog.Error("arrtrim",
-				zap.ByteString("start", args[0]), zap.Error(err))
+				zap.ByteString("start", args[3]), zap.Error(err))
 			return txn.SetError(xerror.ErrNotInteger)
 		}
 	}
-	if len(args) > 2 {
-		end, err = strconv.Atoi(utils.B2S(args[2]))
+	if len(args) > 4 {
+		end, err = strconv.Atoi(utils.B2S(args[4]))
 		if err != nil {
 			utils.ZapLog.Error("arrtrim",
-				zap.ByteString("end", args[1]), zap.Error(err))
+				zap.ByteString("end", args[4]), zap.Error(err))
 			return txn.SetError(xerror.ErrNotInteger)
 		}
 	}

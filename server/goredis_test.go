@@ -1450,9 +1450,9 @@ func TestJsonSetWithPathErrors(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "OK", res)
 
-	res, err = Bytes(rh.JSONGet("setwithpath", "."))
+	resf, err := Bytes(rh.JSONGet("setwithpath", "."))
 	assert.NoError(t, err)
-	assert.Equal(t, []byte(`{"f":1,"0":1}`), res)
+	assert.JSONEq(t, `{"f":1,"0":1}`, string(resf))
 }
 
 func TestJsonGetWithBracketNotation(t *testing.T) {
