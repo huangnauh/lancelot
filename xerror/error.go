@@ -75,6 +75,9 @@ var (
 	ErrTimeoutNegative          = RedisNew("timeout is negative")
 	ErrLuaInvalidType           = RedisNew("lua invalid type")
 	ErrSyntax                   = RedisNew("syntax error")
+	ErrMustCreateRoot           = RedisNew("new objects must be created at the root")
+	ErrWrongStaticPath          = RedisNew("wrong static path")
+	ErrArrayOutOfRange          = RedisNew("array index out of range")
 	ErrMinMaxString             = RedisNew("min or max not valid string range item")
 	ErrNotExpire                = RedisNew("not expire")
 	WrongTypeErr                = WrongTypeNew("Operation against a key holding the wrong kind of value")
@@ -84,6 +87,7 @@ var (
 	UnsupportCmdFromScript      = RedisNew("This Redis command is not allowed from scripts")
 	UnknownCmdFromScript        = RedisNew("Unknown Redis command called from Lua script")
 	UnsupportFlushOption        = RedisNew("SCRIPT FLUSH only support SYNC|ASYNC option.")
+	UnsupportCmd                = RedisNew("This Redis command is not allowed")
 	WRONGPASS                   = RedisNew("WRONGPASS invalid username-password pair or user is disabled.")
 	ErrAuthentication           = RedisNew("Authentication required.")
 	ErrExceedMaxSize            = RedisNew("exceeds maximum allowed size")
@@ -93,6 +97,12 @@ var (
 	ErrResultNan                = RedisNew("resulting score is not a number (NaN)")
 	ErrStoreOption              = RedisNew("STORE option in GEORADIUS is not compatible with WITHDIST, WITHHASH and WITHCOORDS options")
 	ErrKeyIsLocked              = RedisNew("key is locked")
+	ErrPathNotExist             = RedisNew("Path does not exist")
+	ErrPathNotObject            = RedisNew("Path does not an object")
+	ErrPathNotString            = RedisNew("Path does not a string")
+	ErrPathNotBool              = RedisNew("Path does not exist or not a bool")
+	ErrPathNotArray             = RedisNew("Path does not an array")
+	ErrPathNotNumber            = RedisNew("Path does not a number")
 
 	MissingTxn        = RedisNew("missing transcation")
 	InvalidTxn        = RedisNew("invalid transcation")
@@ -119,6 +129,7 @@ var (
 	NotFoundCursor             = RedisNew("not found cursor")
 	InvalidChannel             = RedisNew("invalid channel name")
 	InvalidPartition           = RedisNew("invalid partition")
+	ErrInvalidIndex            = RedisNew("invalid index")
 	ErrOutOfRange              = RedisNew("index out of range")
 	ErrDBIndexOutOfRange       = RedisNew("DB index is out of range")
 	ErrOverflow                = RedisNew("increment or decrement would overflow")
@@ -234,13 +245,21 @@ func WrongUsernameError(username string) error {
 	return RedisNew(WrongUsernameString(username))
 }
 
+func PathNotExist(path string) string {
+	return fmt.Sprintf("Path '%s' does not exist", path)
+}
+
+func PathNotExistError(path string) error {
+	return RedisNew(MakeSafeString(PathNotExist(path)))
+}
+
 func MakeSafeErr(err error) error {
 	msg := MakeSafeString(err.Error())
 	return RedisNew(msg)
 }
 
 func MakeSafeString(msg string) string {
-	return strings.Replace(msg, "\n", ` `, -1)
+	return strings.ReplaceAll(strings.ReplaceAll(msg, "\n", ` `), "\r", ` `)
 }
 
 func MakeSafe(err string) error {

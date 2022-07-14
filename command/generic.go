@@ -358,7 +358,7 @@ func DeleteKeyReturn(txn *store.Txn, key []byte, object *Object, now int64, chan
 	if err != nil {
 		return txn.SetError(err)
 	}
-	return 1
+	return redcon.SimpleInt(1)
 }
 
 func DeleteKey(txn *store.Txn, key []byte, object *Object, now int64, change ChangeType) error {
