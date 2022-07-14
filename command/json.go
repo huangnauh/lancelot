@@ -1033,8 +1033,8 @@ func (c *Command) jsonCallbackHandle(txn *store.Txn, k, path []byte, args []inte
 		}
 	}
 	if change {
-		utils.ZapLog.Info("json callback",
-			zap.Any("root", root))
+		utils.ZapLog.Debug("json callback",
+			zap.Any("root", root), zap.Any("ret", ret))
 		err = c.setJsonValue(txn, key, object, root)
 		if err != nil {
 			return txn.SetError(err)
@@ -1048,6 +1048,10 @@ func (c *Command) jsonCallbackHandle(txn *store.Txn, k, path []byte, args []inte
 		return ret[0]
 	}
 
+	if cmd == JSONNUMINCRBY_COMMAND || cmd == JSONNUMMULTBY_COMMAND {
+		data, _ := json.Marshal(ret)
+		return data
+	}
 	return ret
 }
 
