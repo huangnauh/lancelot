@@ -5,10 +5,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/opentracing/basictracer-go"
 	"gitlab.s.upyun.com/platform/lancelot/metric"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"gitlab.s.upyun.com/platform/lancelot/version"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
 	"go.uber.org/zap"
 )
@@ -36,29 +38,69 @@ func (c *Command) checkSingle(conn *redcon.Conn, unwatch bool) (*store.Txn, bool
 	return newTxn, true
 }
 
-func (c *Command) SingleHandler(conn *redcon.Conn, txn *store.Txn, txnHandle TxnHandle, comma string, args [][]byte) error {
+func (c *Command) SingleHandler(conn *redcon.Conn, txn *store.Txn, txnHandle TxnHandle, comma string, args [][]byte) (interface{}, error) {
 	err := txn.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer txn.Rollback()
 	resp := txnHandle(txn, args)
 	utils.ZapLog.Debug("SingleHandler", zap.Any("resp", resp), zap.Error(txn.Err))
 	if txn.Err != nil {
+		// err, ok := resp.(error)
+		// if ok {
+		// 	WriteConnError(conn, comma, err)
+		// } else {
+		// 	txn.WriteAny(resp)
+		// }
+		return resp, nil
+	}
+	err = txn.Commit()
+	if err != nil {
+		return nil, err
+	}
+	// txn.WriteAny(resp)
+	return resp, nil
+}
+
+func writeResp(conn *redcon.Conn, txn *store.Txn, comma string, resp interface{}) {
+	if txn.Span != nil {
+		txn.Span.Finish()
+		spans := txn.SpanRecorder.GetSpans()
+		resp := make([][]string, len(spans))
+		for rIdx := range spans {
+			span := &spans[rIdx]
+			resp[rIdx] = make([]string, 3)
+			resp[rIdx][0] = span.Operation
+			resp[rIdx][1] = span.Start.String()
+			resp[rIdx][2] = span.Duration.String()
+			// var tags string
+			// if len(span.Tags) > 0 {
+			// 	tags = fmt.Sprintf("%v", span.Tags)
+			// }
+			// for _, l := range span.Logs {
+			// 	for _, field := range l.Fields {
+			// 		b.WriteString("Timestamp:")
+			// 		b.WriteString(l.Timestamp.String())
+			// 		b.WriteString("\r\n")
+			// 		b.WriteString("Value:")
+			// 		b.WriteString(field.Value().(string))
+			// 		b.WriteString("\r\n")
+			// 		b.WriteString("Tags:")
+			// 		b.WriteString(tags)
+			// 		b.WriteString("\r\n")
+			// 	}
+			// }
+		}
+		txn.WriteAny(resp)
+	} else {
 		err, ok := resp.(error)
 		if ok {
 			WriteConnError(conn, comma, err)
 		} else {
 			txn.WriteAny(resp)
 		}
-		return nil
 	}
-	err = txn.Commit()
-	if err != nil {
-		return err
-	}
-	txn.WriteAny(resp)
-	return nil
 }
 
 func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command) error {
@@ -69,29 +111,46 @@ func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command
 			txn.PendingErr = true
 		}
 		err := xerror.UnknownCommandError(comma)
-		WriteConnError(conn, DISCARD_COMMAND, err)
+		WriteConnError(conn, comma, err)
 		return err
 	}
 	txnHandle := handler.Func
-	args := cmd.Args[1:]
 	txn, single := c.checkSingle(conn, comma == UNWATCH_COMMAND)
 	utils.ZapLog.Debug("TxnHandler", zap.String("remote", conn.RemoteAddr()),
 		zap.Uint16("user-id", conn.UserId), zap.Uint8("db", conn.DBId),
 		zap.ByteStrings("args", cmd.Args), zap.Bool("single", single))
+	txn.Trace = strings.ToLower(utils.B2S(cmd.Args[0])) == TRACE_COMMAND
+	args := cmd.Args[1:]
+	if txn.Trace {
+		args = cmd.Args[2:]
+	}
 	if single {
+		if txn.Trace {
+			recorder := basictracer.NewInMemoryRecorder()
+			tracer := basictracer.New(recorder)
+			span := tracer.StartSpan(version.APP)
+			txn.Span = span
+			txn.SpanRecorder = recorder
+		}
 		var err error
+		var resp interface{}
 		for i := 0; i < 3; i++ {
-			err = c.SingleHandler(conn, txn, txnHandle, comma, args)
+			resp, err = c.SingleHandler(conn, txn, txnHandle, comma, args)
 			if err == nil {
+				writeResp(conn, txn, comma, resp)
 				return txn.Err
 			}
 			utils.ZapLog.Info("Retry SingleHandler", zap.String("cmd", cmd.String()), zap.Int("i", i), zap.Error(err))
 			time.Sleep(time.Millisecond * time.Duration(i+1))
 		}
-		WriteConnError(conn, comma, err)
+		writeResp(conn, txn, comma, err)
 		return err
 	}
 
+	if txn.Trace {
+		WriteConnError(conn, comma, xerror.ErrTraceInsideMulti)
+		return xerror.ErrTraceInsideMulti
+	}
 	txn.PendingReq = append(txn.PendingReq, cmd)
 	conn.WriteAny(Queued)
 

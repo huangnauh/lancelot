@@ -116,7 +116,7 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 	if conn.Closed() {
 		return
 	}
-	comma := strings.ToLower(utils.B2S(cmd.Args[0]))
+	var comma string
 	defer func() {
 		if err := recover(); err != nil {
 			var brokenPipe bool
@@ -137,6 +137,19 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 			}
 		}
 	}()
+
+	if len(cmd.Args) == 0 {
+		command.WriteConnError(conn, "", xerror.WrongArgsError(""))
+		return
+	}
+	comma = strings.ToLower(utils.B2S(cmd.Args[0]))
+	if comma == command.TRACE_COMMAND {
+		if len(cmd.Args) < 2 {
+			command.WriteConnError(conn, comma, xerror.WrongArgsError(comma))
+			return
+		}
+		comma = strings.ToLower(utils.B2S(cmd.Args[1]))
+	}
 	if comma != command.AUTH_COMMAND && !conn.Auth {
 		if !s.Command.Default.NoPass() {
 			command.WriteConnError(conn, comma, xerror.ErrAuthentication)

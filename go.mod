@@ -22,6 +22,8 @@ require (
 	github.com/nitishm/go-rejson/v4 v4.1.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.16.0
+	github.com/opentracing/basictracer-go v1.1.0
+	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pingcap/errors v0.11.5-0.20210513014640-40f9a1999b3b
 	github.com/pingcap/kvproto v0.0.0-20211011042309-a4518fcacbc8
 	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
