@@ -51,7 +51,11 @@ func TestMain(m *testing.M) {
 	conf := config.GetDefaultConfig()
 	cfg = &conf
 	utils.SetDevelopmentLog(cfg.LogLevel)
-	ser = server.NewServer(cfg)
+	var err error
+	ser, err = server.NewServer(cfg)
+	if err != nil {
+		panic(err)
+	}
 	redln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", cfg.Host, cfg.RedisPort))
 	if err != nil {
 		panic(err)

@@ -5,14 +5,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/opentracing/basictracer-go"
+	"go.uber.org/zap"
+
 	"gitlab.s.upyun.com/platform/lancelot/metric"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
 	"gitlab.s.upyun.com/platform/lancelot/store"
+	"gitlab.s.upyun.com/platform/lancelot/trace"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/version"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
-	"go.uber.org/zap"
 )
 
 func (c *Command) checkSingle(conn *redcon.Conn, unwatch bool) (*store.Txn, bool) {
@@ -66,33 +67,12 @@ func (c *Command) SingleHandler(conn *redcon.Conn, txn *store.Txn, txnHandle Txn
 func writeResp(conn *redcon.Conn, txn *store.Txn, comma string, resp interface{}) {
 	if txn.Span != nil {
 		txn.Span.Finish()
-		spans := txn.SpanRecorder.GetSpans()
-		resp := make([][]string, len(spans))
-		for rIdx := range spans {
-			span := &spans[rIdx]
-			resp[rIdx] = make([]string, 3)
-			resp[rIdx][0] = span.Operation
-			resp[rIdx][1] = span.Start.String()
-			resp[rIdx][2] = span.Duration.String()
-			// var tags string
-			// if len(span.Tags) > 0 {
-			// 	tags = fmt.Sprintf("%v", span.Tags)
-			// }
-			// for _, l := range span.Logs {
-			// 	for _, field := range l.Fields {
-			// 		b.WriteString("Timestamp:")
-			// 		b.WriteString(l.Timestamp.String())
-			// 		b.WriteString("\r\n")
-			// 		b.WriteString("Value:")
-			// 		b.WriteString(field.Value().(string))
-			// 		b.WriteString("\r\n")
-			// 		b.WriteString("Tags:")
-			// 		b.WriteString(tags)
-			// 		b.WriteString("\r\n")
-			// 	}
-			// }
+		traces, err := trace.GetTraces()
+		if err != nil {
+			WriteConnError(conn, comma, err)
+		} else {
+			txn.WriteAny(traces)
 		}
-		txn.WriteAny(resp)
 	} else {
 		err, ok := resp.(error)
 		if ok {
@@ -126,11 +106,9 @@ func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command
 	}
 	if single {
 		if txn.Trace {
-			recorder := basictracer.NewInMemoryRecorder()
-			tracer := basictracer.New(recorder)
+			tracer := trace.NewTrace()
 			span := tracer.StartSpan(version.APP)
 			txn.Span = span
-			txn.SpanRecorder = recorder
 		}
 		var err error
 		var resp interface{}

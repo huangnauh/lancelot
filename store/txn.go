@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
 	tikverr "github.com/tikv/client-go/v2/error"
@@ -29,23 +28,22 @@ const DefaultLockWait = 100
 
 type Txn struct {
 	*redcon.Conn
-	client       *Client
-	txn          *transaction.KVTxn
-	Multi        bool
-	Watch        bool
-	Exec         bool
-	Trace        bool
-	Span         opentracing.Span
-	SpanRecorder *basictracer.InMemorySpanRecorder
-	Err          error
-	PendingErr   bool
-	InScript     bool
-	Timestamp    uint64
-	Now          int64
-	ListLID      uint32
-	ListRID      uint32
-	Config       *config.Config
-	PendingReq   []redcon.Command
+	client     *Client
+	txn        *transaction.KVTxn
+	Multi      bool
+	Watch      bool
+	Exec       bool
+	Trace      bool
+	Span       opentracing.Span
+	Err        error
+	PendingErr bool
+	InScript   bool
+	Timestamp  uint64
+	Now        int64
+	ListLID    uint32
+	ListRID    uint32
+	Config     *config.Config
+	PendingReq []redcon.Command
 }
 
 // type Transaction interface {

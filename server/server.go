@@ -8,7 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
-	_ "net/http/pprof" // pprof
+	"net/http/pprof"
 	"os"
 	"runtime"
 	"strconv"
@@ -16,15 +16,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorilla/mux"
+	"go.uber.org/zap"
+
 	"gitlab.s.upyun.com/platform/lancelot/command"
 	"gitlab.s.upyun.com/platform/lancelot/config"
 	"gitlab.s.upyun.com/platform/lancelot/grpc"
 	"gitlab.s.upyun.com/platform/lancelot/metric"
 	"gitlab.s.upyun.com/platform/lancelot/proto/lancepb"
 	"gitlab.s.upyun.com/platform/lancelot/redcon"
+	"gitlab.s.upyun.com/platform/lancelot/trace"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
-	"go.uber.org/zap"
 )
 
 const (
@@ -188,9 +191,32 @@ func (s *Server) ServeRESP(conn *redcon.Conn, cmd redcon.Command) {
 	metric.Metric.RequestTotal.WithLabelValues(conn.UserName, strconv.Itoa(int(conn.DBId)), comma).Inc()
 }
 
-func NewServer(cfg *config.Config) *Server {
+func NewServer(cfg *config.Config) (*Server, error) {
+	router := mux.NewRouter()
+	router.HandleFunc("/debug/pprof/", pprof.Index)
+	router.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	router.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	router.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	router.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	err := trace.Router(router, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.LogLevel == "debug" {
+		_ = router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+			t, _ := route.GetPathTemplate()
+			m, _ := route.GetMethods()
+			q, _ := route.GetQueriesTemplates()
+			h, _ := route.GetHostTemplate()
+			log.Printf("%s %v %s %s", t, m, q, h)
+			return nil
+		})
+	}
 	s := &Server{
-		http:   &http.Server{},
+		http: &http.Server{
+			Addr:    fmt.Sprintf("%s:%d", cfg.Host, cfg.HttpPort),
+			Handler: router,
+		},
 		closed: make(chan bool),
 		cfg:    cfg,
 	}
@@ -198,7 +224,7 @@ func NewServer(cfg *config.Config) *Server {
 	s.red = redcon.NewServer("", s.ServeRESP, s.Accept, s.Close)
 	s.Command = command.NewCommand(s.red)
 	lancepb.RegisterLanceServer(s.rpc.GRPCServer, s.Command)
-	return s
+	return s, nil
 }
 
 func (s *Server) Start(httpln, redln, rpcln net.Listener) {
