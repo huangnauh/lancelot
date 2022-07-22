@@ -33,7 +33,6 @@ type Txn struct {
 	Multi      bool
 	Watch      bool
 	Exec       bool
-	Trace      bool
 	Span       opentracing.Span
 	Err        error
 	PendingErr bool
@@ -238,7 +237,7 @@ func (t *Txn) Put(key, val []byte) error {
 	}
 	if t.IsPessimistic() {
 		if t.Span != nil {
-			span := t.Span.Tracer().StartSpan("txn.Lock", opentracing.ChildOf(t.Span.Context()))
+			span := t.Span.Tracer().StartSpan("txn.PutLock", opentracing.ChildOf(t.Span.Context()))
 			defer span.Finish()
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.WriteTimeout)
@@ -267,7 +266,7 @@ func (t *Txn) Del(key []byte) error {
 	}
 	if t.IsPessimistic() {
 		if t.Span != nil {
-			span := t.Span.Tracer().StartSpan("txn.Lock", opentracing.ChildOf(t.Span.Context()))
+			span := t.Span.Tracer().StartSpan("txn.DelLock", opentracing.ChildOf(t.Span.Context()))
 			defer span.Finish()
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.WriteTimeout)
@@ -299,7 +298,7 @@ func (t *Txn) LockKeys(keys [][]byte) error {
 		}
 	}
 	if t.Span != nil {
-		span := t.Span.Tracer().StartSpan("txn.Lock", opentracing.ChildOf(t.Span.Context()))
+		span := t.Span.Tracer().StartSpan("txn.LockKeys", opentracing.ChildOf(t.Span.Context()))
 		defer span.Finish()
 	}
 	err := t.txn.LockKeys(ctx, new(kv.LockCtx), keys...)

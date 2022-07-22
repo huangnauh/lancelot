@@ -12,11 +12,10 @@ import (
 	"gitlab.s.upyun.com/platform/lancelot/store"
 	"gitlab.s.upyun.com/platform/lancelot/trace"
 	"gitlab.s.upyun.com/platform/lancelot/utils"
-	"gitlab.s.upyun.com/platform/lancelot/version"
 	"gitlab.s.upyun.com/platform/lancelot/xerror"
 )
 
-func (c *Command) checkSingle(conn *redcon.Conn, unwatch bool) (*store.Txn, bool) {
+func (c *Command) checkSingle(conn *redcon.Conn, comma string) (*store.Txn, bool) {
 	connTxn := conn.Transaction()
 	var txn *store.Txn
 	if connTxn != nil {
@@ -27,7 +26,7 @@ func (c *Command) checkSingle(conn *redcon.Conn, unwatch bool) (*store.Txn, bool
 				return txn, false
 			} else {
 				// after WATCH command but before MULTI command
-				if unwatch {
+				if comma == UNWATCH_COMMAND {
 					txn.Watch = false
 					txn.Reset()
 				}
@@ -35,7 +34,7 @@ func (c *Command) checkSingle(conn *redcon.Conn, unwatch bool) (*store.Txn, bool
 		}
 
 	}
-	newTxn := c.createTransaction(conn)
+	newTxn := c.createTransaction(conn, comma)
 	return newTxn, true
 }
 
@@ -64,23 +63,45 @@ func (c *Command) SingleHandler(conn *redcon.Conn, txn *store.Txn, txnHandle Txn
 	return resp, nil
 }
 
-func writeResp(conn *redcon.Conn, txn *store.Txn, comma string, resp interface{}) {
-	if txn.Span != nil {
-		txn.Span.Finish()
+func (c *Command) trace(conn *redcon.Conn, cmd redcon.Command) error {
+	if len(cmd.Args) != 2 {
+		err := xerror.WrongArgsError(TRACE_COMMAND)
+		WriteConnError(conn, TRACE_COMMAND, err)
+		return err
+	}
+	var err error
+	sub := strings.ToLower(utils.B2S(cmd.Args[1]))
+	switch sub {
+	case ENABLE_COMMAND:
+		conn.Trace = true
+		conn.WriteAny(OK)
+	case DISABLE_COMMAND:
+		conn.Trace = false
+		conn.WriteAny(OK)
+	case TOGGLE_COMMAND:
+		conn.Trace = !conn.Trace
+		conn.WriteAny(OK)
+	case INFO_COMMAND:
+		if conn.Trace {
+			conn.WriteAny(ENABLE_COMMAND)
+		} else {
+			conn.WriteAny(DISABLE_COMMAND)
+		}
+	case LIST_COMMAND:
 		traces, err := trace.GetTraces()
 		if err != nil {
-			WriteConnError(conn, comma, err)
+			utils.ZapLog.Error("GetTraces", zap.Error(err))
+			WriteConnError(conn, TRACE_COMMAND, err)
 		} else {
-			txn.WriteAny(traces)
+			conn.WriteAny(traces)
 		}
-	} else {
-		err, ok := resp.(error)
-		if ok {
-			WriteConnError(conn, comma, err)
-		} else {
-			txn.WriteAny(resp)
-		}
+		return nil
+	default:
+		err = xerror.WrongArgsError(TRACE_COMMAND)
+		WriteConnError(conn, TRACE_COMMAND, err)
+		return err
 	}
+	return nil
 }
 
 func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command) error {
@@ -95,56 +116,37 @@ func (c *Command) TxnHandler(conn *redcon.Conn, comma string, cmd redcon.Command
 		return err
 	}
 	txnHandle := handler.Func
-	txn, single := c.checkSingle(conn, comma == UNWATCH_COMMAND)
+	txn, single := c.checkSingle(conn, comma)
 	utils.ZapLog.Debug("TxnHandler", zap.String("remote", conn.RemoteAddr()),
 		zap.Uint16("user-id", conn.UserId), zap.Uint8("db", conn.DBId),
 		zap.ByteStrings("args", cmd.Args), zap.Bool("single", single))
-	txn.Trace = strings.ToLower(utils.B2S(cmd.Args[0])) == TRACE_COMMAND
 	args := cmd.Args[1:]
-	if txn.Trace {
-		args = cmd.Args[2:]
-	}
 	if single {
-		if txn.Trace {
-			tracer := trace.NewTrace()
-			span := tracer.StartSpan(version.APP)
-			txn.Span = span
+		if txn.Span != nil {
+			defer txn.Span.Finish()
 		}
 		var err error
 		var resp interface{}
 		for i := 0; i < 3; i++ {
 			resp, err = c.SingleHandler(conn, txn, txnHandle, comma, args)
 			if err == nil {
-				writeResp(conn, txn, comma, resp)
+				err, ok := resp.(error)
+				if ok {
+					WriteConnError(conn, comma, err)
+				} else {
+					txn.WriteAny(resp)
+				}
 				return txn.Err
 			}
 			utils.ZapLog.Info("Retry SingleHandler", zap.String("cmd", cmd.String()), zap.Int("i", i), zap.Error(err))
 			time.Sleep(time.Millisecond * time.Duration(i+1))
 		}
-		writeResp(conn, txn, comma, err)
+		WriteConnError(conn, comma, err)
 		return err
 	}
 
-	if txn.Trace {
-		WriteConnError(conn, comma, xerror.ErrTraceInsideMulti)
-		return xerror.ErrTraceInsideMulti
-	}
 	txn.PendingReq = append(txn.PendingReq, cmd)
 	conn.WriteAny(Queued)
-
-	// if txn.Exec {
-	// 	if !txn.HasTransaction() {
-	// 		txn.Err = xerror.InvalidTxn
-	// 		WriteConnError(conn, xerror.InvalidTxn)
-	// 		return
-	// 	}
-	// 	resp := txnHandle(txn, args)
-	// 	if txn.Err == nil {
-	// 		txn.PendingResp = append(txn.PendingResp, resp)
-	// 	}
-	// } else {
-
-	// }
 	return nil
 }
 
@@ -176,7 +178,7 @@ func (c *Command) discard(conn *redcon.Conn, cmd redcon.Command) error {
 		WriteConnError(conn, DISCARD_COMMAND, xerror.ErrDISCARDErr)
 		return xerror.ErrDISCARDErr
 	}
-	defer conn.SetTransaction(nil)
+	defer clearTransaction(conn, txn)
 	if !txn.Multi {
 		WriteConnError(conn, DISCARD_COMMAND, xerror.ErrDISCARDErr)
 		return xerror.ErrDISCARDErr
@@ -184,6 +186,13 @@ func (c *Command) discard(conn *redcon.Conn, cmd redcon.Command) error {
 	txn.Rollback()
 	conn.WriteAny(OK)
 	return nil
+}
+
+func clearTransaction(conn *redcon.Conn, txn *store.Txn) {
+	if txn != nil && txn.Span != nil {
+		txn.Span.Finish()
+	}
+	conn.SetTransaction(nil)
 }
 
 func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) error {
@@ -196,9 +205,13 @@ func (c *Command) exec(conn *redcon.Conn, cmd redcon.Command) error {
 		return err
 	}
 
-	defer conn.SetTransaction(nil)
 	txn, exist := c.getTransaction(conn)
-	if !exist || !txn.Multi {
+	if !exist {
+		WriteConnError(conn, EXEC_COMMAND, xerror.ErrEXECErr)
+		return xerror.ErrEXECErr
+	}
+	defer clearTransaction(conn, txn)
+	if !txn.Multi {
 		WriteConnError(conn, EXEC_COMMAND, xerror.ErrEXECErr)
 		return xerror.ErrEXECErr
 	}
@@ -305,20 +318,25 @@ func (c *Command) BeginTxn(txn *store.Txn, userID uint16, dbID uint8) {
 	}
 }
 
-func (c *Command) createTransaction(conn *redcon.Conn) *store.Txn {
+func (c *Command) createTransaction(conn *redcon.Conn, comma string) *store.Txn {
 	txn := c.client.NewTxn()
 	cfg := c.GetConfig(conn.UserId)
 	txn.Config = cfg
 	txn.Conn = conn
+	if conn.Trace {
+		tracer := trace.NewTrace()
+		span := tracer.StartSpan(comma)
+		txn.Span = span
+	}
 	return txn
 }
 
-func (c *Command) getOrCreateTransaction(conn *redcon.Conn) (*store.Txn, bool) {
+func (c *Command) getOrCreateTransaction(conn *redcon.Conn, comma string) (*store.Txn, bool) {
 	txn, exist := c.getTransaction(conn)
 	if exist {
 		return txn, true
 	}
-	txn = c.createTransaction(conn)
+	txn = c.createTransaction(conn, comma)
 	return txn, false
 }
 
@@ -331,7 +349,7 @@ func (c *Command) multi(conn *redcon.Conn, cmd redcon.Command) error {
 		WriteConnError(conn, MULTI_COMMAND, err)
 		return err
 	}
-	txn, alreadyExist := c.getOrCreateTransaction(conn)
+	txn, alreadyExist := c.getOrCreateTransaction(conn, MULTI_COMMAND)
 	if txn.Multi {
 		WriteConnError(conn, MULTI_COMMAND, xerror.ErrMultiNested)
 		return xerror.ErrMultiNested
@@ -355,7 +373,7 @@ func (c *Command) watch(conn *redcon.Conn, cmd redcon.Command) error {
 		return err
 	}
 
-	txn, alreadyExist := c.getOrCreateTransaction(conn)
+	txn, alreadyExist := c.getOrCreateTransaction(conn, WATCH_COMMAND)
 	if txn.Multi {
 		WriteConnError(conn, WATCH_COMMAND, xerror.ErrWatchInsideMulti)
 		return xerror.ErrWatchInsideMulti

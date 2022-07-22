@@ -121,6 +121,10 @@ type Sentinel struct {
 	RunID      string `yaml:"run-id" json:"run-id,omitempty"`
 }
 
+type Trace struct {
+	MinEvictAge time.Duration `yaml:"min-evict-age" json:"min-evict-age"`
+}
+
 type Config struct {
 	StartAt         time.Time `yaml:"-" json:"-"`
 	Version         int64     `yaml:"-" json:"-"`
@@ -141,6 +145,7 @@ type Config struct {
 	Redis           Redis     `yaml:"redis" json:"redis,omitempty"`
 	Sentinel        Sentinel  `yaml:"sentinel" json:"sentinel,omitempty"`
 	Log             Log       `yaml:"log" json:"log,omitempty"`
+	Trace           Trace     `yaml:"trace" json:"trace,omitempty"`
 }
 
 func Hostname() string {
@@ -236,6 +241,9 @@ func LoadYAMLConfig(filename string) error {
 	}
 	if cfg.Store.UUID == "" {
 		cfg.Store.UUID = cfg.Host
+	}
+	if cfg.Trace.MinEvictAge == 0 {
+		cfg.Trace.MinEvictAge = time.Hour
 	}
 	return err
 }

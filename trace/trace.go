@@ -9,11 +9,12 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/opentracing/opentracing-go"
-	"gitlab.s.upyun.com/platform/lancelot/config"
 	"sourcegraph.com/sourcegraph/appdash"
 	static "sourcegraph.com/sourcegraph/appdash-data"
 	traceImpl "sourcegraph.com/sourcegraph/appdash/opentracing"
 	"sourcegraph.com/sourcegraph/appdash/traceapp"
+
+	"gitlab.s.upyun.com/platform/lancelot/config"
 )
 
 var Store *appdash.MemoryStore = appdash.NewMemoryStore()
@@ -41,7 +42,7 @@ func GetTraces() ([]string, error) {
 	if len(traces) == 0 {
 		return nil, nil
 	}
-	ids := make([]string, len(traces))
+	ids := make([]string, 0, len(traces))
 	sort.Sort(sortByStartTime(traces))
 	for _, trace := range traces {
 		ids = append(ids, trace.ID.String())
@@ -73,8 +74,9 @@ func Router(router *mux.Router, cfg *config.Config) error {
 		return err
 	}
 	app.Store = &appdash.RecentStore{
-		MinEvictAge: time.Hour,
+		MinEvictAge: cfg.Trace.MinEvictAge,
 		DeleteStore: Store,
+		Debug:       cfg.LogLevel == "debug",
 	}
 	app.Queryer = Store
 	router.Handle("/trace/", app)
