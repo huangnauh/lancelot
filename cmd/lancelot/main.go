@@ -109,7 +109,10 @@ func main() {
 	if err != nil {
 		utils.ZapLog.Fatal("Rpc Server listen failed", zap.Error(err))
 	}
-	serv := server.NewServer(&cfg)
+	serv, err := server.NewServer(&cfg)
+	if err != nil {
+		utils.ZapLog.Fatal("Create Server failed", zap.Error(err))
+	}
 	serv.Start(httpln, redln, rpcln)
 
 	if err := upg.Ready(); err != nil {

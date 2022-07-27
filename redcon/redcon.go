@@ -442,7 +442,9 @@ func handle(s *Server, c *Conn) {
 }
 
 type Transaction interface {
-	Close() error
+	Begin() error
+	Commit() error
+	Rollback()
 }
 
 // conn represents a client connection
@@ -455,6 +457,7 @@ type Conn struct {
 	UserId    uint16
 	UserName  string
 	Blocked   bool
+	Trace     bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	wr        *Writer

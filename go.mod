@@ -16,12 +16,15 @@ require (
 	github.com/golang/protobuf v1.5.2
 	github.com/gomodule/redigo v1.8.5
 	github.com/google/uuid v1.1.2
+	github.com/gorilla/mux v1.8.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/json-iterator/go v1.1.12
 	github.com/mmcloughlin/geohash v0.10.1-0.20210831075534-dc9a53a52fad
 	github.com/nitishm/go-rejson/v4 v4.1.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.16.0
+	github.com/opentracing/basictracer-go v1.1.0 // indirect
+	github.com/opentracing/opentracing-go v1.2.0
 	github.com/pingcap/errors v0.11.5-0.20210513014640-40f9a1999b3b
 	github.com/pingcap/kvproto v0.0.0-20211011042309-a4518fcacbc8
 	github.com/pingcap/log v0.0.0-20210906054005-afc726e70354
@@ -49,6 +52,8 @@ require (
 	google.golang.org/grpc v1.40.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/yaml.v2 v2.4.0
+	sourcegraph.com/sourcegraph/appdash v0.0.0-20211028080628-e2786a622600
+	sourcegraph.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
 )
 
 replace (

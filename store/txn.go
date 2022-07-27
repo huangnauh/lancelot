@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
 	tikverr "github.com/tikv/client-go/v2/error"
 	"github.com/tikv/client-go/v2/kv"
@@ -32,6 +33,7 @@ type Txn struct {
 	Multi      bool
 	Watch      bool
 	Exec       bool
+	Span       opentracing.Span
 	Err        error
 	PendingErr bool
 	InScript   bool
@@ -136,6 +138,11 @@ func returnErr(err error) error {
 }
 
 func (t *Txn) Begin() error {
+	if t.Span != nil {
+		span := t.Span.Tracer().StartSpan("txn.Begin", opentracing.ChildOf(t.Span.Context()))
+		defer span.Finish()
+	}
+
 	tx, err := t.client.store.Begin()
 	if err != nil {
 		utils.ZapLog.Error("[txn] client begin", zap.String("remote", t.RemoteAddr()), zap.Error(err))
@@ -166,6 +173,10 @@ func (t *Txn) Commit() error {
 		return nil
 	}
 
+	if t.Span != nil {
+		span := t.Span.Tracer().StartSpan("txn.Commit", opentracing.ChildOf(t.Span.Context()))
+		defer span.Finish()
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.WriteTimeout)
 	defer cancel()
 	err := t.txn.Commit(ctx)
@@ -184,6 +195,10 @@ func (t *Txn) Commit() error {
 func (t *Txn) Get(key []byte) ([]byte, error) {
 	if len(key) >= utils.MAX_KEY_SIZE {
 		return nil, xerror.ErrExceedMaxSize
+	}
+	if t.Span != nil {
+		span := t.Span.Tracer().StartSpan("txn.Get", opentracing.ChildOf(t.Span.Context()))
+		defer span.Finish()
 	}
 	start := time.Now()
 	snapshot := t.txn.GetSnapshot()
@@ -221,6 +236,10 @@ func (t *Txn) Put(key, val []byte) error {
 		return xerror.ErrExceedMaxSize
 	}
 	if t.IsPessimistic() {
+		if t.Span != nil {
+			span := t.Span.Tracer().StartSpan("txn.PutLock", opentracing.ChildOf(t.Span.Context()))
+			defer span.Finish()
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.WriteTimeout)
 		err := t.txn.LockKeysWithWaitTime(ctx, DefaultLockWait, key)
 		cancel()
@@ -246,6 +265,10 @@ func (t *Txn) Del(key []byte) error {
 		return xerror.ErrExceedMaxSize
 	}
 	if t.IsPessimistic() {
+		if t.Span != nil {
+			span := t.Span.Tracer().StartSpan("txn.DelLock", opentracing.ChildOf(t.Span.Context()))
+			defer span.Finish()
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), t.client.conf.WriteTimeout)
 		err := t.txn.LockKeysWithWaitTime(ctx, DefaultLockWait, key)
 		cancel()
@@ -274,6 +297,10 @@ func (t *Txn) LockKeys(keys [][]byte) error {
 			return xerror.ErrExceedMaxSize
 		}
 	}
+	if t.Span != nil {
+		span := t.Span.Tracer().StartSpan("txn.LockKeys", opentracing.ChildOf(t.Span.Context()))
+		defer span.Finish()
+	}
 	err := t.txn.LockKeys(ctx, new(kv.LockCtx), keys...)
 	if err != nil {
 		utils.ZapLog.Error("[txn] lock", zap.String("remote", t.RemoteAddr()),
@@ -299,6 +326,10 @@ type Iterator struct {
 }
 
 func (t *Txn) Iter(start, end []byte, reversed bool, scanSize int) (*Iterator, error) {
+	if t.Span != nil {
+		span := t.Span.Tracer().StartSpan("txn.Iter", opentracing.ChildOf(t.Span.Context()))
+		defer span.Finish()
+	}
 	var it tikv.Iterator
 	if scanSize > 0 {
 		snapshot := t.txn.GetSnapshot()
@@ -317,6 +348,10 @@ func (t *Txn) Iter(start, end []byte, reversed bool, scanSize int) (*Iterator, e
 }
 
 func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
+	if t.Span != nil {
+		span := t.Span.Tracer().StartSpan("txn.List", opentracing.ChildOf(t.Span.Context()))
+		defer span.Finish()
+	}
 	var it tikv.Iterator
 	var err error
 	if bytes.Compare(end, start) >= 0 {
@@ -366,6 +401,10 @@ func (t *Txn) List(start, end []byte, limit int, callback KVCallback) error {
 }
 
 func (t *Iterator) DeleteUntil(limit int, callback KVCallback) (key []byte, count int, err error) {
+	if t.txn.Span != nil {
+		span := t.txn.Span.Tracer().StartSpan("txn.DeleteUntil", opentracing.ChildOf(t.txn.Span.Context()))
+		defer span.Finish()
+	}
 	for t.Valid() {
 		key = t.Key()
 		if bytes.Compare(key, t.start) < 0 || bytes.Compare(key, t.end) >= 0 {

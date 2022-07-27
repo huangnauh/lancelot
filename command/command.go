@@ -363,6 +363,10 @@ func NewCommand(red *redcon.Server) *Command {
 			Func: c.command,
 			ID:   1018,
 		},
+		TRACE_COMMAND: {
+			Func: c.trace,
+			ID:   1017,
+		},
 		SUBSCRIBE_COMMAND: {
 			Func: c.SubscribeHandle,
 			ID:   352,

@@ -268,6 +268,10 @@ const (
 	SLAVES_COMMAND               = "slaves"
 	MASTERBYNAME_COMMAND         = "get-master-addr-by-name"
 	SENTINELS_COMMAND            = "sentinels"
+	TRACE_COMMAND                = "trace"
+	ENABLE_COMMAND               = "enable"
+	DISABLE_COMMAND              = "disable"
+	TOGGLE_COMMAND               = "toggle"
 
 	MAX_COMMANDS   = 1024
 	MINI_SCAN_SIZE = 256
