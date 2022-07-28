@@ -67,3 +67,5 @@ log:
   max-size: 1073741824
   max-num: 10
   max-age: 30
+trace:
+  min-evict-age: 1h0m0s
