@@ -248,6 +248,7 @@ const (
 	GETUSER_COMMAND              = "getuser"
 	SETUSER_COMMAND              = "setuser"
 	USERS_COMMAND                = "users"
+	USER_COMMAND                 = "user"
 	LIST_COMMAND                 = "list"
 	UNBLOCK_COMMAND              = "unblock"
 	WHOAMI_COMMAND               = "whoami"

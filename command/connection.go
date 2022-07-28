@@ -89,6 +89,8 @@ func (c *Command) ClientHandle(txn *store.Txn, args [][]byte) interface{} {
 		return c.ClientKillHandle(txn, args[1:])
 	case LIST_COMMAND:
 		return c.ClientListHandle(txn, args[1:])
+	case USER_COMMAND:
+		return c.ClientUserHandle(txn, args[1:])
 	case UNBLOCK_COMMAND:
 		return c.ClientUnblockHandle(txn, args[1:])
 	default:
@@ -102,6 +104,14 @@ func (c *Command) ClientIdHandle(txn *store.Txn, args [][]byte) interface{} {
 		return txn.SetWrongSubArgs(CLIENT_COMMAND, ID_COMMAND)
 	}
 	return redcon.SimpleInt(txn.ID)
+}
+
+// CLIENT USER
+func (c *Command) ClientUserHandle(txn *store.Txn, args [][]byte) interface{} {
+	if len(args) != 0 {
+		return txn.SetWrongSubArgs(CLIENT_COMMAND, USER_COMMAND)
+	}
+	return redcon.SimpleString(txn.UserName)
 }
 
 const (
