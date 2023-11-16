@@ -18,6 +18,7 @@ require (
 	github.com/google/uuid v1.1.2
 	github.com/gorilla/mux v1.8.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
+	github.com/hdt3213/rdb v1.0.13
 	github.com/json-iterator/go v1.1.12
 	github.com/mmcloughlin/geohash v0.10.1-0.20210831075534-dc9a53a52fad
 	github.com/nitishm/go-rejson/v4 v4.1.0
@@ -35,7 +36,7 @@ require (
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/cobra v1.2.1
 	github.com/spyzhov/ajson v0.7.1
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.8.1
 	github.com/tidwall/btree v0.5.0
 	github.com/tidwall/gjson v1.8.1 // indirect
 	github.com/tidwall/match v1.0.3

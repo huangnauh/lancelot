@@ -52,6 +52,7 @@ func ExecAbortNew(text string) *RedisError {
 var (
 	ErrWatchInsideMulti     = RedisNew("WATCH inside MULTI is not allowed")
 	ErrTraceInsideMulti     = RedisNew("Trace inside MULTI is not allowed")
+	ErrSlaveOfInsideMulti   = RedisNew("SlaveOf inside MULTI is not allowed")
 	ErrMultiNested          = RedisNew("MULTI calls can not be nested")
 	ErrEXECErr              = RedisNew("EXEC without MULTI")
 	ErrDISCARDErr           = RedisNew("DISCARD without MULTI")

@@ -272,6 +272,7 @@ const (
 	ENABLE_COMMAND               = "enable"
 	DISABLE_COMMAND              = "disable"
 	TOGGLE_COMMAND               = "toggle"
+	SLAVEOF_COMMAND              = "slaveof"
 
 	MAX_COMMANDS   = 1024
 	MINI_SCAN_SIZE = 256
@@ -317,5 +318,6 @@ func SimpleString(n string) redcon.SimpleString {
 
 // Got from redis 6.2.4 with
 // echo 'COMMAND' | nc redis_addr redis_port
+//
 //go:embed commands.data
 var COMMANDS []byte

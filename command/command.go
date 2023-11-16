@@ -41,6 +41,11 @@ type Info struct {
 	Health           bool
 }
 
+const (
+	masterRole = iota
+	slaveRole
+)
+
 type Command struct {
 	cfgs       map[uint16]*config.Config
 	cfgLock    sync.RWMutex
@@ -63,6 +68,8 @@ type Command struct {
 	memberlist *member.MemberList
 	cache      *freecache.Cache
 	Info       *Info
+	role       int32
+	slave      *Slave
 }
 
 func (c *Command) Shutdown(ctx context.Context) {
