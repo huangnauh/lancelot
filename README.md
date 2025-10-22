@@ -2,11 +2,11 @@
 
 ### build
 
-`go build ./cmd/redis-server`
+`make app`
 
 ### run
 
-`./redis-server`
+`make start`
 
 ### test
 `make test`
