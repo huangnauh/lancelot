@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"container/heap"
 
-	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"github.com/huangnauh/lancelot/utils"
 	"go.uber.org/zap"
 )
 

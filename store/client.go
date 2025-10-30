@@ -21,8 +21,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
-	"gitlab.s.upyun.com/platform/lancelot/config"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"github.com/huangnauh/lancelot/config"
+	"github.com/huangnauh/lancelot/utils"
 )
 
 type Client struct {

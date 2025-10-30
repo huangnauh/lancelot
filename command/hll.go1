@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/axiomhq/hyperloglog"
-	"gitlab.s.upyun.com/platform/lancelot/proto/lancepb"
-	"gitlab.s.upyun.com/platform/lancelot/redcon"
-	"gitlab.s.upyun.com/platform/lancelot/store"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
-	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"github.com/huangnauh/lancelot/proto/lancepb"
+	"github.com/huangnauh/lancelot/redcon"
+	"github.com/huangnauh/lancelot/store"
+	"github.com/huangnauh/lancelot/utils"
+	"github.com/huangnauh/lancelot/xerror"
 	"go.uber.org/zap"
 )
 

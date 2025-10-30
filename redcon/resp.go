@@ -1,4 +1,4 @@
-//Package redcon github.com/tidwall/redcon
+// Package redcon github.com/tidwall/redcon
 package redcon
 
 import (
@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"github.com/huangnauh/lancelot/utils"
 )
 
 // Type of RESP
@@ -492,18 +492,19 @@ type Marshaler interface {
 }
 
 // AppendAny appends any type to valid Redis type.
-//   nil             -> null
-//   error           -> error (adds "ERR " when first word is not uppercase)
-//   string          -> bulk-string
-//   numbers         -> bulk-string
-//   []byte          -> bulk-string
-//   bool            -> bulk-string ("0" or "1")
-//   slice           -> array
-//   map             -> array with key/value pairs
-//   SimpleString    -> string
-//   SimpleInt       -> integer
-//   Marshaler       -> raw bytes
-//   everything-else -> bulk-string representation using fmt.Sprint()
+//
+//	nil             -> null
+//	error           -> error (adds "ERR " when first word is not uppercase)
+//	string          -> bulk-string
+//	numbers         -> bulk-string
+//	[]byte          -> bulk-string
+//	bool            -> bulk-string ("0" or "1")
+//	slice           -> array
+//	map             -> array with key/value pairs
+//	SimpleString    -> string
+//	SimpleInt       -> integer
+//	Marshaler       -> raw bytes
+//	everything-else -> bulk-string representation using fmt.Sprint()
 func AppendAny(b []byte, v interface{}) []byte {
 	// fmt.Printf("AppendAny %#v %s\n", v, reflect.TypeOf(v))
 	switch v := v.(type) {

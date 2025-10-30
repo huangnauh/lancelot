@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.s.upyun.com/platform/lancelot/redcon"
-	"gitlab.s.upyun.com/platform/lancelot/store"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
-	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"github.com/huangnauh/lancelot/redcon"
+	"github.com/huangnauh/lancelot/store"
+	"github.com/huangnauh/lancelot/utils"
+	"github.com/huangnauh/lancelot/xerror"
 	"go.uber.org/zap"
 )
 

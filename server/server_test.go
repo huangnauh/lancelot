@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.s.upyun.com/platform/lancelot/config"
-	"gitlab.s.upyun.com/platform/lancelot/server"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"github.com/huangnauh/lancelot/config"
+	"github.com/huangnauh/lancelot/server"
+	"github.com/huangnauh/lancelot/utils"
 	"go.uber.org/goleak"
 )
 

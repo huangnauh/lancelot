@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"gitlab.s.upyun.com/platform/lancelot/proto/lancepb"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"github.com/huangnauh/lancelot/proto/lancepb"
+	"github.com/huangnauh/lancelot/utils"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"

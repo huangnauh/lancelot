@@ -1,7 +1,7 @@
 package store
 
 import (
-	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"github.com/huangnauh/lancelot/xerror"
 )
 
 func (txn *Txn) SetError(err error) error {

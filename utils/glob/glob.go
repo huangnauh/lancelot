@@ -1,4 +1,4 @@
-//Package glob go/src/path/filepath/match.go
+// Package glob go/src/path/filepath/match.go
 package glob
 
 import (

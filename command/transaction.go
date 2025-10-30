@@ -7,12 +7,12 @@ import (
 
 	"go.uber.org/zap"
 
-	"gitlab.s.upyun.com/platform/lancelot/metric"
-	"gitlab.s.upyun.com/platform/lancelot/redcon"
-	"gitlab.s.upyun.com/platform/lancelot/store"
-	"gitlab.s.upyun.com/platform/lancelot/trace"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
-	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"github.com/huangnauh/lancelot/metric"
+	"github.com/huangnauh/lancelot/redcon"
+	"github.com/huangnauh/lancelot/store"
+	"github.com/huangnauh/lancelot/trace"
+	"github.com/huangnauh/lancelot/utils"
+	"github.com/huangnauh/lancelot/xerror"
 )
 
 func (c *Command) checkSingle(conn *redcon.Conn, comma string) (*store.Txn, bool) {

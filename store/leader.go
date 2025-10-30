@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.s.upyun.com/platform/lancelot/metric"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"github.com/huangnauh/lancelot/metric"
+	"github.com/huangnauh/lancelot/utils"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/clientv3/concurrency"
 	"go.uber.org/zap"

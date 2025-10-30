@@ -8,11 +8,11 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"gitlab.s.upyun.com/platform/lancelot/redcon"
-	"gitlab.s.upyun.com/platform/lancelot/store"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
-	"gitlab.s.upyun.com/platform/lancelot/utils/glob"
-	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"github.com/huangnauh/lancelot/redcon"
+	"github.com/huangnauh/lancelot/store"
+	"github.com/huangnauh/lancelot/utils"
+	"github.com/huangnauh/lancelot/utils/glob"
+	"github.com/huangnauh/lancelot/xerror"
 	"go.uber.org/zap"
 )
 
@@ -25,7 +25,7 @@ const (
 	SumAGG    = 0x10
 )
 
-//(hash) HEXISTS key field
+// (hash) HEXISTS key field
 func (c *Command) HExistsHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 {
 		return txn.SetWrongArgs(HEXISTS_COMMAND)
@@ -45,7 +45,7 @@ type HashKV struct {
 	Value []byte
 }
 
-//(hash) HGETALL key
+// (hash) HGETALL key
 func (c *Command) HGetAllHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(HGETALL_COMMAND)
@@ -118,7 +118,7 @@ func (c *Command) HRandFieldHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-//(hash) HKEYS key
+// (hash) HKEYS key
 func (c *Command) HKeysHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(HKEYS_COMMAND)
@@ -130,7 +130,7 @@ func (c *Command) HKeysHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-//(hash) HVALS key
+// (hash) HVALS key
 func (c *Command) HValsHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(HVALS_COMMAND)
@@ -142,7 +142,7 @@ func (c *Command) HValsHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-//(hash) HLEN key
+// (hash) HLEN key
 func (c *Command) HLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(HLEN_COMMAND)
@@ -154,7 +154,7 @@ func (c *Command) HLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	return redcon.SimpleInt(ret)
 }
 
-//(hash) HSCAN key cursor [MATCH pattern] [COUNT count]
+// (hash) HSCAN key cursor [MATCH pattern] [COUNT count]
 func (c *Command) HScanHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(HSCAN_COMMAND)
@@ -314,7 +314,7 @@ func (c *Command) hgetall(txn *store.Txn, args [][]byte, getType int, limit int)
 	return nil, err
 }
 
-//(hash) HMGET key field [field ...]
+// (hash) HMGET key field [field ...]
 func (c *Command) HMGetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(HMGET_COMMAND)
@@ -346,7 +346,7 @@ func (c *Command) HMGetHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-//(hash) HSTRLEN key field
+// (hash) HSTRLEN key field
 func (c *Command) HStrLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 {
 		return txn.SetWrongArgs(HSTRLEN_COMMAND)
@@ -358,7 +358,7 @@ func (c *Command) HStrLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	return len(value)
 }
 
-//(hash) HGET key field
+// (hash) HGET key field
 func (c *Command) HGetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 {
 		return txn.SetWrongArgs(HGET_COMMAND)
@@ -398,7 +398,7 @@ func (c *Command) hget(txn *store.Txn, args [][]byte) ([]byte, error) {
 	return hvalue.Value, nil
 }
 
-//(hash) HDEL key field [field ...]
+// (hash) HDEL key field [field ...]
 func (c *Command) HDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(HDEL_COMMAND)
@@ -431,7 +431,7 @@ func (c *Command) HDelHandle(txn *store.Txn, args [][]byte) interface{} {
 	return SimpleInt(ret)
 }
 
-//(hash) HINCRBYFLOAT key field increment
+// (hash) HINCRBYFLOAT key field increment
 func (c *Command) HIncrByFloatHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 3 {
 		return txn.SetWrongArgs(HINCRBYFLOAT_COMMAND)
@@ -483,7 +483,7 @@ func (c *Command) HIncrByFloatHandle(txn *store.Txn, args [][]byte) interface{} 
 	return floatValue
 }
 
-//(hash) HINCRBY key field increment
+// (hash) HINCRBY key field increment
 func (c *Command) HIncrByHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 3 {
 		return txn.SetWrongArgs(HINCRBY_COMMAND)
@@ -582,7 +582,7 @@ func (c *Command) GetOrCreateUUIDObject(txn *store.Txn, typo ObjectType, arg []b
 	return object, nil
 }
 
-//(hash) HMSET key field value [field value ...]
+// (hash) HMSET key field value [field value ...]
 func (c *Command) HMSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 3 || len(args)%2 != 1 {
 		return txn.SetWrongArgs(HMSET_COMMAND)
@@ -594,7 +594,7 @@ func (c *Command) HMSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	return OK
 }
 
-//(hash) HSETNX key field value
+// (hash) HSETNX key field value
 func (c *Command) HSetNXHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 3 {
 		return txn.SetWrongArgs(HSETNX_COMMAND)
@@ -606,7 +606,7 @@ func (c *Command) HSetNXHandle(txn *store.Txn, args [][]byte) interface{} {
 	return redcon.SimpleInt(ret)
 }
 
-//(hash) HSET key field value [field value ...]
+// (hash) HSET key field value [field value ...]
 func (c *Command) HSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 3 || len(args)%2 != 1 {
 		return txn.SetWrongArgs(HSET_COMMAND)

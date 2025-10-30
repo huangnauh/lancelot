@@ -1,8 +1,8 @@
 package metric
 
 import (
+	"github.com/huangnauh/lancelot/version"
 	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.s.upyun.com/platform/lancelot/version"
 )
 
 type metric struct {

@@ -6,6 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/huangnauh/lancelot/config"
+	"github.com/huangnauh/lancelot/redcon"
+	"github.com/huangnauh/lancelot/utils"
+	"github.com/huangnauh/lancelot/xerror"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
 	tikverr "github.com/tikv/client-go/v2/error"
@@ -15,10 +19,6 @@ import (
 	"github.com/tikv/client-go/v2/txnkv/transaction"
 	"github.com/tikv/client-go/v2/txnkv/txnsnapshot"
 	"github.com/tikv/client-go/v2/util"
-	"gitlab.s.upyun.com/platform/lancelot/config"
-	"gitlab.s.upyun.com/platform/lancelot/redcon"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
-	"gitlab.s.upyun.com/platform/lancelot/xerror"
 	"go.uber.org/zap"
 )
 

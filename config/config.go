@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"gitlab.s.upyun.com/platform/lancelot/json"
+	"github.com/huangnauh/lancelot/json"
 
 	"gopkg.in/yaml.v2"
 )

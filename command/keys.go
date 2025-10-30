@@ -1,6 +1,6 @@
 package command
 
-import "gitlab.s.upyun.com/platform/lancelot/store"
+import "github.com/huangnauh/lancelot/store"
 
 // COPY source destination [DB destination-db] [REPLACE]
 func (c *Command) CopyHandle(txn *store.Txn, args [][]byte) interface{} {

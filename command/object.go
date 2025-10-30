@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/huangnauh/lancelot/redcon"
+	"github.com/huangnauh/lancelot/store"
+	"github.com/huangnauh/lancelot/utils"
+	"github.com/huangnauh/lancelot/xerror"
 	"github.com/tikv/client-go/v2/oracle"
-	"gitlab.s.upyun.com/platform/lancelot/redcon"
-	"gitlab.s.upyun.com/platform/lancelot/store"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
-	"gitlab.s.upyun.com/platform/lancelot/xerror"
 	"go.uber.org/zap"
 )
 

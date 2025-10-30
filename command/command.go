@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/coocood/freecache"
+	"github.com/huangnauh/lancelot/config"
+	"github.com/huangnauh/lancelot/member"
+	"github.com/huangnauh/lancelot/redcon"
+	"github.com/huangnauh/lancelot/store"
+	"github.com/huangnauh/lancelot/utils"
 	"github.com/tikv/client-go/v2/oracle"
 	lua "github.com/yuin/gopher-lua"
-	"gitlab.s.upyun.com/platform/lancelot/config"
-	"gitlab.s.upyun.com/platform/lancelot/member"
-	"gitlab.s.upyun.com/platform/lancelot/redcon"
-	"gitlab.s.upyun.com/platform/lancelot/store"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"go.uber.org/zap"
 )
 

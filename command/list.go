@@ -5,11 +5,11 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.s.upyun.com/platform/lancelot/config"
-	"gitlab.s.upyun.com/platform/lancelot/redcon"
-	"gitlab.s.upyun.com/platform/lancelot/store"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
-	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"github.com/huangnauh/lancelot/config"
+	"github.com/huangnauh/lancelot/redcon"
+	"github.com/huangnauh/lancelot/store"
+	"github.com/huangnauh/lancelot/utils"
+	"github.com/huangnauh/lancelot/xerror"
 	"go.uber.org/zap"
 )
 
@@ -71,7 +71,7 @@ func (c *Command) LMoveHandle(txn *store.Txn, args [][]byte) interface{} {
 	return value
 }
 
-//(list) RPOPLPUSH source destination
+// (list) RPOPLPUSH source destination
 func (c *Command) RPopLPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 2 {
 		return txn.SetWrongArgs(RPOPLPUSH_COMMAND)
@@ -114,7 +114,7 @@ func (c *Command) LRangeHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-//(list) LLEN key
+// (list) LLEN key
 func (c *Command) LLenHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 {
 		return txn.SetWrongArgs(LLEN_COMMAND)
@@ -226,7 +226,7 @@ func (c *Command) checkMaxLen(txn *store.Txn, args [][]byte) (int, error) {
 	return txn.Config.Redis.ScanMaxCount, nil
 }
 
-//(list) LREM key count element [MAXLEN len]
+// (list) LREM key count element [MAXLEN len]
 func (c *Command) LRemHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 3 {
 		return txn.SetWrongArgs(LREM_COMMAND)
@@ -250,7 +250,7 @@ func (c *Command) LRemHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-//(list) LINSERT key BEFORE|AFTER pivot element [MAXLEN len]
+// (list) LINSERT key BEFORE|AFTER pivot element [MAXLEN len]
 func (c *Command) LInsertHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 4 {
 		return txn.SetWrongArgs(LINSERT_COMMAND)
@@ -279,7 +279,7 @@ func (c *Command) LInsertHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-//(list) LINDEX key index [MAXLEN len]
+// (list) LINDEX key index [MAXLEN len]
 func (c *Command) LIndexHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(LINDEX_COMMAND)
@@ -303,7 +303,7 @@ func (c *Command) LIndexHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-//(list) LSET key index element [MAXLEN len]
+// (list) LSET key index element [MAXLEN len]
 func (c *Command) LSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 3 {
 		return txn.SetWrongArgs(LSET_COMMAND)
@@ -326,7 +326,7 @@ func (c *Command) LSetHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-//(list) RPUSHX key element [element ...]
+// (list) RPUSHX key element [element ...]
 func (c *Command) RPushXHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(RPUSHX_COMMAND)
@@ -340,7 +340,7 @@ func (c *Command) RPushXHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-//(list) RPUSH key element [element ...]
+// (list) RPUSH key element [element ...]
 func (c *Command) RPushHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(RPUSH_COMMAND)
@@ -352,7 +352,7 @@ func (c *Command) RPushHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-//(list) LPUSHX key element [element ...]
+// (list) LPUSHX key element [element ...]
 func (c *Command) LPushXHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(LPUSHX_COMMAND)
@@ -366,7 +366,7 @@ func (c *Command) LPushXHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-//(list) LPUSH key element [element ...]
+// (list) LPUSH key element [element ...]
 func (c *Command) LPushHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(LPUSH_COMMAND)
@@ -397,7 +397,7 @@ func (c *Command) listMany(txn *store.Txn, args [][]byte, cmd string) (interface
 	return nil, nil
 }
 
-//(list) BRPOP key [key ...] timeout
+// (list) BRPOP key [key ...] timeout
 func (c *Command) BrPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(BRPOP_COMMAND)
@@ -412,7 +412,7 @@ func (c *Command) BrPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-//(list) BLMOVE source destination LEFT|RIGHT LEFT|RIGHT timeout
+// (list) BLMOVE source destination LEFT|RIGHT LEFT|RIGHT timeout
 func (c *Command) BlMoveHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 5 {
 		return txn.SetWrongArgs(BLMOVE_COMMAND)
@@ -458,7 +458,7 @@ func (c *Command) BlMoveHandle(txn *store.Txn, args [][]byte) interface{} {
 	return msg[1]
 }
 
-//(list) BRPOPLPUSH source destination timeout
+// (list) BRPOPLPUSH source destination timeout
 func (c *Command) BRPopLPushHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 3 {
 		return txn.SetWrongArgs(BRPOPLPUSH_COMMAND)
@@ -485,7 +485,7 @@ func (c *Command) BRPopLPushHandle(txn *store.Txn, args [][]byte) interface{} {
 	return msg[1]
 }
 
-//(list) BLPOP key [key ...] timeout
+// (list) BLPOP key [key ...] timeout
 func (c *Command) BlPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) < 2 {
 		return txn.SetWrongArgs(BLPOP_COMMAND)
@@ -500,7 +500,7 @@ func (c *Command) BlPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	return ret
 }
 
-//(list) RPOP key [count]
+// (list) RPOP key [count]
 func (c *Command) RPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 && len(args) != 2 {
 		return txn.SetWrongArgs(RPOP_COMMAND)
@@ -508,7 +508,7 @@ func (c *Command) RPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	return c.pophandle(txn, args, RPOP_COMMAND)
 }
 
-//(list) LPOP key [count]
+// (list) LPOP key [count]
 func (c *Command) LPopHandle(txn *store.Txn, args [][]byte) interface{} {
 	if len(args) != 1 && len(args) != 2 {
 		return txn.SetWrongArgs(LPOP_COMMAND)

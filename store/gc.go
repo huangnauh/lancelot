@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/huangnauh/lancelot/utils"
 	"github.com/tikv/client-go/v2/oracle"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"go.uber.org/zap"
 )
 

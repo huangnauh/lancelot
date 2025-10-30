@@ -7,14 +7,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"gitlab.s.upyun.com/platform/lancelot/grpc"
-	"gitlab.s.upyun.com/platform/lancelot/member"
-	"gitlab.s.upyun.com/platform/lancelot/proto/lancepb"
-	"gitlab.s.upyun.com/platform/lancelot/redcon"
-	"gitlab.s.upyun.com/platform/lancelot/store"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
-	"gitlab.s.upyun.com/platform/lancelot/utils/glob"
-	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"github.com/huangnauh/lancelot/grpc"
+	"github.com/huangnauh/lancelot/member"
+	"github.com/huangnauh/lancelot/proto/lancepb"
+	"github.com/huangnauh/lancelot/redcon"
+	"github.com/huangnauh/lancelot/store"
+	"github.com/huangnauh/lancelot/utils"
+	"github.com/huangnauh/lancelot/utils/glob"
+	"github.com/huangnauh/lancelot/xerror"
 	"go.uber.org/zap"
 )
 

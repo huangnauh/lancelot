@@ -1,5 +1,5 @@
 PROG=lancelot
-REPO_PATH=gitlab.s.upyun.com/platform/$(PROG)
+REPO_PATH=github.com/huangnauh/$(PROG)
 GIT_COMMIT=$(shell git rev-parse --short HEAD)
 GIT_DESCRIBE=$(shell git describe --tags --always)
 IMPORT=$(REPO_PATH)/version

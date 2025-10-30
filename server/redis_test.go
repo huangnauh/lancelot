@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"gitlab.s.upyun.com/platform/lancelot/json"
+	"github.com/huangnauh/lancelot/json"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

@@ -1,4 +1,4 @@
-module gitlab.s.upyun.com/platform/lancelot
+module github.com/huangnauh/lancelot
 
 go 1.16
 

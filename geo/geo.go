@@ -5,8 +5,8 @@ import (
 
 	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
+	"github.com/huangnauh/lancelot/utils"
 	"github.com/mmcloughlin/geohash"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
 	"go.uber.org/zap"
 )
 

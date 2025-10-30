@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/axiomhq/hyperloglog"
-	"gitlab.s.upyun.com/platform/lancelot/hll"
+	"github.com/huangnauh/lancelot/hll"
 )
 
 func estimateError(got, exp uint64) float64 {

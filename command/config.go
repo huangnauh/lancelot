@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.s.upyun.com/platform/lancelot/config"
-	"gitlab.s.upyun.com/platform/lancelot/json"
-	"gitlab.s.upyun.com/platform/lancelot/member"
-	"gitlab.s.upyun.com/platform/lancelot/store"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
-	"gitlab.s.upyun.com/platform/lancelot/xerror"
+	"github.com/huangnauh/lancelot/config"
+	"github.com/huangnauh/lancelot/json"
+	"github.com/huangnauh/lancelot/member"
+	"github.com/huangnauh/lancelot/store"
+	"github.com/huangnauh/lancelot/utils"
+	"github.com/huangnauh/lancelot/xerror"
 	"go.uber.org/zap"
 )
 

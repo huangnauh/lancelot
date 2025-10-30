@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
-	"gitlab.s.upyun.com/platform/lancelot/config"
+	"github.com/huangnauh/lancelot/config"
 	"google.golang.org/grpc"
 )
 

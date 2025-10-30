@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
-	"gitlab.s.upyun.com/platform/lancelot/command"
-	"gitlab.s.upyun.com/platform/lancelot/config"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"github.com/huangnauh/lancelot/command"
+	"github.com/huangnauh/lancelot/config"
+	"github.com/huangnauh/lancelot/utils"
 )
 
 var cmd *command.Command

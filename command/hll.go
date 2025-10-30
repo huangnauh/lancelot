@@ -3,10 +3,10 @@ package command
 import (
 	"encoding/binary"
 
-	"gitlab.s.upyun.com/platform/lancelot/hll"
-	"gitlab.s.upyun.com/platform/lancelot/redcon"
-	"gitlab.s.upyun.com/platform/lancelot/store"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
+	"github.com/huangnauh/lancelot/hll"
+	"github.com/huangnauh/lancelot/redcon"
+	"github.com/huangnauh/lancelot/store"
+	"github.com/huangnauh/lancelot/utils"
 	"go.uber.org/zap"
 )
 

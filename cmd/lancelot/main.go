@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/cloudflare/tableflip"
-	"gitlab.s.upyun.com/platform/lancelot/config"
-	"gitlab.s.upyun.com/platform/lancelot/log"
-	"gitlab.s.upyun.com/platform/lancelot/server"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
-	"gitlab.s.upyun.com/platform/lancelot/version"
+	"github.com/huangnauh/lancelot/config"
+	"github.com/huangnauh/lancelot/log"
+	"github.com/huangnauh/lancelot/server"
+	"github.com/huangnauh/lancelot/utils"
+	"github.com/huangnauh/lancelot/version"
 	"go.uber.org/zap"
 )
 

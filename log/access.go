@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"gitlab.s.upyun.com/platform/lancelot/config"
+	"github.com/huangnauh/lancelot/config"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 

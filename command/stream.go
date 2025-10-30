@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/huangnauh/lancelot/store"
+	"github.com/huangnauh/lancelot/utils"
+	"github.com/huangnauh/lancelot/utils/glob"
+	"github.com/huangnauh/lancelot/xerror"
 	"github.com/vmihailenco/msgpack/v5"
-	"gitlab.s.upyun.com/platform/lancelot/store"
-	"gitlab.s.upyun.com/platform/lancelot/utils"
-	"gitlab.s.upyun.com/platform/lancelot/utils/glob"
-	"gitlab.s.upyun.com/platform/lancelot/xerror"
 	"go.uber.org/zap"
 )
 

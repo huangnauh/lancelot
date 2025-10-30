@@ -14,7 +14,7 @@ import (
 	traceImpl "sourcegraph.com/sourcegraph/appdash/opentracing"
 	"sourcegraph.com/sourcegraph/appdash/traceapp"
 
-	"gitlab.s.upyun.com/platform/lancelot/config"
+	"github.com/huangnauh/lancelot/config"
 )
 
 var Store *appdash.MemoryStore = appdash.NewMemoryStore()
